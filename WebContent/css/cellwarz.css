@@ -1,0 +1,44 @@
+body {
+	background: url('/Cellwarz/images/blocks/blockA.png');
+}
+
+#canvas {
+	margin-top: -13px 0 0 -15px;
+}
+
+#login {
+	background-color:lightblue;
+	height:640px;
+	left:48px;
+	position:absolute;
+	top:48px;
+	width:528px;
+}
+
+#input {
+	margin: 20px 0 -10px 40px;
+}
+
+#desc {
+	padding: 20px;
+}
+
+.dash-icon {
+	display: none;
+	height:96px;
+	left:90%;
+	position:fixed;
+	width:96px;
+}
+
+#mana1 {
+	top:10px;
+}
+
+#mana2 {
+	top:70px;
+}
+
+#mana3 {
+	top:130px;
+}
