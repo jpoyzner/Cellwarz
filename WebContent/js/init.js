@@ -21,10 +21,9 @@ function init(e, jump) {
 		ctx = canvas.getContext('2d');
 		ctx.globalAlpha = 1;
 		
-		$('#mana1').show();
-		$('#mana2').show();
-		$('#mana3').show();
-		
+		windowElement = $(window);
+		windowWidth = windowElement.width();
+		windowHeight = windowElement.height();
 		engineFramesPerSecond = 48;
 		refreshRate = 1000 / engineFramesPerSecond;
 		inactivityTimeout = 3000;

@@ -3,6 +3,9 @@ body {
 }
 
 #canvas {
+	position:fixed;
+	top: 0;
+	left: 0;
 	margin-top: -13px 0 0 -15px;
 }
 
@@ -24,7 +27,6 @@ body {
 }
 
 .dash-icon {
-	display: none;
 	height:96px;
 	left:90%;
 	position:fixed;

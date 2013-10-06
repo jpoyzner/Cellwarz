@@ -25,8 +25,6 @@ function poll() {
 		inactivityCount++;
 		totalReqCount++;
 		
-		scrollToAvatar();
-		
 		if (totalReqCount % 250 == 0) {
 			totalReqCount = 0;
 			timedOutCount = 0;
@@ -84,13 +82,4 @@ function ajaxSync() {
 		timedOut = true;
 		timedOutCount++;
 	});
-}
-
-function scrollToAvatar() {
-	if (totalReqCount % 18 == 0) {
-		me = sprites[avatars[loginName]];
-		if (me) {
-			window.scrollTo(me[1] - 576, me[2] - 448);
-		}
-	}
 }

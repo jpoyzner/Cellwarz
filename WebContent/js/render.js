@@ -1,9 +1,19 @@
 function drawSprites() {
+	offsetX = 0;
+	offsetY = 0;
+	
+	me = sprites[avatars[loginName]];
+	if (me) {
+		//TODO: avatar sizes should be dynamic
+		offsetX = me[1] + 24 - windowWidth / 2;
+		offsetY = me[2] + 16 - windowHeight / 2;
+	}	
+	
 	spriteIds = Object.keys(sprites);
 	for (var i = 0; i < spriteIds.length; i++) {
 		sprite = sprites[spriteIds[i]];
 		if (sprite[0] != -1) {
-			ctx.drawImage(images[sprite[0]], sprite[1], sprite[2]);
+			ctx.drawImage(images[sprite[0]], sprite[1] - offsetX, sprite[2] - offsetY);
 		}
 	}
 }
@@ -18,10 +28,10 @@ function addScreenText() {
 		//"InactivityCount: " + inactivityCount;
 	//}
 
-	ctx.fillText(loginName + ": " + text, 98, 98);
+	ctx.fillText(loginName + ": " + text, 20, 20);
 	
 	ctx.fillStyle = "darkred";
-	ctx.fillText(cellText, 98, 148);
+	ctx.fillText(cellText, 20, 70);
 }
 
 function drawAvatarsNames() {
@@ -31,7 +41,7 @@ function drawAvatarsNames() {
 		sprite = sprites[avatars[name]];
 		
 		if (sprite) {
-			ctx.fillText(name, sprite[1] - 8, sprite[2] - 16);
+			ctx.fillText(name, sprite[1] - 8 - offsetX, sprite[2] - 16 - offsetY);
 		} else {
 			delete avatars[name];
 		}
