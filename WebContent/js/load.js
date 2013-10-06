@@ -23,7 +23,7 @@ function load(data) {
 					newTools = extraInfo["1"];
 					if (newTools) {
 						if (newTools["-1"]) {
-							$('#mana1').css('background-image', 'none');
+							removeDashboardItem();
 						} else {
 							tools = newTools;
 						}
