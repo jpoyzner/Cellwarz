@@ -21,7 +21,7 @@ public class SocketHub extends MessageInbound {
 	public static final String IMAGE_PATHS_KEY = "imagePaths";
 	public static final String KEY_PARAM = "key";
 	public static final String DOWN_PARAM = "down";
-	private static final int TIMEOUT = 300;
+	private static final int TIMEOUT = 3000;
 	
 	private final World world;
 	private String login;
