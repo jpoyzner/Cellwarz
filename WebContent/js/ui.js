@@ -26,11 +26,13 @@ $(document).keydown(function(event) {
 		}
 	}
 	
-	keydowns[keydowns.length] = event.keyCode;
+	connection.send(JSON.stringify({key: event.keyCode, down: true}));
+	//keydowns[keydowns.length] = event.keyCode;
 });
 
 $(document).keyup(function(event) {
-	keyups[keyups.length] = event.keyCode;
+	//keyups[keyups.length] = event.keyCode;
+	connection.send(JSON.stringify({key: event.keyCode, down: false}));
 });
 
 //canvas.onclick=function(event) {

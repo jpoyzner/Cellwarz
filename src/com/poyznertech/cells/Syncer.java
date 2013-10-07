@@ -28,9 +28,9 @@ public class Syncer extends HttpServlet {
 		String login = request.getParameter(LOGIN_PARAM);
 		Session session = world.getZion().getHardlines().get(login);
 		
-		session.getUI().reactTo(
-			JSONArray.toCollection(JSONArray.fromObject(request.getParameter(KEYDOWNS_PARAM)), Integer.class),
-			JSONArray.toCollection(JSONArray.fromObject(request.getParameter(KEYUPS_PARAM)), Integer.class));
+//		session.getUI().reactTo(
+//			JSONArray.toCollection(JSONArray.fromObject(request.getParameter(KEYDOWNS_PARAM)), Integer.class),
+//			JSONArray.toCollection(JSONArray.fromObject(request.getParameter(KEYUPS_PARAM)), Integer.class));
 		
 		response.setContentType("application/json");
 		PrintWriter out = response.getWriter();

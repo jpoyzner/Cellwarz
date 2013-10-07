@@ -1,6 +1,4 @@
-function sync() {
-	setTimeout("poll()", refreshRate);
-}
+////NOT USED BUT MAKE SURE THE LOGIC BEHIND ALL OF THESE IS IMPLEMENTED, then remove file and import
 
 function poll() {
 	if (inactivityCount < inactivityTimeout) {
@@ -44,11 +42,11 @@ function poll() {
 		ctx.fillRect(0, 0, canvas.width, canvas.height);
 		drawSprites();
 		inactivityCount++;
-		sync();
+		//sync();
 	} else if (keydowns.length != 0 || keyups.length != 0) {
 		refresh(true, false);
 	} else {
-		sync();
+		//sync();
 	}
 }
 
@@ -58,27 +56,10 @@ function ajaxSync() {
 		url: '/Cellwarz/sync',
 		data: {login: loginName, keydowns: JSON.stringify(keydowns), keyups: JSON.stringify(keyups)},
 		success: function(data) {
-			ctx.fillStyle = "lightblue";
-			ctx.fillRect(0, 0, canvas.width, canvas.height);
-			
-			spriteIds = Object.keys(data);
-			if (spriteIds.length == 0) {
-				needsRefresh = true;
-				sync();
-				return;
-			} 
-			
-			load(data);
-			drawSprites();
-			addScreenText();
-			drawAvatarsNames();
-			drawDashboardItems();
-			
-			timedOut = false;
-			sync();
+			render(data);
 		}, timeout: 100}) //This has to be a balance between requests that stall and requests that take too long ...
 	.fail(function() {
-		sync();
+		//sync();
 		timedOut = true;
 		timedOutCount++;
 	});

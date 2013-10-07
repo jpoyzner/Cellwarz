@@ -45,29 +45,69 @@ function refresh(init, jump) {
 		inactivityCount = 0;
 		text = "";
 		cellText = "";
-	}
-	
-	$.post(
-		'/Cellwarz/refresh',
-		{login: loginName, jump: jump},	
-		function(data) {
-			sprites = data.sprites;
-			
-			if (init) {
-				avatars = data.avatars;
-				tools = data.tools;
+		
+		connection = new WebSocket("ws://" + document.location.host + "/Cellwarz/socketrefresh");
+		
+		connection.onopen = function() {
+			connection.send(JSON.stringify({connect: true, login: loginName, jump: jump}));
+		};
+		
+		connection.onmessage = function(e) {
+			data = JSON.parse(e.data);	
+			if (data.connect) {
+				sprites = data.sprites;
 				
-				imagePaths = data.imagePaths;
-				for (var i = 0; i < imagePaths.length; i++) {	
-					image = new Image();
-					image.src = imagePaths[i];
-					images[i] = image;
+				if (init) {
+					avatars = data.avatars;
+					tools = data.tools;
+					
+					imagePaths = data.imagePaths;
+					for (var i = 0; i < imagePaths.length; i++) {	
+						image = new Image();
+						image.src = imagePaths[i];
+						images[i] = image;
+					}
+					
+					needsRefresh = false; //TODO: review this thing and the stale thing on server;
+					
+					//sync();
 				}
-				
-				needsRefresh = false;
-				sync();
+			} else {
+				render(JSON.parse(e.data));
 			}
-		}).fail(function() {
-			refresh(init, jump);
-		});
+		};
+		
+		connection.onerror = function(error) {
+			//refresh(init, jump);
+			connection.close();
+		};
+	} else {
+		connection.send(JSON.stringify({login: loginName, jump: jump}));
+	}
+
+	
+	
+//	$.post(
+//		'/Cellwarz/refresh',
+//		{login: loginName, jump: jump},	
+//		function(data) {
+//			sprites = data.sprites;
+//			
+//			if (init) {
+//				avatars = data.avatars;
+//				tools = data.tools;
+//				
+//				imagePaths = data.imagePaths;
+//				for (var i = 0; i < imagePaths.length; i++) {	
+//					image = new Image();
+//					image.src = imagePaths[i];
+//					images[i] = image;
+//				}
+//				
+//				needsRefresh = false;
+//				sync();
+//			}
+//		}).fail(function() {
+//			refresh(init, jump);
+//		});
 }

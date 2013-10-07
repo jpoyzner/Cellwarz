@@ -1,7 +1,5 @@
 package com.poyznertech.cells;
 
-import java.util.Collection;
-
 import com.poyznertech.cells.sprite.Avatar;
 import com.poyznertech.cells.sprite.Structure;
 
@@ -12,9 +10,10 @@ public class UI {
 		plugin(avatar);
 	}
 
-	void reactTo(Collection<Integer> keydowns, Collection<Integer> keyups) {
+	void reactTo(int key, boolean down) {
 		if (!unplugged()) {
-			for (int key: keydowns) {
+			//for (int key: keydowns) {
+			if (down) {
 				if (key == 37) { //left
 					avatar.runLeft();
 			    } else if (key == 38) { //up
@@ -35,9 +34,9 @@ public class UI {
 					//avatar.die(); //TODO: should be replaced by a freeze call eventually
 			    	//TODO: perhaps make button on screen to go back to main menu
 				} 
-			}
+			} else {
 			
-			for (int key: keyups) {
+			//for (int key: keyups) {
 				if (key == 37 || key == 39) { 
 					avatar.stopRunning();
 			    } else if (key == 49) { //1

@@ -1,3 +1,24 @@
+function render(data) {
+	ctx.fillStyle = "lightblue";
+	ctx.fillRect(0, 0, canvas.width, canvas.height);
+	
+	spriteIds = Object.keys(data);
+	if (spriteIds.length == 0) {
+		needsRefresh = true;
+		sync();
+		return;
+	} 
+	
+	load(data);
+	drawSprites();
+	addScreenText();
+	drawAvatarsNames();
+	drawDashboardItems();
+	
+	timedOut = false;
+	//sync();
+}
+
 function drawSprites() {
 	offsetX = 0;
 	offsetY = 0;
@@ -22,11 +43,11 @@ function addScreenText() {
 	ctx.fillStyle = "red";
 	ctx.font = "bold 16px Arial";
 	
-	//if (totalReqCount % 5 == 0) {
-	//	text = "Fail Rate: " + (timedOutCount * 100 / totalReqCount) + "%";
+	if (totalReqCount % 5 == 0) {
+		text = "Fail Rate: " + (timedOutCount * 100 / totalReqCount) + "%";
 		
 		//"InactivityCount: " + inactivityCount;
-	//}
+	}
 
 	ctx.fillText(loginName + ": " + text, 20, 20);
 	
