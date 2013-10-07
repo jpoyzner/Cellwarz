@@ -21,9 +21,12 @@ public class SocketHub extends MessageInbound {
 	public static final String IMAGE_PATHS_KEY = "imagePaths";
 	public static final String KEY_PARAM = "key";
 	public static final String DOWN_PARAM = "down";
+	private static final int TIMEOUT = 300;
 	
 	private final World world;
 	private String login;
+	private Timer timer;
+	private int inactivityCount;
 	
 	public SocketHub(World world) throws IOException {
 		super();
@@ -41,8 +44,12 @@ public class SocketHub extends MessageInbound {
 	}
 		
 	private final void login(JSONObject data) throws IOException {
-		login = data.getString(LOGIN_PARAM);
-		boolean jump = data.getBoolean(JUMP_PARAM);
+		boolean jump = false;
+		if (login == null) {
+			login = data.getString(LOGIN_PARAM);
+			jump = data.getBoolean(JUMP_PARAM);
+		}
+		
 		Session loginSession = world.getZion().getHardlines().get(login);
 		
 		Cell cell =
@@ -79,7 +86,18 @@ public class SocketHub extends MessageInbound {
 			world.getZion().loginNotStale(login);
 		}
 		
-		new Timer().schedule(
+		startRendering();
+	}
+	
+	private final void startRendering() {
+		inactivityCount = 0;
+		
+		if (timer != null) {
+			timer.cancel();
+		}
+		
+		timer = new Timer();
+		timer.schedule(
 			new TimerTask() {
 				public void run() {
 					try {
@@ -97,19 +115,17 @@ public class SocketHub extends MessageInbound {
 			},
 			0,
 			1000 / Engine.ENGINE_FRAMES_PER_SECOND);
-				
-				
-		
-		//TODO: don't forget to close the connection if possible in both methods, and on client also, maybe after client error too
 	}
 	
 	public void renderClient() throws IOException {
-		Session session = world.getZion().getHardlines().get(login); //TODO: can we get session from original call with websockets?
+		if (inactivityCount == TIMEOUT) {
+			timer.cancel();
+			getWsOutbound().writeTextMessage(CharBuffer.wrap(new JSONObject().element("stale", "0").toString())); //TODO: zero
+			getWsOutbound().flush();
+			return;
+		}
 		
-//		session.getUI().reactTo(
-//			JSONArray.toCollection(JSONArray.fromObject(request.getParameter(KEYDOWNS_PARAM)), Integer.class),
-//			JSONArray.toCollection(JSONArray.fromObject(request.getParameter(KEYUPS_PARAM)), Integer.class));
-
+		Session session = world.getZion().getHardlines().get(login); //TODO: can we get session from original call with websockets?
 		
 		Cell cell = session.getAvatar().getCell();
 		
@@ -123,11 +139,19 @@ public class SocketHub extends MessageInbound {
 			
 		getWsOutbound().writeTextMessage(CharBuffer.wrap(jsonObject.toString()));
 		getWsOutbound().flush();
+		
+		inactivityCount++;
 	}
 	
-	private final void reactToKey(JSONObject data) {
+	private final void reactToKey(JSONObject data) throws IOException {
 		//TODO: can we get session from original call with websockets?
 		world.getZion().getHardlines().get(login).getUI().reactTo(data.getInt(KEY_PARAM), data.getBoolean(DOWN_PARAM));
+		
+		if (inactivityCount == TIMEOUT) {
+			login(null);
+		}
+		
+		inactivityCount = 0;
 	}
 	
 	@Override

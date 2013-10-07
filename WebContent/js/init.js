@@ -72,6 +72,8 @@ function refresh(init, jump) {
 					
 					//sync();
 				}
+			} else if (data.stale) {
+				drawStaleScreen();
 			} else {
 				render(JSON.parse(e.data));
 			}

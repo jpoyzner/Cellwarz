@@ -39,6 +39,12 @@ function drawSprites() {
 	}
 }
 
+function drawStaleScreen() {
+	ctx.fillStyle = "gray";
+	ctx.fillRect(0, 0, canvas.width, canvas.height);
+	drawSprites();
+}
+
 function addScreenText() {
 	ctx.fillStyle = "red";
 	ctx.font = "bold 16px Arial";
