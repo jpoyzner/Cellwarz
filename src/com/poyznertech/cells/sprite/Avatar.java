@@ -38,6 +38,7 @@ public class Avatar extends Sprite {
 	private final Cell cell;
 	private final String name;
 	
+	private Session session;
 	private Structure structure;
 	private int structureChangeUpdate;
 	private int firstDraw; //used for showing name only
@@ -313,5 +314,13 @@ public class Avatar extends Sprite {
     	if (structure != null) {
     		structure.activateManaAction(manaIndex, actionIndex);
     	}
+	}
+
+	public Session getSession() {
+		return session;
+	}
+
+	public void setSession(Session session) {
+		this.session = session;
 	}
 }

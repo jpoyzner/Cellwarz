@@ -9,9 +9,10 @@ public class Portal extends CryogenicDoor {
 		super(x, y, cellInit, cell);
 	}
 	
-	final void warpRandomly(Avatar avatar) {
+	final void warpRandomly(Avatar avatar) {		
 		Zion zion = cell.getWorld().getZion();
-		zion.getRandomEngine().getCell().connect(avatar.getName(), true);
+		//TODO: not sure why but if I use avatar.getSession() it causes NPEs
+		zion.getHardlines().get(avatar.getName()).plugin(zion.getRandomEngine().getCell().addAvatarAtEntrance(avatar.getName()));
 		zion.loginNeedsRefresh(avatar.getName());
 	}
 }

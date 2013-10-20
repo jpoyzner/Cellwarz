@@ -1,6 +1,5 @@
 package com.poyznertech.cells;
 
-import java.util.Map;
 import java.util.Random;
 
 import com.poyznertech.cells.sprite.Avatar;
@@ -139,19 +138,7 @@ public class Cell {
 		return cellData;
 	}
 	
-	public void connect(String login, boolean jump) {
-		Map<String, Session> hardlines = world.getZion().getHardlines();
-		if (hardlines.containsKey(login)) {
-			Session session = hardlines.get(login);
-			if (session.unplugged() || jump) {
-				session.plugin(addAvatarAtEntrance(login));
-			}
-		} else {
-			hardlines.put(login, new Session(addAvatarAtEntrance(login)));
-		}
-	}
-	
-	private final Avatar addAvatarAtEntrance(String name) {
+	public final Avatar addAvatarAtEntrance(String name) {
 		try {
 			return new Avatar(name, entrance.getEntranceX(), entrance.getEntranceY(), false, this);
 		} catch (ClusteredInitException e) {

@@ -49,7 +49,9 @@ public class Zion {
 	}
 	
 	public final void loginNotStale(String login) {
-		staleLogins.remove(login);
+		if (stale(login)) {
+			staleLogins.remove(login);
+		}
 	}
 	
 	public final boolean stale(String login) {

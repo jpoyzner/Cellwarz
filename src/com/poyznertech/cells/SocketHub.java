@@ -3,6 +3,7 @@ package com.poyznertech.cells;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
+import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
 
@@ -27,6 +28,7 @@ public class SocketHub extends MessageInbound {
 	private String login;
 	private Timer timer;
 	private int inactivityCount;
+	private Session session;
 	
 	public SocketHub(World world) throws IOException {
 		super();
@@ -50,41 +52,25 @@ public class SocketHub extends MessageInbound {
 			jump = data.getBoolean(JUMP_PARAM);
 		}
 		
-		Session loginSession = world.getZion().getHardlines().get(login);
+		Zion zion = world.getZion();
+		Map<String, Session> hardlines = zion.getHardlines();
+		session = hardlines.get(login);
+		Cell cell;
 		
-		Cell cell =
-			loginSession == null || loginSession.unplugged() || jump ?
-				world.getZion().getRandomEngine().getCell()
-				: loginSession.getAvatar().getCell();
-		
-		cell.connect(login, jump);
-		
-		JSONObject jsonResponse = new JSONObject();
-		jsonResponse.element(CONNECT_PARAM, "0"); //TODO: make this a constant and find more efficient way to do this?
-		jsonResponse.element(SPRITES_KEY, JSONGenerator.getSprites(cell.getCellData().getSprites(), false, null));
-		
-		JSONObject avatars = new JSONObject();
-		for (Session session: world.getZion().getHardlines().values()) {
-			if (!session.unplugged()) {
-				avatars.element(session.getAvatar().getName(), session.getAvatar().getCellIndex());
-			}
+		if (session == null) {
+			cell = zion.getRandomEngine().getCell();
+			hardlines.put(login, new Session(cell.addAvatarAtEntrance(login)));
+		} else if (session.unplugged() || jump) {
+			cell = zion.getRandomEngine().getCell();
+			session.plugin(cell.addAvatarAtEntrance(login));
+		} else {
+			cell = session.getAvatar().getCell();
 		}
-		jsonResponse.element(AVATARS_KEY, avatars);
-		
-		jsonResponse.element(TOOLS_KEY, JSONGenerator.getTools(world.getZion().getHardlines().get(login).getAvatar()));
-		
-		JSONArray imagePaths = new JSONArray();
-		for (String imagePath: cell.getCellData().getImagePaths()) {
-			imagePaths.element(imagePath);
-		}
-		jsonResponse.element(IMAGE_PATHS_KEY, imagePaths);
-		
-		getWsOutbound().writeTextMessage(CharBuffer.wrap(jsonResponse.toString()));
+
+		getWsOutbound().writeTextMessage(CharBuffer.wrap(getAllSprites(cell).toString()));
 		getWsOutbound().flush();
 		
-		if (world.getZion().stale(login)) {
-			world.getZion().loginNotStale(login);
-		}
+		world.getZion().loginNotStale(login);
 		
 		startRendering();
 	}
@@ -118,20 +104,24 @@ public class SocketHub extends MessageInbound {
 	}
 	
 	public void renderClient() throws IOException {
-		if (inactivityCount == TIMEOUT) {
+		if (inactivityCount == TIMEOUT) { //TODO: inactivity count no longer handled client-side
 			timer.cancel();
-			getWsOutbound().writeTextMessage(CharBuffer.wrap(new JSONObject().element("stale", "0").toString())); //TODO: zero
+			getWsOutbound().writeTextMessage(CharBuffer.wrap(new JSONObject().element("inactive", "0").toString())); //TODO:inactive
 			getWsOutbound().flush();
 			return;
 		}
 		
-		Session session = world.getZion().getHardlines().get(login); //TODO: can we get session from original call with websockets?
+		Session session = world.getZion().getHardlines().get(login);
+		//TODO: tried to replace with "session" but got null pointers, might be related to same thing happening in portal warp
 		
 		Cell cell = session.getAvatar().getCell();
 		
-		JSONObject jsonObject = world.getZion().stale(login) ?
-			new JSONObject()
-			: JSONGenerator.getSprites(cell.getEngine().getRedrawSprites(), true, session.getAvatar());
+		boolean needsRefresh = world.getZion().stale(login);
+		
+		JSONObject jsonObject =
+			needsRefresh ?
+				getAllSprites(cell)
+				: JSONGenerator.getSprites(cell.getEngine().getRedrawSprites(), true, session.getAvatar());
 		
 //		if (cell.hasNewMessage()) {
 //			jsonObject.element(MESSAGE_KEY, cell.getMessage());
@@ -140,7 +130,35 @@ public class SocketHub extends MessageInbound {
 		getWsOutbound().writeTextMessage(CharBuffer.wrap(jsonObject.toString()));
 		getWsOutbound().flush();
 		
+		if (needsRefresh) {
+			world.getZion().loginNotStale(login);
+		}
+		
 		inactivityCount++;
+	}
+	
+	private final JSONObject getAllSprites(Cell cell) {
+		JSONObject jsonResponse = new JSONObject();
+		jsonResponse.element(CONNECT_PARAM, "0"); //TODO: make this a constant and find more efficient way to do this?
+		jsonResponse.element(SPRITES_KEY, JSONGenerator.getSprites(cell.getCellData().getSprites(), false, null));
+		
+		JSONObject avatars = new JSONObject();
+		for (Session avtarSession: world.getZion().getHardlines().values()) {
+			if (!avtarSession.unplugged()) {
+				avatars.element(avtarSession.getAvatar().getName(), avtarSession.getAvatar().getCellIndex());
+			}
+		}
+		jsonResponse.element(AVATARS_KEY, avatars);
+		
+		jsonResponse.element(TOOLS_KEY, JSONGenerator.getTools(world.getZion().getHardlines().get(login).getAvatar()));
+		
+		JSONArray imagePaths = new JSONArray();
+		for (String imagePath: cell.getCellData().getImagePaths()) {
+			imagePaths.element(imagePath);
+		}
+		jsonResponse.element(IMAGE_PATHS_KEY, imagePaths);
+		
+		return jsonResponse;
 	}
 	
 	private final void reactToKey(JSONObject data) throws IOException {

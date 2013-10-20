@@ -8,6 +8,7 @@ public class Session {
 	
 	public Session(Avatar avatar) {
 		this.avatar = avatar;
+		avatar.setSession(this);
 		UI = new UI(avatar);
 	}
 

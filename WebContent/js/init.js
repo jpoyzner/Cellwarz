@@ -46,43 +46,7 @@ function refresh(init, jump) {
 		text = "";
 		cellText = "";
 		
-		connection = new WebSocket("ws://" + document.location.host + "/Cellwarz/socketrefresh");
-		
-		connection.onopen = function() {
-			connection.send(JSON.stringify({connect: true, login: loginName, jump: jump}));
-		};
-		
-		connection.onmessage = function(e) {
-			data = JSON.parse(e.data);	
-			if (data.connect) {
-				sprites = data.sprites;
-				
-				if (init) {
-					avatars = data.avatars;
-					tools = data.tools;
-					
-					imagePaths = data.imagePaths;
-					for (var i = 0; i < imagePaths.length; i++) {	
-						image = new Image();
-						image.src = imagePaths[i];
-						images[i] = image;
-					}
-					
-					needsRefresh = false; //TODO: review this thing and the stale thing on server;
-					
-					//sync();
-				}
-			} else if (data.stale) {
-				drawStaleScreen();
-			} else {
-				render(JSON.parse(e.data));
-			}
-		};
-		
-		connection.onerror = function(error) {
-			//refresh(init, jump);
-			connection.close();
-		};
+		connection = establishSocket(jump);
 	} else {
 		connection.send(JSON.stringify({login: loginName, jump: jump}));
 	}
