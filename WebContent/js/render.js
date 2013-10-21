@@ -49,11 +49,11 @@ function addScreenText() {
 	ctx.fillStyle = "red";
 	ctx.font = "bold 16px Arial";
 	
-	if (totalReqCount % 5 == 0) {
-		text = "Fail Rate: " + (timedOutCount * 100 / totalReqCount) + "%";
-		
-		//"InactivityCount: " + inactivityCount;
-	}
+//	if (totalReqCount % 5 == 0) {
+//		text = "Fail Rate: " + (timedOutCount * 100 / totalReqCount) + "%";
+//		
+//		//"InactivityCount: " + inactivityCount;
+//	}
 
 	ctx.fillText(loginName + ": " + text, 20, 20);
 	

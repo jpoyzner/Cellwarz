@@ -19,19 +19,17 @@ $(document).keydown(function(event) {
 		if (text.length > 0) {
 			text = text.substring(0, text.length - 1);
 		}
-	} else if (event.keyCode == 13) {
+	} else if (event.keyCode == 13) { //enter
 		if (text.length > 0) {
-			$.post('/Cellwarz/message', {login: loginName, message: text});
+			connection.send(JSON.stringify({message: text}));
 			text = "";
 		}
 	}
 	
-	connection.send(JSON.stringify({key: event.keyCode, down: true}));
-	//keydowns[keydowns.length] = event.keyCode;
+	connection.send(JSON.stringify({key: event.keyCode, down: true})); //instead of down, use keyup or keydown param
 });
 
 $(document).keyup(function(event) {
-	//keyups[keyups.length] = event.keyCode;
 	connection.send(JSON.stringify({key: event.keyCode, down: false}));
 });
 

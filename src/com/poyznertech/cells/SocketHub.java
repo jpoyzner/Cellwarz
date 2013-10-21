@@ -14,7 +14,9 @@ import org.apache.catalina.websocket.MessageInbound;
 
 public class SocketHub extends MessageInbound {
 	public static final String CONNECT_PARAM = "connect";
+	public static final String MESSAGE_PARAM = "message";
     public static final String LOGIN_PARAM = "login";
+    public static final String INACTIVE_PARAM = "inactive";
 	public static final String JUMP_PARAM = "jump";
 	public static final String SPRITES_KEY = "sprites";
 	public static final String AVATARS_KEY = "avatars";
@@ -40,6 +42,8 @@ public class SocketHub extends MessageInbound {
 		JSONObject data = JSONObject.fromObject(message.toString());
 		if (data.has(CONNECT_PARAM)) { //TODO: questionable efficiency
 			login(data);
+		} else if (data.has(MESSAGE_PARAM)) {
+			newMessage(data);
 		} else {
 			reactToKey(data);
 		}
@@ -75,6 +79,10 @@ public class SocketHub extends MessageInbound {
 		startRendering();
 	}
 	
+	private final void newMessage(JSONObject data) {
+		world.getZion().getHardlines().get(login).getAvatar().getCell().postMessage(login + ": " + data.getString(MESSAGE_PARAM));
+	}
+	
 	private final void startRendering() {
 		inactivityCount = 0;
 		
@@ -106,8 +114,7 @@ public class SocketHub extends MessageInbound {
 	public void renderClient() throws IOException {
 		if (inactivityCount == TIMEOUT) { //TODO: inactivity count no longer handled client-side
 			timer.cancel();
-			getWsOutbound().writeTextMessage(CharBuffer.wrap(new JSONObject().element("inactive", "0").toString())); //TODO:inactive
-			getWsOutbound().flush();
+			getWsOutbound().writeTextMessage(CharBuffer.wrap(new JSONObject().element(INACTIVE_PARAM, "0").toString()));//the "0"
 			return;
 		}
 		
@@ -123,9 +130,11 @@ public class SocketHub extends MessageInbound {
 				getAllSprites(cell)
 				: JSONGenerator.getSprites(cell.getEngine().getRedrawSprites(), true, session.getAvatar());
 		
-//		if (cell.hasNewMessage()) {
-//			jsonObject.element(MESSAGE_KEY, cell.getMessage());
-//		}
+				
+		//TODO: the whole chat system needs to be redone with a history of chat and limit to one second refresh
+		if (cell.hasNewMessage()) {
+			jsonObject.element(MESSAGE_PARAM, cell.getMessage());
+		}
 			
 		getWsOutbound().writeTextMessage(CharBuffer.wrap(jsonObject.toString()));
 		getWsOutbound().flush();

@@ -21,9 +21,7 @@ function establishSocket(jump) {
 					images[i] = image;
 				}
 				
-				needsRefresh = false; //TODO: review this thing and the stale thing on server;
-				
-				//sync();
+				needsRefresh = false; //TODO: review this thing;
 			}
 		} else if (data.inactive) {
 			drawStaleScreen();
