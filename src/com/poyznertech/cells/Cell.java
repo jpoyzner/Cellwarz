@@ -10,6 +10,7 @@ import com.poyznertech.cells.sprite.Entrance;
 import com.poyznertech.cells.sprite.Launcher;
 import com.poyznertech.cells.sprite.Mana;
 import com.poyznertech.cells.sprite.Portal;
+import com.poyznertech.cells.sprite.Robot;
 import com.poyznertech.cells.sprite.Wall;
 
 //TODO: message lines should be painted on screen on top left in a fixed position
@@ -110,18 +111,14 @@ public class Cell {
 				i--;
 			}
 		}
-		
-//		new Timer().schedule(
-//			new TimerTask() {
-//				public void run() {
-//					if (robotCount < 100) {
-//						addRobotAtEntrance2();
-//						robotCount++;
-//					}
-//				}
-//			},
-//			0,
-//			1000);
+
+		for (int i = 0; i < 10; i++) {
+			try {
+				new Robot(getRandomX(Avatar.WIDTH), getRandomY(Avatar.HEIGHT), true, this);
+			} catch (ClusteredInitException e) {
+				i--;
+			}
+		}
 		
 		return this;
 	}

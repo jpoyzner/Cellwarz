@@ -13,25 +13,28 @@ import com.poyznertech.cells.Physics;
 import com.poyznertech.cells.Session;
 
 public class Avatar extends Sprite {
+	public static final int WIDTH = 6;
+	public static final int HEIGHT = 8;
+	
 	static final String STAND_RIGHT_ACTION = "stand_right";
 	static final String STAND_LEFT_ACTION = "stand_left";
 	static final String RUN_RIGHT_ACTION = "run_right";
 	static final String RUN_LEFT_ACTION = "run_left";
-	private static final String JUMP_RIGHT_ACTION = "jump_right";
-	private static final String JUMP_LEFT_ACTION = "jump_left";
-	private static final String FLOAT_RIGHT_ACTION = "float_right";
-	private static final String FLOAT_LEFT_ACTION = "float_left";
-	private static final String LAND_RIGHT_ACTION = "land_right";
-	private static final String LAND_LEFT_ACTION = "land_left";
+	static final String JUMP_RIGHT_ACTION = "jump_right";
+	static final String JUMP_LEFT_ACTION = "jump_left";
+	static final String FLOAT_RIGHT_ACTION = "float_right";
+	static final String FLOAT_LEFT_ACTION = "float_left";
+	static final String LAND_RIGHT_ACTION = "land_right";
+	static final String LAND_LEFT_ACTION = "land_left";
 	
 	static final int RUN_STEP_DISTANCE = 1;
-	private static final int JUMP_DISTANCE = 1;
+	static final int JUMP_DISTANCE = 1;
 	
 	private static final int FULL_JUMP_ACTION_LENGTH = 24;
 	private static final int JUMP_ACTION_LENGTH = 10;
 	private static final int FLOAT_ACTION_LENGTH = 8;
-	private static final int START_FLOAT_INTERVAL = FULL_JUMP_ACTION_LENGTH - JUMP_ACTION_LENGTH;
-	private static final int START_LAND_INTERVAL = START_FLOAT_INTERVAL - FLOAT_ACTION_LENGTH;
+	static final int START_FLOAT_INTERVAL = FULL_JUMP_ACTION_LENGTH - JUMP_ACTION_LENGTH;
+	static final int START_LAND_INTERVAL = START_FLOAT_INTERVAL - FLOAT_ACTION_LENGTH;
 	
 	static Map<String, List<Frame>> actionFrames = new HashMap<String, List<Frame>>();
 	
@@ -41,10 +44,10 @@ public class Avatar extends Sprite {
 	private Session session;
 	private Structure structure;
 	private int structureChangeUpdate;
-	private int firstDraw; //used for showing name only
+	int firstDraw; //used for showing name only
 	private Mana handledMana;
 	
-	private boolean facingRight;
+	boolean facingRight;
 	int yPower;
 	int xPower;
 	int slidePower;
@@ -82,12 +85,12 @@ public class Avatar extends Sprite {
 	
 	@Override
 	public int getWidth() {
-		return 6;
+		return WIDTH;
 	}
 	
 	@Override
 	public int getHeight() {
-		return 8;
+		return HEIGHT;
 	}
 
 	@Override

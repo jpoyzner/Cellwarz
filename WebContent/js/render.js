@@ -1,6 +1,13 @@
 function render(data) {
-	ctx.fillStyle = "lightblue";
+	ctx.fillStyle = 'black';//"lightblue";
 	ctx.fillRect(0, 0, canvas.width, canvas.height);
+	
+	ctx.drawImage(
+		bgImage,
+		offsetX / 10 * -1,
+		offsetY / 50 * -1);
+		//window.innerWidth,
+		//window.innerHeight);
 	
 	spriteIds = Object.keys(data);
 	if (spriteIds.length == 0) {
@@ -57,7 +64,7 @@ function addScreenText() {
 
 	ctx.fillText(loginName + ": " + text, 20, 20);
 	
-	ctx.fillStyle = "darkred";
+	ctx.fillStyle = "#FF9933";//"darkred";
 	ctx.fillText(cellText, 20, 70);
 }
 

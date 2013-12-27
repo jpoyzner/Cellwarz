@@ -31,6 +31,8 @@ function init(e, jump) {
 		timedOutCount = 0;
 		totalReqCount = 0;
 		needsRefresh = false;
+		offsetX = 0;
+		offsetY = 0;
 		
 		refresh(true, jump);
 	}

@@ -21,6 +21,9 @@ function establishSocket(jump) {
 					images[i] = image;
 				}
 				
+				bgImage = new Image();
+				bgImage.src = 'images/bg/saturn.png';
+				
 				needsRefresh = false; //TODO: review this thing;
 			}
 		} else if (data.inactive) {
