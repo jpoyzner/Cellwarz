@@ -128,6 +128,8 @@ define(['backbone'], function(Backbone) {
 		},
 		drawDashboardItems: function() {
 			if (Object.keys(this.tools).length != 0) {
+				//TODO: the line below is causing MAD errors by trying to load a URL which is http://localhost:8080/Cellwarz/undefined
+				//it's probably done some inefficient way also
 				$('#mana1').css('background-image', 'url(\'' + this.imagePaths[this.tools[0]] + '\')');
 				delete this.tools[0];
 			}
