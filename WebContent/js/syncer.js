@@ -1,42 +1,44 @@
-function establishSocket(jump) {
-	connection = new WebSocket("ws://" + document.location.host + "/Cellwarz/socketrefresh");
+define(['underscore', 'backbone'], function(_, Backbone) {
+	return Backbone.View.extend({
+		initialize: function(options) {
+			this.canvas = options.canvas;
+			this.jump = options.jump;
 	
-	connection.onopen = function() {
-		connection.send(JSON.stringify({connect: true, login: loginName, jump: jump}));
-	};
-	
-	connection.onmessage = function(e) {
-		data = JSON.parse(e.data);	
-		if (data.connect) {
-			sprites = data.sprites;
+			this.connection = new WebSocket("ws://" + document.location.host + "/Cellwarz/socketrefresh");
 			
-			if (init) {
-				avatars = data.avatars;
-				tools = data.tools;
-				
-				imagePaths = data.imagePaths;
-				for (var i = 0; i < imagePaths.length; i++) {	
-					image = new Image();
-					image.src = imagePaths[i];
-					images[i] = image;
+			this.connection.onopen = _.bind(function() {
+				this.connection.send(JSON.stringify({connect: true, login: this.canvas.loginName, jump: this.jump}));
+			}, this);
+			
+			this.connection.onmessage = _.bind(function(e) {
+				var data = JSON.parse(e.data);	
+				if (data.connect) {
+					this.canvas.renderer.sprites = data.sprites;
+					
+					//if (init) {
+						this.canvas.renderer.avatars = data.avatars;
+						this.canvas.renderer.tools = data.tools;
+						
+						this.canvas.renderer.imagePaths = data.imagePaths;
+						for (var i = 0; i < this.canvas.renderer.imagePaths.length; i++) {	
+							var image = new Image();
+							image.src = this.canvas.renderer.imagePaths[i];
+							this.canvas.images[i] = image;
+						}
+
+						//needsRefresh = false;
+					//}
+				} else if (data.inactive) {
+					this.canvas.renderer.drawStaleScreen();
+				} else {
+					this.canvas.renderer.render(JSON.parse(e.data));
 				}
-				
-				bgImage = new Image();
-				bgImage.src = 'images/bg/saturn.png';
-				
-				needsRefresh = false; //TODO: review this thing;
-			}
-		} else if (data.inactive) {
-			drawStaleScreen();
-		} else {
-			render(JSON.parse(e.data));
+			}, this);
+			
+			this.connection.onerror = _.bind(function(error) {
+				console.log(error);
+				this.connection.close();
+			}, this);
 		}
-	};
-	
-	connection.onerror = function(error) {
-		console.log(error);
-		connection.close();
-	};
-	
-	return connection;
-}
+	});
+});
