@@ -14,18 +14,18 @@ define(['backbone', 'underscore',], function(Backbone, _) {
 			this.bgImage = new Image();
 			this.bgImage.src = 'images/bg/saturn.png';
 			
-			requestAnimationFrame =
-				requestAnimationFrame || mozRequestAnimationFrame || webkitRequestAnimationFrame || msRequestAnimationFrame;
-			
-			this.step = _.bind(function step() {
-				if (this.renderData) {
-					this.render();
-				}
-				
-			    requestAnimationFrame(this.step);
-			}, this);
-			
-			requestAnimationFrame(this.step);
+//			requestAnimationFrame =
+//				requestAnimationFrame || mozRequestAnimationFrame || webkitRequestAnimationFrame || msRequestAnimationFrame;
+//			
+//			this.step = _.bind(function step() {
+//				if (this.renderData) {
+//					this.render();
+//				}
+//				
+//			    requestAnimationFrame(this.step);
+//			}, this);
+//			
+//			requestAnimationFrame(this.step);
 		},
 		render: function() {
 			this.canvas.ctx.fillStyle = 'black';//"lightblue";

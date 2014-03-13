@@ -24,10 +24,11 @@ define(['underscore', 'backbone'], function(_, Backbone) {
 						this.canvas.images[i] = image;
 					}
 				} else if (data.inactive) {
-					this.canvas.renderer.renderData = null;
+					//this.canvas.renderer.renderData = null;
 					this.canvas.renderer.drawStaleScreen();
 				} else {
 					this.canvas.renderer.renderData = JSON.parse(e.data);
+					this.canvas.renderer.render();
 				}
 			}, this);
 			
