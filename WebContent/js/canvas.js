@@ -24,21 +24,6 @@ define(['backbone', 'ui', 'renderer', 'syncer'], function(Backbone, UI, Renderer
 				this.ui = new UI({canvas: this});
 				this.renderer = new Renderer({canvas: this});
 				this.syncer = new Syncer({canvas: this, jump: options.jump});
-				
-				
-				//if (init) {
-					
-					//keydowns = new Array();
-					//keyups = new Array();
-					
-					//inactivityCount = 0;
-					
-					
-					
-					//connection = establishSocket(options.jump);
-				//} else {
-					//connection.send(JSON.stringify({login: this.loginName, jump: jump}));
-				//}
 			}
 		}
 	});

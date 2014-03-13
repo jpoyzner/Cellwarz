@@ -14,24 +14,20 @@ define(['underscore', 'backbone'], function(_, Backbone) {
 				var data = JSON.parse(e.data);	
 				if (data.connect) {
 					this.canvas.renderer.sprites = data.sprites;
+					this.canvas.renderer.avatars = data.avatars;
+					this.canvas.renderer.tools = data.tools;
 					
-					//if (init) {
-						this.canvas.renderer.avatars = data.avatars;
-						this.canvas.renderer.tools = data.tools;
-						
-						this.canvas.renderer.imagePaths = data.imagePaths;
-						for (var i = 0; i < this.canvas.renderer.imagePaths.length; i++) {	
-							var image = new Image();
-							image.src = this.canvas.renderer.imagePaths[i];
-							this.canvas.images[i] = image;
-						}
-
-						//needsRefresh = false;
-					//}
+					this.canvas.renderer.imagePaths = data.imagePaths;
+					for (var i = 0; i < this.canvas.renderer.imagePaths.length; i++) {	
+						var image = new Image();
+						image.src = this.canvas.renderer.imagePaths[i];
+						this.canvas.images[i] = image;
+					}
 				} else if (data.inactive) {
+					this.canvas.renderer.renderData = null;
 					this.canvas.renderer.drawStaleScreen();
 				} else {
-					this.canvas.renderer.render(JSON.parse(e.data));
+					this.canvas.renderer.renderData = JSON.parse(e.data);
 				}
 			}, this);
 			

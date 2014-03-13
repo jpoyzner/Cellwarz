@@ -1,4 +1,4 @@
-define(['backbone'], function(Backbone) {
+define(['backbone', 'underscore',], function(Backbone, _) {
 	return Backbone.View.extend({
 		initialize: function(options) {
 			this.canvas = options.canvas;
@@ -13,8 +13,21 @@ define(['backbone'], function(Backbone) {
 			
 			this.bgImage = new Image();
 			this.bgImage.src = 'images/bg/saturn.png';
+			
+			requestAnimationFrame =
+				requestAnimationFrame || mozRequestAnimationFrame || webkitRequestAnimationFrame || msRequestAnimationFrame;
+			
+			this.step = _.bind(function step() {
+				if (this.renderData) {
+					this.render();
+				}
+				
+			    requestAnimationFrame(this.step);
+			}, this);
+			
+			requestAnimationFrame(this.step);
 		},
-		render: function(data) {
+		render: function() {
 			this.canvas.ctx.fillStyle = 'black';//"lightblue";
 			this.canvas.ctx.fillRect(0, 0, this.canvas.canvas.width, this.canvas.canvas.height);
 			
@@ -25,19 +38,16 @@ define(['backbone'], function(Backbone) {
 				//window.innerWidth,
 				//window.innerHeight);
 			
-			this.spriteIds = Object.keys(data);
+			this.spriteIds = Object.keys(this.renderData);
 			if (this.spriteIds.length == 0) {
-				//needsRefresh = true;
 				return;
 			} 
 			
-			this.load(data);
+			this.load(this.renderData);
 			this.drawSprites();
 			this.addScreenText();
 			this.drawAvatarsNames();
 			this.drawDashboardItems();
-			
-			//timedOut = false;
 		},
 		load: function(data) {
 			for (var i = 0; i < this.spriteIds.length; i++) {
