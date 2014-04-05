@@ -1,4 +1,4 @@
-define(['backbone', 'ui', 'renderer', 'syncer'], function(Backbone, UI, Renderer, Syncer) {
+define(['ui', 'renderer', 'syncer', 'backbone'], function(UI, Renderer, Syncer) {
 	return Backbone.View.extend({
 		initialize: function(options) {
 			this.loginName = $('#loginName').val();

@@ -35,7 +35,7 @@ public class Session {
 	}
 	
 	public final void unplug() {
-		avatar.setManaDown();
+		avatar.setManaDown(); //TODO: will crash if someone kills you while you hold something because of NPE here
 		avatar = null;
 		UI.unplug();
 	}

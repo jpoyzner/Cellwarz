@@ -1,4 +1,4 @@
-define(['underscore', 'backbone'], function(_, Backbone) {
+define(['underscore', 'backbone'], function() {
 	return Backbone.View.extend({
 		initialize: function(options) {
 			this.canvas = options.canvas;
@@ -28,6 +28,8 @@ define(['underscore', 'backbone'], function(_, Backbone) {
 						this.canvas.syncer.connection.send(JSON.stringify({message: this.canvas.text}));
 						this.canvas.text = "";
 					}
+				} else if (event.keyCode == 187) { //=
+					console.log(this.canvas.renderer.sprites);
 				}
 				
 				//TODO: instead of down, use keyup or keydown param

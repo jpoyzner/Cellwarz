@@ -1,4 +1,4 @@
-define(['backbone', 'underscore',], function(Backbone, _) {
+define(['backbone', 'underscore'], function() {
 	return Backbone.View.extend({
 		initialize: function(options) {
 			this.canvas = options.canvas;
@@ -12,7 +12,7 @@ define(['backbone', 'underscore',], function(Backbone, _) {
 			this.cellText = "";
 			
 			this.bgImage = new Image();
-			this.bgImage.src = 'images/bg/saturn.png';
+			this.bgImage.src = 'images/bg/temple1.png';
 			
 //			requestAnimationFrame =
 //				requestAnimationFrame || mozRequestAnimationFrame || webkitRequestAnimationFrame || msRequestAnimationFrame;
@@ -137,11 +137,13 @@ define(['backbone', 'underscore',], function(Backbone, _) {
 			}
 		},
 		drawDashboardItems: function() {
-			if (Object.keys(this.tools).length != 0) {
-				//TODO: the line below is causing MAD errors by trying to load a URL which is http://localhost:8080/Cellwarz/undefined
-				//it's probably done some inefficient way also
-				$('#mana1').css('background-image', 'url(\'' + this.imagePaths[this.tools[0]] + '\')');
-				delete this.tools[0];
+			if (Object.keys(this.tools).length != 0) { //TODO: why is this always true? happens every render!
+				var url = this.imagePaths[this.tools[0]];
+				if (url) {
+					$('#mana1').css('background-image', "url('" + url + "')");
+				}
+				
+				delete this.tools[0]; //maybe because this or something
 			}
 		},
 		removeDashboardItem: function() {

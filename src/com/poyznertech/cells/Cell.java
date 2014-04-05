@@ -16,12 +16,17 @@ import com.poyznertech.cells.sprite.Wall;
 //TODO: message lines should be painted on screen on top left in a fixed position
 
 public class Cell {
-	private static final int CELL_WIDTH = 1152 / CellData.ANIMATION_STEP;
-	private static final int CELL_HEIGHT = 896 / CellData.ANIMATION_STEP;
+	//private static final int MAX_CELL_WIDTH = 1152;
+	private static final int MIN_CELL_WIDTH = 3000;
+	//private static final int MAX_CELL_HEIGHT = 896;
+	private static final int MIN_CELL_HEIGHT = 2000;	
 	private static final int OUTER_WALL_SIZE = CellBlock.SIZE * 4;
 	
+	private final int width;
+	private final int height;
+	
 	private final World world;
-	private final CellData cellData;
+	private final CellData data;
 	private final Random random;
 	private Engine engine;
 	private Entrance entrance;
@@ -34,34 +39,36 @@ public class Cell {
 
 	public Cell(World world) {
 		this.world = world;
-		cellData = new CellData(CELL_WIDTH, CELL_HEIGHT, world); 
-		newMessageEcho = 0;
 		random = new Random();
+		width = (/*random.nextInt(MAX_CELL_WIDTH - MIN_CELL_WIDTH) +*/ MIN_CELL_WIDTH) / CellData.ANIMATION_STEP;
+		height = (/*random.nextInt(MAX_CELL_HEIGHT - MIN_CELL_HEIGHT) +*/ MIN_CELL_HEIGHT) / CellData.ANIMATION_STEP;
+		data = new CellData(width, height, world); 
+		newMessageEcho = 0;
 	}
 	
 	final Cell init() {
-		Avatar.init(cellData);
-		CellBlock.init(cellData);
-		CryogenicDoor.init(cellData);
-		EngineMana.init(cellData);
-		Launcher.init(cellData);
+		Avatar.init(data);
+		CellBlock.init(data);
+		CryogenicDoor.init(data);
+		EngineMana.init(data);
+		Launcher.init(data);
 		
-		int wallWidth = CELL_WIDTH / CellBlock.SIZE;
-		int wallHeight = CELL_HEIGHT / CellBlock.SIZE;
+		int wallWidth = width / CellBlock.SIZE;
+		int wallHeight = height / CellBlock.SIZE;
 		
 		///outer walls
 		new Wall(false, CellBlock.SIZE, 0, wallWidth - CellBlock.SIZE, this);
 		new Wall(false, CellBlock.SIZE, CellBlock.SIZE, wallWidth - CellBlock.SIZE, this);
 		new Wall(false, CellBlock.SIZE, CellBlock.SIZE * 2, wallWidth - CellBlock.SIZE, this);
 		new Wall(false, CellBlock.SIZE, CellBlock.SIZE * 3, wallWidth - CellBlock.SIZE, this);
-		new Wall(true, CELL_WIDTH - CellBlock.SIZE, 0, wallHeight, this);
-		new Wall(true, CELL_WIDTH - CellBlock.SIZE * 2, 0, wallHeight, this);
-		new Wall(true, CELL_WIDTH - CellBlock.SIZE * 3, 0, wallHeight, this);
-		new Wall(true, CELL_WIDTH - CellBlock.SIZE * 4, 0, wallHeight, this);
-		new Wall(false, CellBlock.SIZE, CELL_HEIGHT - CellBlock.SIZE, wallWidth - CellBlock.SIZE, this);
-		new Wall(false, CellBlock.SIZE, CELL_HEIGHT - CellBlock.SIZE * 2, wallWidth - CellBlock.SIZE, this);
-		new Wall(false, CellBlock.SIZE, CELL_HEIGHT - CellBlock.SIZE * 3, wallWidth - CellBlock.SIZE, this);
-		new Wall(false, CellBlock.SIZE, CELL_HEIGHT - CellBlock.SIZE * 4, wallWidth - CellBlock.SIZE, this);
+		new Wall(true, width - CellBlock.SIZE, 0, wallHeight, this);
+		new Wall(true, width - CellBlock.SIZE * 2, 0, wallHeight, this);
+		new Wall(true, width - CellBlock.SIZE * 3, 0, wallHeight, this);
+		new Wall(true, width - CellBlock.SIZE * 4, 0, wallHeight, this);
+		new Wall(false, CellBlock.SIZE, height - CellBlock.SIZE, wallWidth - CellBlock.SIZE, this);
+		new Wall(false, CellBlock.SIZE, height - CellBlock.SIZE * 2, wallWidth - CellBlock.SIZE, this);
+		new Wall(false, CellBlock.SIZE, height - CellBlock.SIZE * 3, wallWidth - CellBlock.SIZE, this);
+		new Wall(false, CellBlock.SIZE, height - CellBlock.SIZE * 4, wallWidth - CellBlock.SIZE, this);
 		new Wall(true, 0, 0, wallHeight, this);
 		new Wall(true, CellBlock.SIZE, 0, wallHeight, this);
 		new Wall(true, CellBlock.SIZE * 2, 0, wallHeight, this);
@@ -78,7 +85,7 @@ public class Cell {
 				vertical,
 				x,
 				y,
-				random.nextInt(vertical ? CELL_HEIGHT - y - OUTER_WALL_SIZE : CELL_WIDTH - x - OUTER_WALL_SIZE) / CellBlock.SIZE,
+				random.nextInt(vertical ? height - y - OUTER_WALL_SIZE : width - x - OUTER_WALL_SIZE) / CellBlock.SIZE,
 				this);
 		}
 		
@@ -124,15 +131,15 @@ public class Cell {
 	}
 	
 	private final int getRandomX(int spriteSize) {
-		return OUTER_WALL_SIZE + random.nextInt(CELL_WIDTH - OUTER_WALL_SIZE * 2) - spriteSize + 1;
+		return OUTER_WALL_SIZE + random.nextInt(width - OUTER_WALL_SIZE * 2) - spriteSize + 1;
 	}
 	
 	private final int getRandomY(int spriteSize) {
-		return OUTER_WALL_SIZE + random.nextInt(CELL_HEIGHT - OUTER_WALL_SIZE * 2) - spriteSize + 1;
+		return OUTER_WALL_SIZE + random.nextInt(height - OUTER_WALL_SIZE * 2) - spriteSize + 1;
 	}
 
 	public CellData getCellData() {
-		return cellData;
+		return data;
 	}
 	
 	public final Avatar addAvatarAtEntrance(String name) {
@@ -180,5 +187,13 @@ public class Cell {
 	
 	public void setEngine(Engine engine) {
 		this.engine = engine;
+	}
+	
+	int getWidth() {
+		return width;
+	}
+	
+	int getHeight() {
+		return width;
 	}
 }
