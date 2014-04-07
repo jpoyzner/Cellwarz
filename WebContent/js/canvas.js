@@ -4,9 +4,12 @@ define(['ui', 'renderer', 'syncer', 'backbone'], function(UI, Renderer, Syncer) 
 			this.loginName = $('#loginName').val();
 			if (this.loginName.length != 0) {
 				$('#login').remove();
+				$('#canvas-bg').show();
 				
 				this.canvas = $('#canvas').get(0);
 				this.ctx = this.canvas.getContext('2d');
+				this.ctx.canvas.width  = window.innerWidth;
+				this.ctx.canvas.height = window.innerHeight;
 				this.ctx.globalAlpha = 1;
 
 				//TODO: these are legacy but can be still used for debugging:

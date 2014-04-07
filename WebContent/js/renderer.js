@@ -1,5 +1,6 @@
 define(['backbone', 'underscore'], function() {
 	return Backbone.View.extend({
+		background: $('#canvas-bg'),
 		initialize: function(options) {
 			this.canvas = options.canvas;
 			
@@ -11,8 +12,8 @@ define(['backbone', 'underscore'], function() {
 			
 			this.cellText = "";
 			
-			this.bgImage = new Image();
-			this.bgImage.src = 'images/bg/temple1.png';
+			//this.bgImage = new Image();
+			//this.bgImage.src = 'images/bg/temple1.png';
 			
 //			requestAnimationFrame =
 //				requestAnimationFrame || mozRequestAnimationFrame || webkitRequestAnimationFrame || msRequestAnimationFrame;
@@ -28,15 +29,11 @@ define(['backbone', 'underscore'], function() {
 //			requestAnimationFrame(this.step);
 		},
 		render: function() {
-			this.canvas.ctx.fillStyle = 'black';//"lightblue";
-			this.canvas.ctx.fillRect(0, 0, this.canvas.canvas.width, this.canvas.canvas.height);
+			//this.canvas.ctx.fillStyle = 'black';//"lightblue";
+			//this.canvas.ctx.fillRect(0, 0, this.canvas.canvas.width, this.canvas.canvas.height);
+			this.canvas.ctx.clearRect(0, 0, this.canvas.canvas.width, this.canvas.canvas.height);
 			
-			this.canvas.ctx.drawImage(
-				this.bgImage,
-				this.offsetX / 10 * -1,
-				this.offsetY / 50 * -1);
-				//window.innerWidth,
-				//window.innerHeight);
+			this.background.css({left: (this.offsetX / 10 * -1) - 55, top: (this.offsetY / 50 * -1) - 20});
 			
 			this.spriteIds = Object.keys(this.renderData);
 			if (this.spriteIds.length == 0) {
@@ -104,6 +101,8 @@ define(['backbone', 'underscore'], function() {
 			}
 		},
 		drawStaleScreen: function() {
+			//TODO: I think there's an issue where if you go stable, then on another browser you go somewhere else, it will mess things up
+			
 			this.canvas.ctx.fillStyle = "gray";
 			this.canvas.ctx.fillRect(0, 0, this.canvas.canvas.width, this.canvas.canvas.height);
 			this.drawSprites();

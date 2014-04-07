@@ -2,11 +2,21 @@ body {
 	background: url('/Cellwarz/images/blocks/blockA.png');
 }
 
+#canvas-bg {
+	background: url('/Cellwarz/images/bg/temple1.png') no-repeat;
+	background-size: cover;
+	display: none;
+	height: 110%;
+	position:fixed;
+	width: 125%;
+}
+
 #canvas {
+	left: 0;
+	height: 100%;
 	position:fixed;
 	top: 0;
-	left: 0;
-	margin-top: -13px 0 0 -15px;
+	width: 100%;
 }
 
 #login {
