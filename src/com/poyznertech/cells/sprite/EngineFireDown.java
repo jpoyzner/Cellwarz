@@ -12,7 +12,7 @@ import com.poyznertech.cells.Frame;
 public class EngineFireDown extends EngineFire {
 	static Map<String, List<Frame>> actionFrames = new HashMap<String, List<Frame>>();
 	
-	public EngineFireDown(int x, int y, EngineMana mana, Cell cell)  throws ClusteredInitException {
+	public EngineFireDown(int x, int y, Thruster mana, Cell cell)  throws ClusteredInitException {
 		super(x, y, mana, cell);
 	}
 	

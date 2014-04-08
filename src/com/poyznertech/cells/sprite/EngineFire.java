@@ -13,7 +13,7 @@ public abstract class EngineFire extends Sprite {
 	
 	private final Mana mana;
 	
-	public EngineFire(int x, int y, EngineMana mana, Cell cell) throws ClusteredInitException {
+	public EngineFire(int x, int y, Thruster mana, Cell cell) throws ClusteredInitException {
 		super(x, y, false, cell);
 		this.mana = mana;
 	}

@@ -5,12 +5,13 @@ import java.util.Random;
 import com.poyznertech.cells.sprite.Avatar;
 import com.poyznertech.cells.sprite.CellBlock;
 import com.poyznertech.cells.sprite.CryogenicDoor;
-import com.poyznertech.cells.sprite.EngineMana;
 import com.poyznertech.cells.sprite.Entrance;
+import com.poyznertech.cells.sprite.Ice;
 import com.poyznertech.cells.sprite.Launcher;
 import com.poyznertech.cells.sprite.Mana;
 import com.poyznertech.cells.sprite.Portal;
 import com.poyznertech.cells.sprite.Robot;
+import com.poyznertech.cells.sprite.Thruster;
 import com.poyznertech.cells.sprite.Wall;
 
 //TODO: message lines should be painted on screen on top left in a fixed position
@@ -35,7 +36,7 @@ public class Cell {
 	//private int robotCount = 0;
 	
 	private int newMessageEcho;
-	private String message; //TODO: should be come list soon
+	private String message; //TODO: should become list soon
 
 	public Cell(World world) {
 		this.world = world;
@@ -50,8 +51,9 @@ public class Cell {
 		Avatar.init(data);
 		CellBlock.init(data);
 		CryogenicDoor.init(data);
-		EngineMana.init(data);
+		Thruster.init(data);
 		Launcher.init(data);
+		Ice.init(data);
 		
 		int wallWidth = width / CellBlock.SIZE;
 		int wallHeight = height / CellBlock.SIZE;
@@ -105,7 +107,7 @@ public class Cell {
 		
 		for (int i = 0; i < 10; i++) {
 			try {
-				new EngineMana(getRandomX(Mana.SIZE), getRandomY(Mana.SIZE), true, this);
+				new Thruster(getRandomX(Mana.SIZE), getRandomY(Mana.SIZE), true, this);
 			} catch (ClusteredInitException e) {
 				i--;
 			}
@@ -114,6 +116,14 @@ public class Cell {
 		for (int i = 0; i < 10; i++) {
 			try {
 				new Launcher(getRandomX(Mana.SIZE), getRandomY(Mana.SIZE), true, this);
+			} catch (ClusteredInitException e) {
+				i--;
+			}
+		}
+		
+		for (int i = 0; i < 10; i++) {
+			try {
+				new Ice(getRandomX(Mana.SIZE), getRandomY(Mana.SIZE), true, this);
 			} catch (ClusteredInitException e) {
 				i--;
 			}

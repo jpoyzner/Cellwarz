@@ -11,7 +11,7 @@ import com.poyznertech.cells.ClusteredInitException;
 import com.poyznertech.cells.Frame;
 import com.poyznertech.cells.Physics;
 
-public class EngineMana extends Mana {
+public class Thruster extends Mana {
 	static Map<String, List<Frame>> actionFrames = new HashMap<String, List<Frame>>();
 	static int dashboardImageIndex;
 	
@@ -26,7 +26,7 @@ public class EngineMana extends Mana {
 	private int upThrust;
 	private int rightThrust;
 	
-	public EngineMana(int x, int y, boolean cellInit, Cell cell) throws ClusteredInitException {
+	public Thruster(int x, int y, boolean cellInit, Cell cell) throws ClusteredInitException {
 		super(x, y, cellInit, cell);
 		leftFire = new EngineFireLeft(x - EngineFire.FIRE_LENGTH, y, this, cell);
 		leftFire.remove();
