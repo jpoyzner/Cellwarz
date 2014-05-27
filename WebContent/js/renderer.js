@@ -45,6 +45,11 @@ define(['backbone', 'underscore'], function() {
 			this.addScreenText();
 			this.drawAvatarsNames();
 			this.drawDashboardItems();
+			
+			if (this.canvas.analyzer) {
+				this.canvas.analyzer.redraws++;
+				this.canvas.analyzer.drawTime = Date.now() - this.canvas.analyzer.connectionTime;
+			}
 		},
 		load: function(data) {
 			for (var i = 0; i < this.spriteIds.length; i++) {
@@ -120,7 +125,7 @@ define(['backbone', 'underscore'], function() {
 			this.canvas.ctx.fillText(this.canvas.loginName + ": " + this.canvas.text, 20, 20);
 			
 			this.canvas.ctx.fillStyle = "#FF9933";//"darkred";
-			this.canvas.ctx.fillText(this.cellText, 20, 70);
+			this.canvas.ctx.fillText(this.canvas.analyzer ? this.canvas.analyzer.state : this.cellText, 20, 70);
 		},
 		drawAvatarsNames: function() {
 			var avatarNames = Object.keys(this.avatars);

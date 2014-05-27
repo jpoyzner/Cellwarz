@@ -27,7 +27,7 @@ public class Engine {
 	private final Cell cell;
 	private List<Sprite> redrawSprites;
 	private int frameNumber;
-		
+
 	public Engine(Cell cell) {
 		this.cell = cell;
 		cell.setEngine(this);
@@ -40,6 +40,8 @@ public class Engine {
 		new Timer().schedule(
 			new TimerTask() {
 				public void run() {
+					//long started = System.currentTimeMillis();
+					
 					List<Sprite> newRedrawSprites = new ArrayList<Sprite>(); //TODO: The sprites should be processed closer to together when they will be used simultaneously?
 					
 					for (Sprite sprite: cell.getCellData().getSprites()) {
@@ -59,6 +61,9 @@ public class Engine {
 					}
 					
 					redrawSprites = newRedrawSprites;
+					
+					//System.out.println("TIME: " + (System.currentTimeMillis() - started) + " mls");
+					
 				}
 			},
 			0,

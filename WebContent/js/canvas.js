@@ -1,10 +1,12 @@
-define(['ui', 'renderer', 'syncer', 'backbone'], function(UI, Renderer, Syncer) {
+define(['ui', 'renderer', 'syncer', 'analyzer', 'backbone'], function(UI, Renderer, Syncer, Analyzer) {
 	return Backbone.View.extend({
 		initialize: function(options) {
 			this.loginName = $('#loginName').val();
 			if (this.loginName.length != 0) {
 				$('#login').remove();
 				$('#canvas-bg').show();
+				
+				this.analyzer = new Analyzer();
 				
 				this.canvas = $('#canvas').get(0);
 				this.ctx = this.canvas.getContext('2d');
@@ -27,6 +29,8 @@ define(['ui', 'renderer', 'syncer', 'backbone'], function(UI, Renderer, Syncer) 
 				this.ui = new UI({canvas: this});
 				this.renderer = new Renderer({canvas: this});
 				this.syncer = new Syncer({canvas: this, jump: options.jump});
+				
+				
 			}
 		}
 	});

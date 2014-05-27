@@ -11,6 +11,10 @@ define(['underscore', 'backbone'], function() {
 			}, this);
 			
 			this.connection.onmessage = _.bind(function(e) {
+				if (this.canvas.analyzer) {
+					this.canvas.analyzer.connectionTime = Date.now();
+				}
+				
 				var data = JSON.parse(e.data);	
 				if (data.connect) {
 					if (data.connect == "inactive") {
@@ -33,6 +37,10 @@ define(['underscore', 'backbone'], function() {
 				} else {
 					this.canvas.renderer.renderData = JSON.parse(e.data);
 					this.canvas.renderer.render();
+				}
+				
+				if (this.canvas.analyzer) {
+					this.canvas.analyzer.connections++;
 				}
 			}, this);
 			

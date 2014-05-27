@@ -18,9 +18,10 @@ import com.poyznertech.cells.sprite.Wall;
 
 public class Cell {
 	//private static final int MAX_CELL_WIDTH = 1152;
-	private static final int MIN_CELL_WIDTH = 3000;
+	private static final int MIN_CELL_WIDTH = 800;
 	//private static final int MAX_CELL_HEIGHT = 896;
-	private static final int MIN_CELL_HEIGHT = 2000;	
+	private static final int MIN_CELL_HEIGHT = 800;
+	
 	private static final int OUTER_WALL_SIZE = CellBlock.SIZE * 4;
 	
 	private final int width;
@@ -76,12 +77,12 @@ public class Cell {
 		new Wall(true, CellBlock.SIZE * 2, 0, wallHeight, this);
 		new Wall(true, CellBlock.SIZE * 3, 0, wallHeight, this);
 		
-		for (int i = 0; i < 20; i++) {
+		for (int i = 0; i < 10; i++) {
 			int x = getRandomX(1);
 			x = x % 2 == 0 ? x : (x - 1);
 			int y = getRandomY(1);
 			y = y % 2 == 0 ? y : (y - 1);
-			boolean vertical = random.nextBoolean();
+			boolean vertical = false; //random.nextBoolean();
 			
 			new Wall(
 				vertical,
@@ -97,15 +98,15 @@ public class Cell {
 			} catch (ClusteredInitException e) {}
 		} while (entrance == null);
 		
-		do {
-			try {
-				portal = new Portal(getRandomX(CryogenicDoor.WIDTH), getRandomY(CryogenicDoor.HEIGHT), true, this);
-			} catch (ClusteredInitException e) {}
-		} while (portal == null);
+//		do {
+//			try {
+//				portal = new Portal(getRandomX(CryogenicDoor.WIDTH), getRandomY(CryogenicDoor.HEIGHT), true, this);
+//			} catch (ClusteredInitException e) {}
+//		} while (portal == null);
 		
 		//entrance2 = new CryogenicDoor(100, 90, world);
 		
-		for (int i = 0; i < 10; i++) {
+		for (int i = 0; i < 5; i++) {
 			try {
 				new Thruster(getRandomX(Mana.SIZE), getRandomY(Mana.SIZE), true, this);
 			} catch (ClusteredInitException e) {
@@ -121,7 +122,7 @@ public class Cell {
 			}
 		}
 		
-		for (int i = 0; i < 10; i++) {
+		for (int i = 0; i < 1; i++) {
 			try {
 				new Ice(getRandomX(Mana.SIZE), getRandomY(Mana.SIZE), true, this);
 			} catch (ClusteredInitException e) {
@@ -129,7 +130,7 @@ public class Cell {
 			}
 		}
 
-		for (int i = 0; i < 10; i++) {
+		for (int i = 0; i < 0; i++) {
 			try {
 				new Robot(getRandomX(Avatar.WIDTH), getRandomY(Avatar.HEIGHT), true, this);
 			} catch (ClusteredInitException e) {

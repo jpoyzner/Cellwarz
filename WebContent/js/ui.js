@@ -1,9 +1,10 @@
-define(['underscore', 'backbone'], function() {
+define(['jquerymobile', 'underscore', 'backbone'], function() {
 	return Backbone.View.extend({
 		initialize: function(options) {
 			this.canvas = options.canvas;
+			var bodyElement = $('body');
 			
-			$(document).keydown(_.bind(function(event) {
+			bodyElement.keydown(_.bind(function(event) {
 				if (event.keyCode == 37 || event.keyCode == 38 || event.keyCode == 39 || event.keyCode == 40) {
 					event.preventDefault();
 				} else if (event.keyCode == 32 || (event.keyCode > 57 && event.keyCode < 91)) { //letters
@@ -36,10 +37,20 @@ define(['underscore', 'backbone'], function() {
 				this.canvas.syncer.connection.send(JSON.stringify({key: event.keyCode, down: true}));
 			}, this));
 			
-			$(document).keyup(_.bind(function(event) {
+			bodyElement.keyup(_.bind(function(event) {
 				//TODO: instead of down, use keyup or keydown param
 				this.canvas.syncer.connection.send(JSON.stringify({key: event.keyCode, down: false}));
 			}, this));
+			
+			bodyElement.on("swipeleft", _.bind(function() {
+				this.canvas.syncer.connection.send(JSON.stringify({key: 37, down: true}));
+			}, this));
+			
+			bodyElement.on("swipeRight", _.bind(function() {
+				this.canvas.syncer.connection.send(JSON.stringify({key: 39, down: true}));
+			}, this));
+			
+			//check out: http://stackoverflow.com/questions/17131815/how-to-swipe-top-down-jquery-mobile
 		}
 	});
 });

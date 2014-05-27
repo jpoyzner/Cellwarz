@@ -23,10 +23,10 @@ public class Zion {
 		staleLogins = new HashSet<String>();
 		
 		addCell();
-		addCell();
-		addCell();
-		addCell();
-		addCell();
+//		addCell();
+//		addCell();
+//		addCell();
+//		addCell();
 	}
 	
 	final void addCell() {
