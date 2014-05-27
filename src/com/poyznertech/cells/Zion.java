@@ -8,29 +8,30 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 
+import com.poyznertech.cells.cell.Cell;
+import com.poyznertech.cells.cell.SimpleSmallCell;
+
 public class Zion {
-	private final World world;
 	private Map<String, Session> hardlines;
 	private final List<Engine> matrix;
 	private final Random random;
 	private final Set<String> staleLogins;
 	
 	public Zion(World world) {
-		this.world = world;
 		hardlines = new HashMap<String, Session>();
 		matrix = new ArrayList<Engine>();
 		random = new Random();
 		staleLogins = new HashSet<String>();
 		
-		addCell();
-//		addCell();
-//		addCell();
-//		addCell();
-//		addCell();
+		addCell(new SimpleSmallCell(world));
+		addCell(new SimpleSmallCell(world));
+		addCell(new SimpleSmallCell(world));
+		addCell(new SimpleSmallCell(world));
+		addCell(new SimpleSmallCell(world));
 	}
 	
-	final void addCell() {
-		Engine engine = new Engine(new Cell(world));
+	final void addCell(Cell cell) {
+		Engine engine = new Engine(cell);
 		matrix.add(engine);
 		engine.getCell().init();
 		engine.start();

@@ -1,9 +1,9 @@
 package com.poyznertech.cells.sprite;
 
-import com.poyznertech.cells.Cell;
 import com.poyznertech.cells.ClusteredInitException;
 import com.poyznertech.cells.Engine;
 import com.poyznertech.cells.Physics;
+import com.poyznertech.cells.cell.Cell;
 
 public class Robot extends Avatar {
 	private static int count = 0;

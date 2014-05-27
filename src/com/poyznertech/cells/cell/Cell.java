@@ -1,7 +1,11 @@
-package com.poyznertech.cells;
+package com.poyznertech.cells.cell;
 
 import java.util.Random;
 
+import com.poyznertech.cells.CellData;
+import com.poyznertech.cells.ClusteredInitException;
+import com.poyznertech.cells.Engine;
+import com.poyznertech.cells.World;
 import com.poyznertech.cells.sprite.Avatar;
 import com.poyznertech.cells.sprite.CellBlock;
 import com.poyznertech.cells.sprite.CryogenicDoor;
@@ -16,11 +20,10 @@ import com.poyznertech.cells.sprite.Wall;
 
 //TODO: message lines should be painted on screen on top left in a fixed position
 
-public class Cell {
+public abstract class Cell {
+	//turn these to abstract methods:
 	//private static final int MAX_CELL_WIDTH = 1152;
-	private static final int MIN_CELL_WIDTH = 800;
 	//private static final int MAX_CELL_HEIGHT = 896;
-	private static final int MIN_CELL_HEIGHT = 800;
 	
 	private static final int OUTER_WALL_SIZE = CellBlock.SIZE * 4;
 	
@@ -33,7 +36,6 @@ public class Cell {
 	private Engine engine;
 	private Entrance entrance;
 	//private Entrance entrance2;
-	private Entrance portal;
 	//private int robotCount = 0;
 	
 	private int newMessageEcho;
@@ -42,13 +44,13 @@ public class Cell {
 	public Cell(World world) {
 		this.world = world;
 		random = new Random();
-		width = (/*random.nextInt(MAX_CELL_WIDTH - MIN_CELL_WIDTH) +*/ MIN_CELL_WIDTH) / CellData.ANIMATION_STEP;
-		height = (/*random.nextInt(MAX_CELL_HEIGHT - MIN_CELL_HEIGHT) +*/ MIN_CELL_HEIGHT) / CellData.ANIMATION_STEP;
+		width = (/*random.nextInt(MAX_CELL_WIDTH - MIN_CELL_WIDTH) +*/ getMinCellWidth()) / CellData.ANIMATION_STEP;
+		height = (/*random.nextInt(MAX_CELL_HEIGHT - MIN_CELL_HEIGHT) +*/ getMinCellHeight()) / CellData.ANIMATION_STEP;
 		data = new CellData(width, height, world); 
 		newMessageEcho = 0;
 	}
 	
-	final Cell init() {
+	public final Cell init() {
 		Avatar.init(data);
 		CellBlock.init(data);
 		CryogenicDoor.init(data);
@@ -98,15 +100,18 @@ public class Cell {
 			} catch (ClusteredInitException e) {}
 		} while (entrance == null);
 		
-//		do {
-//			try {
-//				portal = new Portal(getRandomX(CryogenicDoor.WIDTH), getRandomY(CryogenicDoor.HEIGHT), true, this);
-//			} catch (ClusteredInitException e) {}
-//		} while (portal == null);
-		
+		if (usePortal()) {
+			Portal portal = null;		
+			do {
+				try {
+					portal = new Portal(getRandomX(CryogenicDoor.WIDTH), getRandomY(CryogenicDoor.HEIGHT), true, this);
+				} catch (ClusteredInitException e) {}
+			} while (portal == null);
+		}
+			
 		//entrance2 = new CryogenicDoor(100, 90, world);
 		
-		for (int i = 0; i < 5; i++) {
+		for (int i = 0; i < getNumBoosters(); i++) {
 			try {
 				new Thruster(getRandomX(Mana.SIZE), getRandomY(Mana.SIZE), true, this);
 			} catch (ClusteredInitException e) {
@@ -114,7 +119,7 @@ public class Cell {
 			}
 		}
 		
-		for (int i = 0; i < 10; i++) {
+		for (int i = 0; i < getNumLaunchers(); i++) {
 			try {
 				new Launcher(getRandomX(Mana.SIZE), getRandomY(Mana.SIZE), true, this);
 			} catch (ClusteredInitException e) {
@@ -122,7 +127,7 @@ public class Cell {
 			}
 		}
 		
-		for (int i = 0; i < 1; i++) {
+		for (int i = 0; i < getNumIce(); i++) {
 			try {
 				new Ice(getRandomX(Mana.SIZE), getRandomY(Mana.SIZE), true, this);
 			} catch (ClusteredInitException e) {
@@ -130,7 +135,7 @@ public class Cell {
 			}
 		}
 
-		for (int i = 0; i < 0; i++) {
+		for (int i = 0; i < getNumRobots(); i++) {
 			try {
 				new Robot(getRandomX(Avatar.WIDTH), getRandomY(Avatar.HEIGHT), true, this);
 			} catch (ClusteredInitException e) {
@@ -169,7 +174,7 @@ public class Cell {
 //		}
 //	}
 	
-	final void process() {
+	public final void process() {
 		if (newMessageEcho != 0) {
 			newMessageEcho--;
 		}
@@ -207,4 +212,12 @@ public class Cell {
 	int getHeight() {
 		return width;
 	}
+	
+	abstract int getMinCellWidth();
+	abstract int getMinCellHeight();
+	abstract boolean usePortal();
+	abstract int getNumBoosters();
+	abstract int getNumLaunchers();
+	abstract int getNumIce();
+	abstract int getNumRobots();
 }

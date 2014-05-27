@@ -3,9 +3,9 @@ package com.poyznertech.cells.sprite;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.poyznertech.cells.Cell;
 import com.poyznertech.cells.ClusteredInitException;
 import com.poyznertech.cells.Physics;
+import com.poyznertech.cells.cell.Cell;
 
 public abstract class Mana extends Sprite {
 	public static final int SIZE = 3;

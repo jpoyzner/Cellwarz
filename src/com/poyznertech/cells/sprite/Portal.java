@@ -1,8 +1,8 @@
 package com.poyznertech.cells.sprite;
 
-import com.poyznertech.cells.Cell;
 import com.poyznertech.cells.ClusteredInitException;
 import com.poyznertech.cells.Zion;
+import com.poyznertech.cells.cell.Cell;
 
 public class Portal extends CryogenicDoor {
 	public Portal(int x, int y, boolean cellInit, Cell cell) throws ClusteredInitException {

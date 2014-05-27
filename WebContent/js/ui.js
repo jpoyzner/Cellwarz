@@ -2,9 +2,9 @@ define(['jquerymobile', 'underscore', 'backbone'], function() {
 	return Backbone.View.extend({
 		initialize: function(options) {
 			this.canvas = options.canvas;
-			var bodyElement = $('body');
+			var doc = $('body');
 			
-			bodyElement.keydown(_.bind(function(event) {
+			doc.keydown(_.bind(function(event) {
 				if (event.keyCode == 37 || event.keyCode == 38 || event.keyCode == 39 || event.keyCode == 40) {
 					event.preventDefault();
 				} else if (event.keyCode == 32 || (event.keyCode > 57 && event.keyCode < 91)) { //letters
@@ -35,18 +35,15 @@ define(['jquerymobile', 'underscore', 'backbone'], function() {
 				
 				//TODO: instead of down, use keyup or keydown param
 				this.canvas.syncer.connection.send(JSON.stringify({key: event.keyCode, down: true}));
-			}, this));
-			
-			bodyElement.keyup(_.bind(function(event) {
+			}, this))
+			.keyup(_.bind(function(event) {
 				//TODO: instead of down, use keyup or keydown param
 				this.canvas.syncer.connection.send(JSON.stringify({key: event.keyCode, down: false}));
-			}, this));
-			
-			bodyElement.on("swipeleft", _.bind(function() {
+			}, this))
+			.on("swipeleft", _.bind(function() {
 				this.canvas.syncer.connection.send(JSON.stringify({key: 37, down: true}));
-			}, this));
-			
-			bodyElement.on("swipeRight", _.bind(function() {
+			}, this))
+			.on("swipeRight", _.bind(function() {
 				this.canvas.syncer.connection.send(JSON.stringify({key: 39, down: true}));
 			}, this));
 			

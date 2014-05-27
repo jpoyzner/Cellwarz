@@ -4,11 +4,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.poyznertech.cells.Cell;
 import com.poyznertech.cells.CellData;
 import com.poyznertech.cells.ClusteredInitException;
 import com.poyznertech.cells.Frame;
 import com.poyznertech.cells.Physics;
+import com.poyznertech.cells.cell.Cell;
 
 public class CellBlock extends Sprite implements Stable {
 	public static final int SIZE = 2;

@@ -5,11 +5,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.poyznertech.cells.Cell;
 import com.poyznertech.cells.CellData;
 import com.poyznertech.cells.ClusteredInitException;
 import com.poyznertech.cells.Frame;
 import com.poyznertech.cells.Physics;
+import com.poyznertech.cells.cell.Cell;
 
 public class Thruster extends Mana {
 	static Map<String, List<Frame>> actionFrames = new HashMap<String, List<Frame>>();

@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
 
+import com.poyznertech.cells.cell.Cell;
 import com.poyznertech.cells.sprite.Sprite;
 
 public class Engine {

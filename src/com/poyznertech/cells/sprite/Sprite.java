@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import com.poyznertech.cells.Cell;
 import com.poyznertech.cells.CellData;
 import com.poyznertech.cells.ClusteredInitException;
 import com.poyznertech.cells.EdgeOfCellDataException;
@@ -12,6 +11,7 @@ import com.poyznertech.cells.Engine;
 import com.poyznertech.cells.Force;
 import com.poyznertech.cells.Frame;
 import com.poyznertech.cells.Physics;
+import com.poyznertech.cells.cell.Cell;
 
 public abstract class Sprite {
 	public static final String DEFAULT_IMAGE_DIR = "images/";

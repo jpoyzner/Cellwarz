@@ -12,6 +12,8 @@ import net.sf.json.JSONObject;
 
 import org.apache.catalina.websocket.MessageInbound;
 
+import com.poyznertech.cells.cell.Cell;
+
 public class SocketHub extends MessageInbound {
 	public static final String CONNECT_PARAM = "connect";
 	public static final String INACTIVE_PARAM = "inactive";

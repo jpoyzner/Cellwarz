@@ -1,9 +1,9 @@
 package com.poyznertech.cells.sprite;
 
-import com.poyznertech.cells.Cell;
 import com.poyznertech.cells.ClusteredInitException;
 import com.poyznertech.cells.Engine;
 import com.poyznertech.cells.Physics;
+import com.poyznertech.cells.cell.Cell;
 
 public abstract class EngineFire extends Sprite {
 	static final String FIRE_ACTION = "fire";
