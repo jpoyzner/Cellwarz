@@ -43,8 +43,17 @@ define(['jquerymobile', 'underscore', 'backbone'], function() {
 			.on("swipeleft", _.bind(function() {
 				this.canvas.syncer.connection.send(JSON.stringify({key: 37, down: true}));
 			}, this))
-			.on("swipeRight", _.bind(function() {
+			.on("swiperight", _.bind(function() {
 				this.canvas.syncer.connection.send(JSON.stringify({key: 39, down: true}));
+			}, this))
+			.on("tap", _.bind(function(event) {
+				if (event.clientY < this.canvas.renderer.me[2] - this.canvas.renderer.offsetY) {
+					this.canvas.syncer.connection.send(JSON.stringify({key: 38, down: true}));
+					this.canvas.syncer.connection.send(JSON.stringify({key: 38, down: false}));
+				} else {
+					this.canvas.syncer.connection.send(JSON.stringify({key: 37, down: false}));
+					this.canvas.syncer.connection.send(JSON.stringify({key: 39, down: false}));
+				}
 			}, this));
 			
 			//check out: http://stackoverflow.com/questions/17131815/how-to-swipe-top-down-jquery-mobile

@@ -11,7 +11,7 @@ define(['backbone', 'underscore'], function() {
 			setInterval(_.bind(this.recordState, this), 1000);
 		},
 		recordState: function() {
-			this.state = this.connections + "CONNEX, " + this.redraws + " REDRAWS, REDRAW TIME:" + this.drawTime;
+			this.state = this.connections + " con, " + this.redraws + " draws at " + this.drawTime;
 			
 			this.connections = 0;
 			this.redraws = 0;

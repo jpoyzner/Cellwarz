@@ -90,11 +90,11 @@ define(['backbone', 'underscore'], function() {
 			this.offsetX = 0;
 			this.offsetY = 0;
 			
-			var me = this.sprites[this.avatars[this.canvas.loginName]];
-			if (me) {
+			this.me = this.sprites[this.avatars[this.canvas.loginName]];
+			if (this.me) {
 				//TODO: avatar sizes should be dynamic
-				this.offsetX = me[1] + 24 - this.windowWidth / 2;
-				this.offsetY = me[2] + 16 - this.windowHeight / 2;
+				this.offsetX = this.me[1] + 24 - this.windowWidth / 2;
+				this.offsetY = this.me[2] + 16 - this.windowHeight / 2;
 			}	
 			
 			this.spriteIds = Object.keys(this.sprites);
