@@ -20,12 +20,12 @@ body {
 }
 
 #login {
-	background-color:lightblue;
-	height:640px;
-	left:48px;
-	position:absolute;
-	top:48px;
-	width:528px;
+	background-color: lightblue;
+	height: 90%; /*640px;*/
+	left: 5%; /*48px;*/
+	position: absolute;
+	top: 5%; /*48px;*/
+	width: 90%; /*528px;*/
 }
 
 #input {
