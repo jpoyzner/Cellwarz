@@ -46,3 +46,7 @@ later. Old code lives on the `java` git branch/tag. Remaining follow-ups, not ye
     - Scoring would need to be adapted for game outcomes (e.g. survival time, kills, territory)
 
 - Maybe make a room where people can collaborate on live music somehow!!! Maybe they play instruments synced together in the same room live!?! A realtime interactive DAW?
+
+- Have events where people submit songs and people vote? Basically to reproduce groove outpost, but maybe this can be done over all time instead of around specific events
+
+- if it gets popular, host real DJs for special hours
