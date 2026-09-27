@@ -1,0 +1,36 @@
+{
+  "name": "cellwarz",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Online multiplayer platform game",
+  "type": "module",
+  "scripts": {
+    "start": "rsbuild dev",
+    "server": "tsx watch server.ts",
+    "dev": "concurrently -k -n client,server \"npm:start\" \"npm:server\"",
+    "build": "rsbuild build",
+    "serve": "tsx server.ts",
+    "test:unit": "vitest run",
+    "test": "playwright test",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.47.0",
+    "@rsbuild/core": "^1.0.0",
+    "@rsbuild/plugin-react": "^1.0.0",
+    "@types/express": "^4.17.21",
+    "@types/react": "^18.3.5",
+    "@types/react-dom": "^18.3.0",
+    "@types/ws": "^8.5.12",
+    "concurrently": "^9.0.1",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.2",
+    "vitest": "^5.0.2"
+  }
+}
