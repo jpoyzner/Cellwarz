@@ -1,6 +1,6 @@
 import { CellData } from '../cellData';
 import { ClusteredInitException } from '../errors';
-import { Engine } from '../engine';
+import type { Engine } from '../engine';
 import { randomInt } from '../random';
 import type { World } from '../world';
 import { Avatar } from '../sprite/avatar';
@@ -26,15 +26,11 @@ export abstract class Cell {
   private engine!: Engine;
   private entrance: Entrance | undefined;
 
-  private newMessageEcho = 0;
-  private message: string | undefined;
-
   constructor(world: World) {
     this.world = world;
     this.width = Math.floor(this.getMinCellWidth() / CellData.ANIMATION_STEP);
     this.height = Math.floor(this.getMinCellHeight() / CellData.ANIMATION_STEP);
     this.data = new CellData(this.width, this.height, world);
-    this.newMessageEcho = 0;
   }
 
   init(): Cell {
@@ -163,24 +159,7 @@ export abstract class Cell {
     }
   }
 
-  process(): void {
-    if (this.newMessageEcho !== 0) {
-      this.newMessageEcho--;
-    }
-  }
-
-  getMessage(): string | undefined {
-    return this.message;
-  }
-
-  postMessage(message: string): void {
-    this.message = message;
-    this.newMessageEcho = Engine.REDRAW_ECHO_FRAMES;
-  }
-
-  hasNewMessage(): boolean {
-    return this.newMessageEcho !== 0;
-  }
+  process(): void {}
 
   getWorld(): World {
     return this.world;

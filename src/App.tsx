@@ -1,4 +1,18 @@
-// TODO(phase 4): replace with LoginScreen / GameCanvas once the client is ported from js/canvas.js.
+import { useState } from 'react';
+import { GameCanvas } from './components/GameCanvas';
+import { LoginScreen } from './components/LoginScreen';
+
+interface Session {
+  loginName: string;
+  jump: boolean;
+}
+
 export function App() {
-  return <div>Cellwarz — migration scaffold running.</div>;
+  const [session, setSession] = useState<Session | null>(null);
+
+  if (!session) {
+    return <LoginScreen onEnter={(loginName, jump) => setSession({ loginName, jump })} />;
+  }
+
+  return <GameCanvas loginName={session.loginName} jump={session.jump} />;
 }

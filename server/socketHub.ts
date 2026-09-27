@@ -7,7 +7,6 @@ import type { Cell } from './cell/cell';
 
 const CONNECT_PARAM = 'connect';
 const INACTIVE_PARAM = 'inactive';
-const MESSAGE_PARAM = 'message';
 const LOGIN_PARAM = 'login';
 const JUMP_PARAM = 'jump';
 const SPRITES_KEY = 'sprites';
@@ -43,8 +42,6 @@ export class SocketHub {
   private onTextMessage(data: Record<string, unknown>): void {
     if (CONNECT_PARAM in data) {
       this.handleLogin(data);
-    } else if (MESSAGE_PARAM in data) {
-      this.newMessage(data);
     } else {
       this.reactToKey(data);
     }
@@ -83,12 +80,6 @@ export class SocketHub {
     this.startRendering();
   }
 
-  private newMessage(data: Record<string, unknown>): void {
-    if (!this.login) return;
-    const avatar = this.world.getZion().getHardlines().get(this.login)?.getAvatar();
-    avatar?.getCell().postMessage(`${this.login}: ${data[MESSAGE_PARAM]}`);
-  }
-
   private startRendering(): void {
     this.inactivityCount = 0;
 
@@ -124,14 +115,10 @@ export class SocketHub {
     const cell = avatar.getCell();
     const needsRefresh = this.world.getZion().stale(this.login);
 
+    // Redraw-only frames are the sprite map itself (flat, unwrapped) — matches the original terse wire protocol.
     const json: Record<string, unknown> = needsRefresh
       ? this.getCellState(cell)
-      : { [SPRITES_KEY]: getSprites(cell.getEngine().getRedrawSprites(), true, avatar) };
-
-    // TODO: the whole chat system needs to be redone with a history of chat and limit to one second refresh (kept from original Java implementation).
-    if (cell.hasNewMessage()) {
-      json[MESSAGE_PARAM] = cell.getMessage();
-    }
+      : (getSprites(cell.getEngine().getRedrawSprites(), true, avatar) as Record<string, unknown>);
 
     this.send(json);
 

@@ -1,0 +1,56 @@
+body {
+  background: url('/images/blocks/blockA.png');
+}
+
+#canvas-bg {
+  background: url('/images/bg/temple1.png') no-repeat;
+  background-size: cover;
+  display: none;
+  height: 110%;
+  position: fixed;
+  width: 125%;
+}
+
+#canvas {
+  left: 0;
+  height: 100%;
+  position: fixed;
+  top: 0;
+  width: 100%;
+}
+
+#login {
+  background-color: lightblue;
+  height: 90%;
+  left: 5%;
+  position: absolute;
+  top: 5%;
+  width: 90%;
+}
+
+#input {
+  margin: 20px 0 -10px 40px;
+}
+
+#desc {
+  padding: 20px;
+}
+
+.dash-icon {
+  height: 96px;
+  left: 90%;
+  position: fixed;
+  width: 96px;
+}
+
+#mana1 {
+  top: 10px;
+}
+
+#mana2 {
+  top: 70px;
+}
+
+#mana3 {
+  top: 130px;
+}

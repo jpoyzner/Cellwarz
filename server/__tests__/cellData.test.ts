@@ -1,13 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { CellData } from '../cellData';
 import { EdgeOfCellDataException } from '../errors';
-import { Physics } from '../physics';
-import type { World } from '../world';
+import { createTestCell } from './testHelpers';
 
-function createCellData(width: number, height: number): CellData {
-  const physics = new Physics();
-  const fakeWorld = { getPhysics: () => physics } as unknown as World;
-  return new CellData(width, height, fakeWorld);
+function createCellData(width: number, height: number) {
+  return createTestCell(width, height).cellData;
 }
 
 describe('CellData', () => {
