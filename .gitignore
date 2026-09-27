@@ -2,3 +2,6 @@ node_modules/
 dist/
 test-results/
 playwright-report/
+
+# graphify (fully regenerable via `/graphify . --update`)
+graphify-out/
