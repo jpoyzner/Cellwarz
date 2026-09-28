@@ -3,7 +3,7 @@ import { randomInt } from './random';
 import type { Session } from './session';
 import type { World } from './world';
 import type { Cell } from './cell/cell';
-import { SimpleSmallCell } from './cell/simpleSmallCell';
+import { MainRoom } from './cell/mainRoom';
 
 export class Zion {
   private readonly hardlines = new Map<string, Session>();
@@ -11,11 +11,8 @@ export class Zion {
   private readonly staleLogins = new Set<string>();
 
   constructor(world: World) {
-    this.addCell(new SimpleSmallCell(world));
-    this.addCell(new SimpleSmallCell(world));
-    this.addCell(new SimpleSmallCell(world));
-    this.addCell(new SimpleSmallCell(world));
-    this.addCell(new SimpleSmallCell(world));
+    // Single shared room for now so all multiplayer logins land together (see TODOS.md).
+    this.addCell(new MainRoom(world));
   }
 
   private addCell(cell: Cell): void {

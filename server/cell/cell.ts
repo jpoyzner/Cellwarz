@@ -15,7 +15,7 @@ import { Robot } from '../sprite/robot';
 import { Thruster } from '../sprite/thruster';
 import { Wall } from '../sprite/wall';
 
-const OUTER_WALL_SIZE = CellBlock.SIZE * 4;
+export const OUTER_WALL_SIZE = CellBlock.SIZE * 4;
 
 export abstract class Cell {
   private readonly width: number;
@@ -24,7 +24,7 @@ export abstract class Cell {
   private readonly world: World;
   private readonly data: CellData;
   private engine!: Engine;
-  private entrance: Entrance | undefined;
+  protected entrance: Entrance | undefined;
 
   constructor(world: World) {
     this.world = world;
@@ -136,11 +136,11 @@ export abstract class Cell {
     return this;
   }
 
-  private getRandomX(spriteSize: number): number {
+  protected getRandomX(spriteSize: number): number {
     return OUTER_WALL_SIZE + randomInt(this.width - OUTER_WALL_SIZE * 2) - spriteSize + 1;
   }
 
-  private getRandomY(spriteSize: number): number {
+  protected getRandomY(spriteSize: number): number {
     return OUTER_WALL_SIZE + randomInt(this.height - OUTER_WALL_SIZE * 2) - spriteSize + 1;
   }
 
