@@ -75,7 +75,11 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   each other; they also lean on shared helpers in [e2e/gameHelpers.ts](e2e/gameHelpers.ts) (`walkTo` jumps only
   when the avatar's x actually stalls, rather than blindly, to avoid climbing MainRoom's stepping-stone columns
   by accident) and a small keepout zone in `MainRoom` so randomly-placed mana can't land on the fixed test
-  fixtures or block the floor path e2e tests walk.
+  fixtures or block the floor path e2e tests walk. Remaining e2e gaps: death-by-engine-fire specifically (only
+  death-by-missile is automated so far), and general mana/booster/ice positions elsewhere in the room are still
+  randomized. `MainRoom.getNumRobots()` is temporarily `0` — robots only ever run one direction until
+  permanently blocked, so they'd inevitably camp on the fixed test fixtures; re-enable once there's dedicated
+  robot e2e coverage (or robots gain a turn-around behavior) to justify the risk.
 - A few spots intentionally diverge from the original Java's crash-on-null behavior: e.g.
   `Cell.addAvatarAtEntrance` and `Portal.warpRandomly` fail gracefully (no-op) instead of throwing an NPE when a
   room has no free entrance spot. This is called out with comments at each site.
