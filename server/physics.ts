@@ -13,8 +13,9 @@ export class Physics {
   static readonly OBJECT_LAYER = 2;
   static readonly BACKGROUND_LAYER = 3;
 
-  private static readonly GRAVITY_ACCELERATION_INTERVAL = 5;
-  static readonly FALL_DISTANCE = 2;
+  // Halved from the original Java's 5/2 to cut fall speed (and the rate it accelerates) by 50%.
+  private static readonly GRAVITY_ACCELERATION_INTERVAL = 10;
+  static readonly FALL_DISTANCE = 1;
 
   gravitate(sprite: Sprite): boolean {
     if (sprite.getMass() === 0) {

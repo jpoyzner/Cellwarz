@@ -15,12 +15,14 @@ const TOOLS_KEY = 'tools';
 const IMAGE_PATHS_KEY = 'imagePaths';
 const KEY_PARAM = 'key';
 const DOWN_PARAM = 'down';
+const DIED_PARAM = 'died';
 const TIMEOUT = 3000;
 
 export class SocketHub {
   private login: string | undefined;
   private timer: ReturnType<typeof setInterval> | undefined;
   private inactivityCount = 0;
+  private diedNotified = false;
 
   constructor(
     private readonly world: World,
@@ -110,7 +112,15 @@ export class SocketHub {
 
     const session = this.world.getZion().getHardlines().get(this.login);
     const avatar = session?.getAvatar();
-    if (!session || !avatar) return;
+    if (!session || !avatar) {
+      // The dying player's own connection otherwise goes silent forever (no avatar left to render for them)
+      // — send one final ping so their client can react (screen flash) instead of just freezing on the spot.
+      if (session && !this.diedNotified) {
+        this.diedNotified = true;
+        this.send({ [DIED_PARAM]: true });
+      }
+      return;
+    }
 
     const cell = avatar.getCell();
     const needsRefresh = this.world.getZion().stale(this.login);

@@ -46,7 +46,7 @@ export class Missile extends Sprite {
 
     for (const sprite of this.physics.getSpritesAtSamePosition(this)) {
       if (sprite instanceof Avatar) {
-        sprite.die();
+        sprite.die(this.direction, Physics.NONE);
         this.removePermanently();
       }
     }

@@ -1,5 +1,6 @@
 import type { Analyzer } from './analyzer';
 import type { Renderer } from './renderer';
+import type { ConnectPayload } from './types';
 
 /** Mirrors js/syncer.js: owns the WebSocket connection and feeds frames into the Renderer. */
 export class Syncer {
@@ -32,12 +33,10 @@ export class Syncer {
         if (data.connect === 'inactive') {
           this.renderer.drawStaleScreen();
         } else {
-          this.renderer.sprites = data.sprites;
-          this.renderer.avatars = data.avatars;
-          this.renderer.tools = data.tools;
-          this.renderer.imagePaths = data.imagePaths;
-          this.renderer.loadImages();
+          this.renderer.applyFullState(data as ConnectPayload);
         }
+      } else if (data.died) {
+        this.renderer.onLocalAvatarDeath();
       } else {
         this.renderer.render(data);
       }
@@ -61,3 +60,4 @@ export class Syncer {
     this.connection?.close();
   }
 }
+

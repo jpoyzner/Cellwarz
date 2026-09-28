@@ -11,10 +11,14 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
 
 - **Server** (`server/`, entry point [server.ts](server.ts)): `World` constructs one `Physics` and one `Zion` at
   startup. `Zion` currently creates a single [MainRoom](server/cell/mainRoom.ts) instance (room), wrapped in an
-  `Engine` that runs its own 48 FPS `setInterval` game loop (`Engine.ENGINE_FRAMES_PER_SECOND`) — every login
-  lands in this same room for now, on purpose, so all multiplayer players end up together (see TODOS.md; `Zion`
-  still supports multiple room instances via its `matrix`/`getRandomEngine()`, this is just a constructor tweak).
-  `Session` maps a login to the player's current `Avatar`.
+  `Engine` that runs its own 48 FPS game loop (`Engine.ENGINE_FRAMES_PER_SECOND`) — every login lands in this
+  same room for now, on purpose, so all multiplayer players end up together (see TODOS.md; `Zion` still supports
+  multiple room instances via its `matrix`/`getRandomEngine()`, this is just a constructor tweak). The loop is a
+  fixed-timestep accumulator on top of `setInterval` (not "assume every callback is exactly 1000/48ms"): each
+  callback advances a `Date.now()`-based accumulator and runs as many 1/48s simulation steps as elapsed wall
+  time calls for (capped at `Engine.MAX_CATCHUP_STEPS` to avoid a catch-up spiral after a long stall), so the
+  sim speed stays correct even if Node's timer drifts or briefly coalesces. `Session` maps a login to the
+  player's current `Avatar`.
 - **Realtime transport**: a single `ws` `WebSocketServer` mounted at `/socketrefresh` in [server.ts](server.ts).
   Each connection gets its own [SocketHub](server/socketHub.ts), which runs its own 48 FPS render loop and speaks
   a small JSON protocol (`connect` / key-down-up) via [jsonGenerator.ts](server/jsonGenerator.ts).
@@ -23,7 +27,7 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   grid. Sprites (`server/sprite/`) extend the abstract `Sprite`; cells (`server/cell/`) extend abstract `Cell`,
   which populates walls/doors/mana/robots in `init()`. [MainRoom](server/cell/mainRoom.ts) is "the" reusable main
   multiplayer room layout — a fixed (non-random) giant rectangle with long horizontal platform rows, a center
-  hole bridged by two straight-up/down stepping-stone columns, scattered decorative blocks, and one `Portal` in
+  hole bridged by four straight-up/down stepping-stone columns, scattered decorative blocks, and one `Portal` in
   each corner; only its mana/`Robot` pickup positions are still randomized per instance. It's the only room type
   wired into `Zion` today. [SimpleSmallCell](server/cell/simpleSmallCell.ts) (small, fully-random walls) is kept
   around as a fast fixture for unit tests and as the likely starting point for the future randomly-generated
@@ -42,6 +46,41 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
 - **No chat**: player-to-player text chat was removed entirely (client input handling, `Cell.postMessage` /
   `MESSAGE_PARAM` on the server) — a different communication system will replace it later. Don't re-add it
   without an explicit request.
+- **Movement/jump feel** (`server/sprite/avatar.ts`): grid-discrete movement (still integer `CellData` units, no
+  subpixel physics) plus three additive-only forgiveness mechanics layered on top of the original fixed-height
+  jump: **variable jump height** (releasing the jump key cuts `yPower` down to `MIN_JUMP_ACTION_LENGTH`; holding
+  it keeps the full `FULL_JUMP_ACTION_LENGTH` arc), **coyote time** (`coyoteFramesRemaining`, a few grace frames
+  to jump after leaving a ledge), and **jump buffering** (`jumpBufferedFrames`, a press just before landing
+  fires the instant you land). `releaseJump()` ignores a release faster than `MIN_HOLD_BEFORE_RELEASE_MS` real
+  ms since the jump started — a same-instant keydown+keyup can't be a genuine human tap (that's exactly what a
+  zero-delay scripted/automated key press looks like over the wire, and MainRoom's obstacle heights assume a
+  full jump), so it's treated as a full-height jump instead of silently shrinking every such input. A
+  decelerating jump *arc* was deliberately **not** added server-side (it would need either shrinking the
+  reachable height within the same frame budget, risking breaking existing jump-gap traversal, or subpixel
+  positions) — the client's render-smoothing layer below covers the visual want instead.
+- **Death feedback**: `Avatar.die(knockbackXDirection?, knockbackYDirection?)` takes an optional knockback
+  direction (missiles knock back along their flight direction, engine fire knocks upward) applied via one
+  `Physics.move` before `removePermanently()` — death is still a single hit, this only adds physicality to it.
+  Because a dying player's own `SocketHub.renderClient()` otherwise goes silent forever the instant their
+  session unplugs (no avatar left to render for them), it sends one one-shot `{ died: true }` message first so
+  their own client can react (see `Renderer.onLocalAvatarDeath()`) instead of the screen just freezing.
+- **Client netcode smoothing & "juice" layer** (`src/game/`, all purely cosmetic — none of it changes actual
+  positions/collision outcomes, which stay 100% server-authoritative): `Renderer` runs its own
+  `requestAnimationFrame` loop, independent of message arrival, that exponentially smooths every sprite's
+  drawn position toward its latest known server position (`SMOOTHING_TAU_MS`) instead of snapping to each new
+  snapshot; `prediction.ts`'s `LocalPredictor` additionally predicts the *local* avatar's left/right movement
+  the instant a key is pressed (softly reconciling against the server a few frames later, snapping instead on a
+  large mismatch) since the client has no collision geometry to predict jumps/pushes against. `audio.ts`
+  synthesizes short WebAudio blips (no audio asset files were added) and `particles.ts` draws small dust/impact/
+  warp bursts, both triggered by diffing incoming sprite positions/deletions (e.g. an avatar sprite disappearing
+  ⇒ impact burst; a rendered avatar's y going from falling to flat ⇒ landing dust). **Important**: any state that
+  actual game logic or tests depend on (the `sprites`/`avatars` maps) is mutated synchronously as messages
+  arrive, never lazily from the `requestAnimationFrame` callback — that loop is throttled/paused by the browser
+  for backgrounded/unfocused tabs (this bit a Playwright test with two browser contexts during development;
+  see the git history on `src/game/renderer.ts` for the fix), so anything logically load-bearing can't depend
+  on it actually running.
+- **Stand animation already exists**: `Avatar`'s `STAND_LEFT_ACTION`/`STAND_RIGHT_ACTION` already cycle through
+  6 art frames (`me/stand1..6`) at `Engine.QUARTER_STEP` — there's no "frozen idle" gap to fill.
 
 ## Build / run
 
@@ -74,12 +113,14 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   run inside one `test.describe.configure({ mode: 'serial' })` block so their avatars can't push/collide with
   each other; they also lean on shared helpers in [e2e/gameHelpers.ts](e2e/gameHelpers.ts) (`walkTo` jumps only
   when the avatar's x actually stalls, rather than blindly, to avoid climbing MainRoom's stepping-stone columns
-  by accident) and a small keepout zone in `MainRoom` so randomly-placed mana can't land on the fixed test
-  fixtures or block the floor path e2e tests walk. Remaining e2e gaps: death-by-engine-fire specifically (only
-  death-by-missile is automated so far), and general mana/booster/ice positions elsewhere in the room are still
-  randomized. `MainRoom.getNumRobots()` is temporarily `0` — robots only ever run one direction until
-  permanently blocked, so they'd inevitably camp on the fixed test fixtures; re-enable once there's dedicated
-  robot e2e coverage (or robots gain a turn-around behavior) to justify the risk.
+  by accident) and a small keepout zone in `MainRoom` so randomly-placed mana/robots can't spawn on the fixed
+  test fixtures or block the floor path e2e tests walk (robots can still *wander* into that zone while
+  patrolling, since only their spawn position is constrained — watch for e2e flakiness from this and tighten
+  further if it shows up). Remaining e2e gaps: death-by-engine-fire specifically (only death-by-missile is
+  automated so far), general mana/booster/ice positions elsewhere in the room are still randomized, and robots
+  have unit coverage ([server/__tests__/robot.test.ts](server/__tests__/robot.test.ts)) but no e2e coverage yet.
+  `Robot.turnAround()` reverses direction (and keeps patrolling indefinitely) the instant its current direction
+  is blocked by a solid obstacle — re-enabled via `MainRoom.getNumRobots()` now that this is covered.
 - A few spots intentionally diverge from the original Java's crash-on-null behavior: e.g.
   `Cell.addAvatarAtEntrance` and `Portal.warpRandomly` fail gracefully (no-op) instead of throwing an NPE when a
   room has no free entrance spot. This is called out with comments at each site.

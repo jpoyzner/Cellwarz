@@ -23,12 +23,24 @@ export const LAND_LEFT_ACTION = 'land_left';
 
 const RUN_STEP_DISTANCE = 1;
 const JUMP_DISTANCE = 1;
+const DEATH_KNOCKBACK_DISTANCE = 3;
 
 export const FULL_JUMP_ACTION_LENGTH = 24;
 const JUMP_ACTION_LENGTH = 10;
 const FLOAT_ACTION_LENGTH = 8;
 export const START_FLOAT_INTERVAL = FULL_JUMP_ACTION_LENGTH - JUMP_ACTION_LENGTH;
 export const START_LAND_INTERVAL = START_FLOAT_INTERVAL - FLOAT_ACTION_LENGTH;
+
+// Releasing the jump key early (a "short hop") cuts the ascent down to this length instead of the full one.
+const MIN_JUMP_ACTION_LENGTH = 8;
+// A release arriving faster than this (real elapsed ms) can't be a genuine human tap — it's an instantaneous
+// keydown+keyup, like an automated test's zero-delay key press — so it's treated as a full-height jump instead
+// of silently shrinking every scripted/bot input down to the minimum.
+const MIN_HOLD_BEFORE_RELEASE_MS = 100;
+// Grace window (frames) a jump still registers after walking off a ledge, or a jump press still registers
+// just before landing — both are additive forgiveness, they never change the jump itself.
+const COYOTE_TIME_FRAMES = 6;
+const JUMP_BUFFER_FRAMES = 6;
 
 export class Avatar extends Sprite {
   static readonly WIDTH = 6;
@@ -48,6 +60,9 @@ export class Avatar extends Sprite {
   protected yPower = Physics.NONE;
   protected xPower = Physics.NONE;
   protected slidePower = Physics.NONE;
+  private coyoteFramesRemaining = 0;
+  private jumpBufferedFrames = 0;
+  private jumpStartedAt = 0;
 
   getActionFrames(): Map<string, Frame[]> {
     return Avatar.actionFrames;
@@ -86,7 +101,22 @@ export class Avatar extends Sprite {
 
   protected override doAction(): void {
     if (this.yPower === Physics.NONE) {
-      if (this.physics.touchSprite(this, Physics.NONE, Physics.DOWN, false)) {
+      const grounded = this.physics.touchSprite(this, Physics.NONE, Physics.DOWN, false);
+
+      if (grounded) {
+        this.coyoteFramesRemaining = COYOTE_TIME_FRAMES;
+        if (this.jumpBufferedFrames > 0) {
+          this.startJump();
+        }
+      } else if (this.coyoteFramesRemaining > 0) {
+        this.coyoteFramesRemaining--;
+      }
+
+      if (this.jumpBufferedFrames > 0) {
+        this.jumpBufferedFrames--;
+      }
+
+      if (grounded) {
         if (this.xPower === Physics.NONE) {
           this.setAnimationSequence(this.facingRight ? STAND_RIGHT_ACTION : STAND_LEFT_ACTION);
         } else {
@@ -202,9 +232,30 @@ export class Avatar extends Sprite {
   }
 
   attemptJump(): void {
-    if (!this.structure && this.yPower === Physics.NONE && this.physics.touchSprite(this, Physics.NONE, Physics.DOWN, false)) {
-      this.yPower = FULL_JUMP_ACTION_LENGTH;
+    if (this.structure || this.yPower !== Physics.NONE) {
+      return;
     }
+
+    if (this.physics.touchSprite(this, Physics.NONE, Physics.DOWN, false) || this.coyoteFramesRemaining > 0) {
+      this.startJump();
+    } else {
+      // Not grounded and outside the coyote window: remember the press and consume it the instant we land.
+      this.jumpBufferedFrames = JUMP_BUFFER_FRAMES;
+    }
+  }
+
+  /** Releasing the jump key early cuts the ascent short (variable jump height); holding it keeps the full arc. */
+  releaseJump(): void {
+    if (this.yPower > MIN_JUMP_ACTION_LENGTH && Date.now() - this.jumpStartedAt >= MIN_HOLD_BEFORE_RELEASE_MS) {
+      this.yPower = MIN_JUMP_ACTION_LENGTH;
+    }
+  }
+
+  private startJump(): void {
+    this.yPower = FULL_JUMP_ACTION_LENGTH;
+    this.coyoteFramesRemaining = 0;
+    this.jumpBufferedFrames = 0;
+    this.jumpStartedAt = Date.now();
   }
 
   getName(): string {
@@ -219,10 +270,15 @@ export class Avatar extends Sprite {
     return this.structureChangeUpdate > 0;
   }
 
-  die(): void {
+  /** Optional knockback direction gives death a little physicality instead of an instant, silent vanish. */
+  die(knockbackXDirection: number = Physics.NONE, knockbackYDirection: number = Physics.NONE): void {
     const session = this.cell.getWorld().getZion().getHardlines().get(this.name);
     if (session) {
       session.unplug();
+    }
+
+    if (knockbackXDirection !== Physics.NONE || knockbackYDirection !== Physics.NONE) {
+      this.physics.move(this, knockbackXDirection, knockbackYDirection, DEATH_KNOCKBACK_DISTANCE, false);
     }
 
     this.removePermanently();

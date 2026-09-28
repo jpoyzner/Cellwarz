@@ -46,13 +46,17 @@ export function GameCanvas({ loginName, jump }: GameCanvasProps) {
     const syncer = new Syncer(renderer, loginName, jump, analyzer);
     syncer.connect();
 
-    const detachInput = attachInputHandlers((key, down) => syncer.sendKey(key, down), renderer);
+    const detachInput = attachInputHandlers((key, down) => {
+      syncer.sendKey(key, down);
+      renderer.onLocalKey(key, down);
+    }, renderer);
 
     window.__cellwarz = { renderer };
 
     return () => {
       detachInput();
       syncer.close();
+      renderer.stop();
       analyzer.stop();
       delete window.__cellwarz;
     };

@@ -41,7 +41,7 @@ export abstract class EngineFire extends Sprite {
   burnKill(): void {
     for (const sprite of this.physics.getSpritesAtSamePosition(this)) {
       if (sprite instanceof Avatar && sprite !== this.mana.getStructure()?.getAvatar()) {
-        sprite.die();
+        sprite.die(Physics.NONE, Physics.UP);
       }
     }
   }

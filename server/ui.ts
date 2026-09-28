@@ -31,6 +31,8 @@ export class UI {
       }
     } else if (key === 37 || key === 39) {
       avatar.stopRunning();
+    } else if (key === 38) {
+      avatar.releaseJump();
     } else if (key === 49) {
       avatar.getStructure()?.deactivateManaAction(0, 0);
     } else if (key === 50) {

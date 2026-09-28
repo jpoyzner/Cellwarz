@@ -19,7 +19,18 @@ const HOLE_RIGHT = 310;
 const ROW_Y = [40, 100, 160];
 const STONE_LENGTH = 5;
 const LEFT_COLUMN_X = 210;
+const MID_LEFT_COLUMN_X = 230;
+const MID_RIGHT_COLUMN_X = 270;
 const RIGHT_COLUMN_X = 290;
+// Each column's stones are spaced 20 units apart vertically (still climbable straight up/down on its own),
+// but the four columns are offset from each other by 5 units so there's a stone within easy reach practically
+// everywhere in the shaft, not just every 20 units up one single column.
+const STEPPING_STONE_COLUMNS: ReadonlyArray<readonly [number, number]> = [
+  [MID_RIGHT_COLUMN_X, 5],
+  [LEFT_COLUMN_X, 10],
+  [MID_LEFT_COLUMN_X, 15],
+  [RIGHT_COLUMN_X, 20],
+];
 
 // Fixed mana/launcher fixtures on the (obstacle-free) floor, just right of the entrance, purely so
 // e2e tests have deterministic targets for the mana-pickup and death/respawn workflows (see WORKFLOWS.md).
@@ -38,7 +49,7 @@ const TEST_FIXTURE_KEEPOUT = { min: OUTER_WALL_SIZE + 8, max: TEST_LAUNCHER_X + 
 
 /**
  * The single reusable "main multiplayer mode" room layout: a big rectangle with long
- * horizontal platforms, a center hole (bridged by two stepping-stone columns players
+ * horizontal platforms, a center hole (bridged by four stepping-stone columns players
  * can climb straight up/down), scattered decorative blocks, and one portal in each
  * corner. Built as a deterministic stand-in for the randomly-generated "side-quest"
  * rooms so e2e tests have stable geometry to target (see TODOS.md).
@@ -76,10 +87,7 @@ export class MainRoom extends Cell {
   }
 
   getNumRobots(): number {
-    // Robots only ever run one direction until they're permanently blocked by the first solid obstacle in
-    // their path, so any placed near the entrance would inevitably camp on the fixed test fixtures above
-    // (there's no dedicated robot e2e coverage yet to justify that risk — see TODOS.md).
-    return 0;
+    return 8;
   }
 
   override init(): Cell {
@@ -138,13 +146,13 @@ export class MainRoom extends Cell {
     new Wall(false, OUTER_WALL_SIZE, floorY, (width - OUTER_WALL_SIZE * 2) / CellBlock.SIZE, this);
   }
 
-  /** Two vertical columns of small platforms through the hole, each climbable straight up/down in ~20-unit steps. */
+  /** Four vertical columns of small platforms through the hole, each climbable straight up/down in ~20-unit
+   * steps; the columns are offset from each other so there's always a nearby stone somewhere in reach. */
   private buildSteppingStones(floorY: number): void {
-    for (let y = ROW_Y[0] + 10; y < floorY; y += 20) {
-      new Wall(false, LEFT_COLUMN_X, y, STONE_LENGTH, this);
-    }
-    for (let y = ROW_Y[0] + 20; y < floorY; y += 20) {
-      new Wall(false, RIGHT_COLUMN_X, y, STONE_LENGTH, this);
+    for (const [x, startOffset] of STEPPING_STONE_COLUMNS) {
+      for (let y = ROW_Y[0] + startOffset; y < floorY; y += 20) {
+        new Wall(false, x, y, STONE_LENGTH, this);
+      }
     }
   }
 

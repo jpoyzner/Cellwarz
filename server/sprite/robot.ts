@@ -48,16 +48,21 @@ export class Robot extends Avatar {
     if (this.xPower !== Physics.NONE) {
       if (this.engine.actionMatchesFrequency(Engine.HALF_STEP)) {
         if (!this.physics.move(this, this.xPower, Physics.NONE, RUN_STEP_DISTANCE)) {
-          if (this.facingRight) {
-            this.runLeft();
-          } else {
-            this.runRight();
-          }
+          this.turnAround();
         }
       }
     } else if (this.slidePower !== Physics.NONE) {
       this.physics.move(this, this.slidePower, Physics.NONE, RUN_STEP_DISTANCE);
       this.slidePower = Physics.NONE;
+    }
+  }
+
+  /** Patrol behavior: bounce off whatever blocked the current direction and head back the other way. */
+  private turnAround(): void {
+    if (this.facingRight) {
+      this.runLeft();
+    } else {
+      this.runRight();
     }
   }
 
