@@ -7,7 +7,11 @@
 - Redesign the login screen
 
 - Give the 2D UX a "box-shadow" so that it looks 3D, OR EVEN BETTER: Render the actual graphics in 3D but keep the gameplay in 2D for actual physics. I wonder if this can dbe done with fancy CSS
-- Swap the bespoke Physics grid-push system for something like matter-js/planck.js only if you ever want slopes/rotation/finer collision — not necessary for the current flat-platform aesthetic, and would be the highest-effort, lowest-necessity item here. Your homegrown AABB+push system is honestly fine for what MainRoom needs; I wouldn't touch it just for its own sake.
+- Swap the bespoke Physics grid-push system for something like matter-js/planck.js only if you ever want slopes/rotation/finer collision — not necessary for the current flat-platform aesthetic, and would be the highest-effort, lowest-necessity item here. I might want this for mana blocks bewing spewed out by the plant, make them roll as they fly out and whenever they fall they should bounce.
+
+- Make ise blocks or other blocks climb walls like in boulderdash!?
+
+- Possibly instead of pressing down on blocks, just touching them and any blocks they tuch is enough to get their powers...the tricky part is controlling them.
 
 - use my DJ Recognize site to host cellwarz realtime multiplayers that can remember things if you sign up! Think about limiting chat to avoid hate, maybe just one emoji at a time as a speak bubble above, follows the avatar head perfectly.
 
