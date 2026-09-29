@@ -4,12 +4,12 @@ import { ClusteredInitException } from '../errors';
 import { CellData } from '../cellData';
 import { Avatar } from '../sprite/avatar';
 import { CellBlock } from '../sprite/cellBlock';
-import { CryogenicDoor } from '../sprite/cryogenicDoor';
 import { Ice } from '../sprite/ice';
 import { Launcher } from '../sprite/launcher';
 import { Mana } from '../sprite/mana';
 import { Portal } from '../sprite/portal';
 import { Robot } from '../sprite/robot';
+import { SpawnPortal } from '../sprite/spawnPortal';
 import { Thruster } from '../sprite/thruster';
 import { Wall } from '../sprite/wall';
 
@@ -32,7 +32,7 @@ const STEPPING_STONE_COLUMNS: ReadonlyArray<readonly [number, number]> = [
   [RIGHT_COLUMN_X, 20],
 ];
 
-// Fixed mana/launcher fixtures on the (obstacle-free) floor, just right of the entrance, purely so
+// Fixed mana/launcher fixtures on the (obstacle-free) floor, just right of the warp portal, purely so
 // e2e tests have deterministic targets for the mana-pickup and death/respawn workflows (see WORKFLOWS.md).
 // The rest of the room's boosters/launchers/ice/robots stay randomly placed. Exported in pixels so e2e
 // specs don't need to duplicate the grid-to-pixel math.
@@ -43,31 +43,49 @@ export const TEST_FIXTURE_PIXELS = {
   launcherX: TEST_LAUNCHER_X * CellData.ANIMATION_STEP,
 };
 // Random boosters/launchers/ice reroll their x out of this range so they can't land anywhere along the
-// floor between the entrance, the bottom-left portal, and the fixed test fixtures above — e2e tests walk
-// that whole stretch and (mostly) can't jump-clear an obstacle blocking a portal/mana/launcher interaction.
+// floor between the warp portal, the fixed test fixtures above, and the shaft e2e tests fall through — e2e
+// tests walk that whole stretch and (mostly) can't jump-clear an obstacle blocking a portal/mana/launcher
+// interaction.
 const TEST_FIXTURE_KEEPOUT = { min: OUTER_WALL_SIZE + 8, max: TEST_LAUNCHER_X + 80 };
+// Vertical gap (grid units) of open air below the spawn portal before the floor beneath it, so an avatar
+// deposited there visibly drops instead of appearing already standing.
+const SPAWN_PORTAL_GAP = 14;
+
+const ROOM_WIDTH_PX = 4000;
+const ROOM_HEIGHT_PX = 2000;
+const GRID_WIDTH = Math.floor(ROOM_WIDTH_PX / CellData.ANIMATION_STEP);
+const GRID_HEIGHT = Math.floor(ROOM_HEIGHT_PX / CellData.ANIMATION_STEP);
+const GRID_FLOOR_Y = GRID_HEIGHT - OUTER_WALL_SIZE - 2;
+const SPAWN_PORTAL_Y = GRID_FLOOR_Y - SpawnPortal.HEIGHT - SPAWN_PORTAL_GAP;
+const STARGATE_Y = ROW_Y[0] - Portal.HEIGHT;
+
+// Fixed, deterministic pixel position for the spawn portal, exported so e2e specs (which can't run
+// TypeScript room-building code) can target/assert against it without duplicating this layout math.
+export const SPAWN_ENTRANCE_PIXELS = {
+  x: (GRID_WIDTH / 2 - SpawnPortal.WIDTH / 2) * CellData.ANIMATION_STEP,
+  y: SPAWN_PORTAL_Y * CellData.ANIMATION_STEP,
+} as const;
 
 /**
  * The single reusable "main multiplayer mode" room layout: a big rectangle with long
  * horizontal platforms, a center hole (bridged by four stepping-stone columns players
- * can climb straight up/down), scattered decorative blocks, and one portal in each
- * corner. Built as a deterministic stand-in for the randomly-generated "side-quest"
- * rooms so e2e tests have stable geometry to target (see TODOS.md).
+ * can climb straight up/down), scattered decorative blocks, two animated stargate warp
+ * portals in the top corners, and one small floating spawn portal at the bottom center
+ * (where most avatars first land, and where warping through either stargate deposits
+ * them). Built as a deterministic stand-in for the randomly-generated "side-quest" rooms
+ * so e2e tests have stable geometry to target (see TODOS.md).
  */
 export class MainRoom extends Cell {
-  private static readonly WIDTH_PX = 4000;
-  private static readonly HEIGHT_PX = 2000;
-
   constructor(world: World) {
     super(world);
   }
 
   getMinCellWidth(): number {
-    return MainRoom.WIDTH_PX;
+    return ROOM_WIDTH_PX;
   }
 
   getMinCellHeight(): number {
-    return MainRoom.HEIGHT_PX;
+    return ROOM_HEIGHT_PX;
   }
 
   usePortal(): boolean {
@@ -94,7 +112,8 @@ export class MainRoom extends Cell {
     const data = this.getCellData();
     Avatar.init(data);
     CellBlock.init(data);
-    CryogenicDoor.init(data);
+    SpawnPortal.init(data);
+    Portal.init(data);
     Thruster.init(data);
     Launcher.init(data);
     Ice.init(data);
@@ -107,8 +126,8 @@ export class MainRoom extends Cell {
     this.buildPlatformRows(width, floorY);
     this.buildSteppingStones(floorY);
     this.buildClutter(width);
-    this.buildEntrance(width, floorY);
-    this.buildCornerPortals(width, floorY);
+    this.buildStargatePortals(width);
+    this.buildSpawnPortal(width, floorY);
     this.buildTestFixtures(floorY);
     this.buildPickupsAndRobots();
 
@@ -179,30 +198,31 @@ export class MainRoom extends Cell {
     }
   }
 
-  /** Single entrance centered on the floor, directly below the stepping-stone shaft. */
-  private buildEntrance(width: number, floorY: number): void {
-    try {
-      this.entrance = new CryogenicDoor(width / 2 - CryogenicDoor.WIDTH / 2, floorY - CryogenicDoor.HEIGHT, true, this);
-    } catch (e) {
-      if (!(e instanceof ClusteredInitException)) throw e;
-    }
-  }
-
-  /** One portal per corner, each resting on the nearest platform segment so it's always reachable. */
-  private buildCornerPortals(width: number, floorY: number): void {
-    const corners: Array<[number, number]> = [
-      [OUTER_WALL_SIZE + 4, ROW_Y[0] - CryogenicDoor.HEIGHT],
-      [width - OUTER_WALL_SIZE - CryogenicDoor.WIDTH - 4, ROW_Y[0] - CryogenicDoor.HEIGHT],
-      [OUTER_WALL_SIZE + 4, floorY - CryogenicDoor.HEIGHT],
-      [width - OUTER_WALL_SIZE - CryogenicDoor.WIDTH - 4, floorY - CryogenicDoor.HEIGHT],
+  /** Two animated stargate warp portals resting on the top platform row's corners; walking into either
+   * relocates the avatar to a random other room's spawn portal (see Portal.warpRandomly). */
+  private buildStargatePortals(width: number): void {
+    const positions: Array<[number, number]> = [
+      [OUTER_WALL_SIZE + 4, STARGATE_Y],
+      [width - OUTER_WALL_SIZE - Portal.WIDTH - 4, STARGATE_Y],
     ];
 
-    for (const [x, y] of corners) {
+    for (const [x, y] of positions) {
       try {
         new Portal(x, y, true, this);
       } catch (e) {
         if (!(e instanceof ClusteredInitException)) throw e;
       }
+    }
+  }
+
+  /** The single small circular spawn portal, floating above the floor (with an open-air gap beneath it) at
+   * the bottom center, directly below the stepping-stone shaft — where most avatars first land, and where
+   * a stargate warp deposits them. */
+  private buildSpawnPortal(width: number, floorY: number): void {
+    try {
+      this.entrances.push(new SpawnPortal(width / 2 - SpawnPortal.WIDTH / 2, floorY - SpawnPortal.HEIGHT - SPAWN_PORTAL_GAP, true, this));
+    } catch (e) {
+      if (!(e instanceof ClusteredInitException)) throw e;
     }
   }
 

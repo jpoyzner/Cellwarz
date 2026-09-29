@@ -28,6 +28,21 @@ export async function getAvatarPosition(page: Page, loginName: string): Promise<
   }, loginName);
 }
 
+/** A freshly (re)spawned avatar starts at a floating SpawnPortal and free-falls under gravity until it
+ * lands — poll until its y position stops changing rather than assuming it's already grounded. */
+export async function waitUntilGrounded(page: Page, loginName: string): Promise<{ x: number; y: number }> {
+  let previous = await getAvatarPosition(page, loginName);
+  for (let i = 0; i < 20; i++) {
+    await page.waitForTimeout(150);
+    const current = await getAvatarPosition(page, loginName);
+    if (current && previous && current.y === previous.y) {
+      return current;
+    }
+    previous = current;
+  }
+  throw new Error(`Avatar never settled (loginName=${loginName})`);
+}
+
 /** Finds the spriteId of whatever's currently rendered near (x, y) — used to track a known mana fixture.
  * Keep the tolerance tight; the room also has random mana instances that could otherwise false-match. */
 export async function findSpriteNear(page: Page, x: number, y: number, tolerance = 6): Promise<string | undefined> {

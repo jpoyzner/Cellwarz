@@ -2,11 +2,12 @@
 
 Source of truth for Cellwarz's browser regression tests (`e2e/`). Each workflow below lists the user-facing
 behavior, how to trigger it, and whether it's covered by an automated Playwright test or requires manual
-verification. The entrance spawn point, portal positions, and one Thruster/Launcher pair are all fixed and
-deterministic since [MainRoom](server/cell/mainRoom.ts) replaced the old randomized room layout, and every
-login currently lands in the same single room (see [TODOS.md](TODOS.md)) — together these closed most of the
-prior randomness-driven browser-test gaps below. The room's *other* mana/booster/launcher/ice positions stay
-randomized (robots patrol back and forth, turning around when blocked — see [robot.ts](server/sprite/robot.ts)).
+verification. The two stargate warp portal positions, the one spawn portal position, and one Thruster/Launcher
+pair are all fixed and deterministic since [MainRoom](server/cell/mainRoom.ts) replaced the old randomized room
+layout, and every login currently lands in the same single room (see [TODOS.md](TODOS.md)) — together these
+closed most of the prior randomness-driven browser-test gaps below. The room's *other*
+mana/booster/launcher/ice positions stay randomized (robots patrol back and forth, turning around when blocked
+— see [robot.ts](server/sprite/robot.ts)).
 
 ## Login — enter randomly
 
@@ -57,30 +58,47 @@ targeting the one fixed Thruster fixture on MainRoom's floor (connect, pick up/c
 
 ## Portal warp
 
-1. Walk into a Portal sprite (a variant of the cryogenic door) while running.
-2. The avatar is relocated back to the entrance of the (currently only) room; the client receives a full state
-   refresh.
+1. Walk into a Portal sprite — an animated "stargate" ring (a little bigger than an avatar) sitting on a
+   platform in one of [MainRoom](server/cell/mainRoom.ts)'s two top corners — while running.
+2. The avatar is relocated to the room's spawn portal (see "Spawn portal" below); the client receives a full
+   state refresh.
 
-**Covered by**: [server/__tests__/portal.test.ts](server/__tests__/portal.test.ts) at the engine level, and
-[e2e/main-room-workflows.spec.ts](e2e/main-room-workflows.spec.ts) end-to-end (walks the whole floor to the
-bottom-left portal and asserts the avatar warps back to the exact entrance position).
+**Covered by**: [server/__tests__/portal.test.ts](server/__tests__/portal.test.ts) at the engine level (the
+relocate-and-refresh mechanic itself). Reaching a corner stargate requires climbing MainRoom's center
+stepping-stone shaft, which is deliberately organic/skill-based platforming (jumping while drifting between
+horizontally-offset columns) — not reliably scriptable, so the full walk-up-and-touch-it flow is manual-only,
+the same tradeoff already made for burn-from-engine-fire death below.
+
+## Spawn portal
+
+1. A small circular portal floats in the air (off the ground) at the bottom center of MainRoom, directly
+   below the stepping-stone shaft.
+2. Logging in, reattaching, or warping through either corner stargate deposits the avatar at this spawn
+   portal; since it floats above the floor below it, the avatar visibly drops a short distance before landing
+   rather than appearing already standing.
+
+**Covered by**: [e2e/main-room-workflows.spec.ts](e2e/main-room-workflows.spec.ts) (asserts a fresh avatar
+settles at the known fixed spawn portal position after dropping) and
+[e2e/reattach.spec.ts](e2e/reattach.spec.ts) (asserts reattaching returns to the same settled position).
 
 ## Death and respawn
 
 1. An avatar dies when hit by a Missile (from a Launcher) or burned by active engine fire; death still happens
    in exactly one hit (no health pool was added) — the only change is a short knockback (in the missile's
    flight direction, or upward for engine fire) plays out over the death animation instead of an instant vanish.
-2. On death the avatar's session is unplugged; the next login/reattach places it at a fresh entrance.
+2. On death the avatar's session is unplugged; the next login/reattach places it at the fresh spawn portal (see
+   "Spawn portal" above).
 3. The player who died sees their own screen flash/shake briefly (a one-shot server ping tells their client to
    play the effect, since their connection otherwise goes silent the instant their avatar is removed).
 
 **Covered by**: [e2e/main-room-workflows.spec.ts](e2e/main-room-workflows.spec.ts) end-to-end — one browser
 context connects to the fixed Launcher fixture and fires a missile at a second context's avatar standing in its
-path, then reattaches the victim and asserts it respawns at the (fixed) entrance. The knockback and death-flash
-are covered at the unit level ([server/__tests__/avatar.test.ts](server/__tests__/avatar.test.ts)); the
-client-side flash/shake/sound itself is manual-only (no automated assertions on canvas pixels or WebAudio
-output). Burn-from-engine-fire death is still manual-only (a Thruster can't burn its own connected pilot by
-design, so it needs a second avatar deliberately standing in the flame — not yet automated).
+path, then reattaches the victim and asserts it respawns at the known fixed spawn portal position.
+The knockback and death-flash are covered at the unit level
+([server/__tests__/avatar.test.ts](server/__tests__/avatar.test.ts)); the client-side flash/shake/sound itself
+is manual-only (no automated assertions on canvas pixels or WebAudio output). Burn-from-engine-fire death is
+still manual-only (a Thruster can't burn its own connected pilot by design, so it needs a second avatar
+deliberately standing in the flame — not yet automated).
 
 ## Multiplayer visibility
 

@@ -5,14 +5,13 @@ import { Physics } from '../physics';
 import { Entrance } from './entrance';
 import { addAction } from './frames';
 
-const CLOSED_ACTION = 'closed';
-const OPENING_ACTION = 'opening';
-const OPEN_ACTION = 'open';
-const CLOSING_ACTION = 'closing';
+const IDLE_ACTION = 'idle';
 
-export class CryogenicDoor extends Entrance {
-  static readonly WIDTH = 12;
-  static readonly HEIGHT = 14;
+/** Small circular portal that hovers off the ground; avatars deposited here (login/warp-arrival) drop
+ * a short distance under gravity before landing, rather than appearing already standing on solid ground. */
+export class SpawnPortal extends Entrance {
+  static readonly WIDTH = 4;
+  static readonly HEIGHT = 4;
 
   private static readonly actionFrames = new Map<string, Frame[]>();
 
@@ -21,26 +20,23 @@ export class CryogenicDoor extends Entrance {
   }
 
   getActionFrames(): Map<string, Frame[]> {
-    return CryogenicDoor.actionFrames;
+    return SpawnPortal.actionFrames;
   }
 
   static init(cellData: CellData): void {
-    addAction(cellData, CLOSED_ACTION, 'doors/cryo/closed', 1, false, CryogenicDoor.actionFrames);
-    addAction(cellData, OPENING_ACTION, 'doors/cryo/opening', 6, false, CryogenicDoor.actionFrames);
-    addAction(cellData, OPEN_ACTION, 'doors/cryo/open', 1, false, CryogenicDoor.actionFrames);
-    addAction(cellData, CLOSING_ACTION, 'doors/cryo/closing', 6, false, CryogenicDoor.actionFrames);
+    addAction(cellData, IDLE_ACTION, 'doors/entrance/idle', 6, false, SpawnPortal.actionFrames);
   }
 
   protected override getDefaultAction(): string {
-    return CLOSED_ACTION;
+    return IDLE_ACTION;
   }
 
   getWidth(): number {
-    return CryogenicDoor.WIDTH;
+    return SpawnPortal.WIDTH;
   }
 
   getHeight(): number {
-    return CryogenicDoor.HEIGHT;
+    return SpawnPortal.HEIGHT;
   }
 
   getLayer(): number {
@@ -55,12 +51,14 @@ export class CryogenicDoor extends Entrance {
     return 12;
   }
 
+  // Deposits the avatar right at the portal itself (not resting on ground) so the placement gap built
+  // into the room layout (see MainRoom) is what makes the avatar visibly drop when it emerges.
   protected getEntranceXOffset(): number {
-    return 1;
+    return -1;
   }
 
   protected getEntranceYOffset(): number {
-    return 6;
+    return SpawnPortal.HEIGHT;
   }
 
   override getMass(): number {

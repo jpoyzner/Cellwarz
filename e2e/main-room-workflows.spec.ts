@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
-import { TEST_FIXTURE_PIXELS } from '../server/cell/mainRoom';
-import { findSpriteNear, getAvatarPosition, login, waitForAvatar, walkTo } from './gameHelpers';
+import { SPAWN_ENTRANCE_PIXELS, TEST_FIXTURE_PIXELS } from '../server/cell/mainRoom';
+import { findSpriteNear, getAvatarPosition, login, waitForAvatar, waitUntilGrounded, walkTo } from './gameHelpers';
 
 // The fixed Thruster/Launcher sit on the floor at known pixel positions (see server/cell/mainRoom.ts)
 // purely so these tests have deterministic targets — the room's other mana positions stay randomized.
@@ -17,8 +17,13 @@ const VICTIM_STAND_X = LAUNCHER_X + 64;
 test.describe.configure({ mode: 'serial' });
 
 test.describe('MainRoom deterministic workflows', () => {
-  test('walking into a portal warps the avatar back to the room entrance', async ({ page }) => {
-    test.setTimeout(60000);
+  // The two stargates sit in the top corners, only reachable by climbing MainRoom's center stepping-stone
+  // shaft — deliberately organic, skill-based platforming (jump while drifting between offset columns),
+  // not scriptable deterministically. The warp mechanic itself is covered at the engine level
+  // (server/__tests__/portal.test.ts); this only exercises the reachable half: a fresh avatar is deposited
+  // at the (fixed) spawn portal, floating above the floor, and drops onto it under gravity.
+  test('a fresh avatar drops onto the floor from the fixed spawn portal', async ({ page }) => {
+    test.setTimeout(30000);
     const loginName = `portal-${Date.now()}`;
 
     await login(page, loginName);
@@ -26,41 +31,15 @@ test.describe('MainRoom deterministic workflows', () => {
     await waitForAvatar(page, loginName);
     await page.locator('#canvas').click();
 
-    const before = await getAvatarPosition(page, loginName);
-    expect(before).not.toBeNull();
-
-    // MainRoom's floor is a clear, obstacle-free walkway from the (fixed) entrance to the bottom-left
-    // portal in the corner — hold left until the warp is detected, then release immediately so the still-
-    // held key doesn't keep running the freshly-respawned avatar further left via OS key-repeat.
-    await page.keyboard.down('ArrowLeft');
-    try {
-      await page.waitForFunction(
-        (name) => {
-          const state = window.__cellwarz;
-          if (!state) return false;
-          const spriteId = state.renderer.avatars[name];
-          const sprite = spriteId !== undefined ? state.renderer.sprites[spriteId] : undefined;
-          // The warp relocates the avatar back to the entrance, far from the wall it's walking toward.
-          return !!sprite && sprite[1] > 1000;
-        },
-        loginName,
-        { timeout: 20000, polling: 100 },
-      );
-    } finally {
-      await page.keyboard.up('ArrowLeft');
-    }
-
-    // The entrance is fixed/deterministic now, so a warp lands the avatar at the exact same spot it spawned.
-    await page.waitForTimeout(300);
-    const after = await getAvatarPosition(page, loginName);
-    expect(after).not.toBeNull();
-    expect(Math.abs(after!.x - before!.x)).toBeLessThan(100);
-    expect(after!.y).toBe(before!.y);
+    const spawn = await waitUntilGrounded(page, loginName);
+    expect(Math.abs(spawn.x - SPAWN_ENTRANCE_PIXELS.x)).toBeLessThan(40);
+    // It free-falls from the floating portal before landing, rather than appearing already grounded.
+    expect(spawn.y).toBeGreaterThan(SPAWN_ENTRANCE_PIXELS.y);
   });
 
   // Runs before the mana-pickup test below (which leaves its own avatar sitting near the Thruster) so the
   // killer/victim have a clear floor to walk across on their way to the Launcher/stand-off point.
-  test('a missile from a Launcher kills another avatar, who then respawns at the entrance', async ({ page, browser }) => {
+  test('a missile from a Launcher kills another avatar, who then respawns at the spawn portal', async ({ page, browser }) => {
     test.setTimeout(60000);
     const killerName = `killer-${Date.now()}`;
     const victimName = `victim-${Date.now()}`;
@@ -70,7 +49,7 @@ test.describe('MainRoom deterministic workflows', () => {
     await waitForAvatar(page, killerName);
     await page.locator('#canvas').click();
 
-    // Get the killer fully off the shared entrance tile *before* the victim even logs in — two avatars
+    // Get the killer fully off the shared spawn portal tile *before* the victim even logs in — two avatars
     // spawning on top of each other at the exact same coordinates is a much messier collision to resolve
     // than either of them individually hopping over a single obstacle later on.
     await walkTo(page, killerName, 'ArrowRight', LAUNCHER_X, { timeoutMs: 20000 });
@@ -87,8 +66,7 @@ test.describe('MainRoom deterministic workflows', () => {
       await waitForAvatar(pageB, victimName);
       await pageB.locator('#canvas').click();
 
-      const entrance = await getAvatarPosition(pageB, victimName);
-      expect(entrance).not.toBeNull();
+      const spawnPortalPosition = await waitUntilGrounded(pageB, victimName);
 
       // Victim stands just to the right of the launcher, in the path of a rightward-fired missile.
       await walkTo(pageB, victimName, 'ArrowRight', VICTIM_STAND_X, { timeoutMs: 20000 });
@@ -117,15 +95,15 @@ test.describe('MainRoom deterministic workflows', () => {
       }
       expect(killed).toBe(true);
 
-      // Reattaching places a fresh avatar back at the (fixed, deterministic) entrance.
+      // Reattaching places a fresh avatar back at the (fixed, deterministic) spawn portal.
       await pageB.reload();
       await pageB.locator('#loginName').fill(victimName);
       await pageB.locator('#enter').click();
       await expect(pageB.locator('#canvas')).toBeVisible();
       await waitForAvatar(pageB, victimName);
 
-      const respawned = await getAvatarPosition(pageB, victimName);
-      expect(respawned).toEqual(entrance);
+      const respawned = await waitUntilGrounded(pageB, victimName);
+      expect(respawned).toEqual(spawnPortalPosition);
     } finally {
       await contextB.close();
     }

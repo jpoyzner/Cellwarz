@@ -1,13 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Avatar } from '../sprite/avatar';
-import { CryogenicDoor } from '../sprite/cryogenicDoor';
 import { Portal } from '../sprite/portal';
 import { createTestCell } from './testHelpers';
 
 describe('Portal', () => {
   it('relocates the avatar to a new room and marks the login as needing a refresh', () => {
     const { cell } = createTestCell(50, 50);
-    CryogenicDoor.init(cell.getCellData());
+    Portal.init(cell.getCellData());
     Avatar.init(cell.getCellData());
     const avatar = new Avatar('traveler', 10, 10, false, cell);
 
@@ -31,7 +30,7 @@ describe('Portal', () => {
 
   it('does not crash when the destination room has no free entrance spot', () => {
     const { cell } = createTestCell(50, 50);
-    CryogenicDoor.init(cell.getCellData());
+    Portal.init(cell.getCellData());
     Avatar.init(cell.getCellData());
     const avatar = new Avatar('unlucky', 10, 10, false, cell);
 

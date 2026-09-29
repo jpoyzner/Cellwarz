@@ -27,9 +27,11 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   grid. Sprites (`server/sprite/`) extend the abstract `Sprite`; cells (`server/cell/`) extend abstract `Cell`,
   which populates walls/doors/mana/robots in `init()`. [MainRoom](server/cell/mainRoom.ts) is "the" reusable main
   multiplayer room layout — a fixed (non-random) giant rectangle with long horizontal platform rows, a center
-  hole bridged by four straight-up/down stepping-stone columns, scattered decorative blocks, and one `Portal` in
-  each corner; only its mana/`Robot` pickup positions are still randomized per instance. It's the only room type
-  wired into `Zion` today. [SimpleSmallCell](server/cell/simpleSmallCell.ts) (small, fully-random walls) is kept
+  hole bridged by four straight-up/down stepping-stone columns, scattered decorative blocks, two animated
+  `Portal` "stargates" (walking into either warps the avatar to a random other room's spawn portal) in the top
+  corners, and one small floating `SpawnPortal` (avatars are deposited/warped-in here) at the bottom center;
+  only its mana/`Robot` pickup positions are still randomized per instance. It's the only room type wired into
+  `Zion` today. [SimpleSmallCell](server/cell/simpleSmallCell.ts) (small, fully-random walls) is kept
   around as a fast fixture for unit tests and as the likely starting point for the future randomly-generated
   "side-quest" room mode (see [TODOS.md](TODOS.md)) — it isn't used in production room selection anymore.
 - **Wire format is intentionally terse**: `getSprites` in [jsonGenerator.ts](server/jsonGenerator.ts) emits
@@ -98,7 +100,9 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
 - `Cell` subclasses usually only override the small set of abstract sizing/spawn-count methods (see
   [SimpleSmallCell](server/cell/simpleSmallCell.ts)); prefer that for new room types. A subclass that needs a
   fully custom, deterministic layout (like [MainRoom](server/cell/mainRoom.ts)) can instead override `init()`
-  itself — `Cell.entrance` and `Cell.getRandomX`/`getRandomY` are `protected` specifically to support this.
+  itself — `Cell.entrances` and `Cell.getRandomX`/`getRandomY` are `protected` specifically to support this.
+  `Cell.addAvatarAtEntrance` picks a random entry from `entrances` (an avatar can be deposited at any of them,
+  e.g. MainRoom's two `SpawnPortal`s), not just a single fixed spot.
 - Sprite subclasses under `server/sprite/` follow a consistent pattern: static `init(CellData)` registers
   animation frames/images once per cell (shared static `Map`, not per-instance — this only stays correct because
   every `CellData` registers images in the same deterministic order), instance constructors take
@@ -113,7 +117,9 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   run inside one `test.describe.configure({ mode: 'serial' })` block so their avatars can't push/collide with
   each other; they also lean on shared helpers in [e2e/gameHelpers.ts](e2e/gameHelpers.ts) (`walkTo` jumps only
   when the avatar's x actually stalls, rather than blindly, to avoid climbing MainRoom's stepping-stone columns
-  by accident) and a small keepout zone in `MainRoom` so randomly-placed mana/robots can't spawn on the fixed
+  by accident; `waitUntilGrounded` polls until an avatar's y stops changing, since a fresh spawn now free-falls a
+  short distance from its floating `SpawnPortal` before landing) and a small keepout zone in `MainRoom` so
+  randomly-placed mana/robots can't spawn on the fixed
   test fixtures or block the floor path e2e tests walk (robots can still *wander* into that zone while
   patrolling, since only their spawn position is constrained — watch for e2e flakiness from this and tighten
   further if it shows up). Remaining e2e gaps: death-by-engine-fire specifically (only death-by-missile is

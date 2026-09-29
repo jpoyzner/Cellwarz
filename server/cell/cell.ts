@@ -5,13 +5,13 @@ import { randomInt } from '../random';
 import type { World } from '../world';
 import { Avatar } from '../sprite/avatar';
 import { CellBlock } from '../sprite/cellBlock';
-import { CryogenicDoor } from '../sprite/cryogenicDoor';
 import type { Entrance } from '../sprite/entrance';
 import { Ice } from '../sprite/ice';
 import { Launcher } from '../sprite/launcher';
 import { Mana } from '../sprite/mana';
 import { Portal } from '../sprite/portal';
 import { Robot } from '../sprite/robot';
+import { SpawnPortal } from '../sprite/spawnPortal';
 import { Thruster } from '../sprite/thruster';
 import { Wall } from '../sprite/wall';
 
@@ -24,7 +24,8 @@ export abstract class Cell {
   private readonly world: World;
   private readonly data: CellData;
   private engine!: Engine;
-  protected entrance: Entrance | undefined;
+  // Multiple deposit points (spawn/warp-arrival) are supported; addAvatarAtEntrance picks one at random.
+  protected entrances: Entrance[] = [];
 
   constructor(world: World) {
     this.world = world;
@@ -36,7 +37,8 @@ export abstract class Cell {
   init(): Cell {
     Avatar.init(this.data);
     CellBlock.init(this.data);
-    CryogenicDoor.init(this.data);
+    SpawnPortal.init(this.data);
+    Portal.init(this.data);
     Thruster.init(this.data);
     Launcher.init(this.data);
     Ice.init(this.data);
@@ -78,9 +80,9 @@ export abstract class Cell {
       );
     }
 
-    while (!this.entrance) {
+    while (this.entrances.length === 0) {
       try {
-        this.entrance = new CryogenicDoor(this.getRandomX(CryogenicDoor.WIDTH), this.getRandomY(CryogenicDoor.HEIGHT), true, this);
+        this.entrances.push(new SpawnPortal(this.getRandomX(SpawnPortal.WIDTH), this.getRandomY(SpawnPortal.HEIGHT), true, this));
       } catch (e) {
         if (!(e instanceof ClusteredInitException)) throw e;
       }
@@ -90,7 +92,7 @@ export abstract class Cell {
       let portal: Portal | undefined;
       while (!portal) {
         try {
-          portal = new Portal(this.getRandomX(CryogenicDoor.WIDTH), this.getRandomY(CryogenicDoor.HEIGHT), true, this);
+          portal = new Portal(this.getRandomX(Portal.WIDTH), this.getRandomY(Portal.HEIGHT), true, this);
         } catch (e) {
           if (!(e instanceof ClusteredInitException)) throw e;
         }
@@ -149,10 +151,11 @@ export abstract class Cell {
   }
 
   addAvatarAtEntrance(name: string): Avatar | undefined {
-    if (!this.entrance) return undefined;
+    if (this.entrances.length === 0) return undefined;
+    const entrance = this.entrances[randomInt(this.entrances.length)];
 
     try {
-      return new Avatar(name, this.entrance.getEntranceX(), this.entrance.getEntranceY(), false, this);
+      return new Avatar(name, entrance.getEntranceX(), entrance.getEntranceY(), false, this);
     } catch (e) {
       if (e instanceof ClusteredInitException) return undefined;
       throw e;

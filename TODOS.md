@@ -2,7 +2,11 @@
 
 ## Core features
 
-- Redesign the warps.
+- need an overvew map! At least for admin!
+
+- put holes in the ends of levels 2 and 3 and also near the ends of floor 1 (to drop to floor 4)
+
+- give it a cyberpubk flare? Make the background dark and spacy and have the platforms and blocks and avatar light up more
 
 - Redesign the login screen
 
@@ -19,9 +23,14 @@
 Make holes at the top and on sides that when a player falls through, they appear on the other side, so they can take shortcuts. Doors should be at the corners of the recatngle
 - Make level designer?
 
+- A "side-quest" mode that players will be able to take that takes them to randomaly generated rooms where they fight NPCs and build around challenges using blocks. There should be a danger sign, and it should be located at the ends of floors 2 & 3. They will enter this mode from the main multiplayer mode somehow (we will define this later).
+
 - Need to decide whether players will have their own room or just a big bag of inventory for picking up and hoarding blocks.
 
+- Need a record/debug mode that captures position of everything to report weird situations so it can rerun and fix.
+
 - If persistence is ever needed (session/avatar state surviving a server restart), use a NoSQL store — no DB is in use today.
+
 
 ## Social features
 
@@ -34,8 +43,6 @@ Make holes at the top and on sides that when a player falls through, they appear
     - Scoring would need to be adapted for game outcomes (e.g. survival time, kills, territory)
 
 ## Game expansions
-
-- A "side-quest" mode that players will be able to take that takes them to randomaly generated rooms where they fight NPCs and build around challenges using blocks. They will enter this mode from the main multiplayer mode somehow (we will define this later).
 
 - Maybe make a room where people can collaborate on live music somehow!!! Maybe they play instruments synced together in the same room live!?! A realtime interactive DAW?
 
