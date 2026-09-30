@@ -2,6 +2,8 @@
 
 ## Core features
 
+, BE ABLE TO SEE DJ RECOGNIZE WEBSITE OR EVEN SOME VIDEOS FROM MY YOUTUBE CAN BE PLAYING!!!!!!!!!!!!! MAKE THEM PLAY ON GIANT TVS IN THE BACKGROUND!!!
+
 - need an overvew map! At least for admin!
 
 - put holes in the ends of levels 2 and 3 and also near the ends of floor 1 (to drop to floor 4)
@@ -35,6 +37,7 @@ Make holes at the top and on sides that when a player falls through, they appear
 ## Social features
 
 - Be able to see the whole game in the background of the DJ Recognize website (in the space), and make it the entry into this game. Perhaps a spaceship can take you to the game somehow. Maybe it bothers the website users.
+AND VICE VERSA
 
 - Could this be a team sport? Maybe NPC players try to guard the tree!!!! Or do they just annoy/kill players? Maybe make them replicate like in exodus lol!?? Game NPC AI - Use Exodus decision trees to drive NPC avatars in CellWarz (the ninja game). Instead of scripted behavior, ninjas evolve their own movement and combat logic autonomously.
     - Trees evolve to control NPC players — movement, targeting, attacking
