@@ -2,7 +2,7 @@
 
 ## Core Gameplay
 
-- give it a cyberpunk flare? Make the background dark and spacy and have the platforms and blocks and avatar light up more
+- give it a cyberpunk flare
 - remove the framerate thng and MAKE THE TETRIS OBJECTS GIVE YOU POINTS WHEN YOU TOUCH THEM! make the blocks fly towards a score that adds. Each tetrino block should be worth 20 points.
 - make it look like a ship? But then it doesn't mesh with the continues movement thing:
 - put holes in the ends of levels 2 and 3 and also near the ends of floor 1 (to drop to floor 4)

@@ -25,6 +25,9 @@ export interface Lamp {
   topY: number;
   bottomY: number;
   halfWidth: number;
+  /** Horizontal pixel span the beam is clipped to (the inner faces of the end walls). */
+  minX: number;
+  maxX: number;
 }
 
 export abstract class Cell {

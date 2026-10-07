@@ -3,6 +3,8 @@ export interface Lamp {
   topY: number;
   bottomY: number;
   halfWidth: number;
+  minX: number;
+  maxX: number;
 }
 
 // Each beam's floor end sweeps this far either side of straight down; alternate lamps swing in opposite
@@ -30,6 +32,9 @@ export function drawLamps(
     const baseX = x + sway;
 
     ctx.save();
+    ctx.beginPath();
+    ctx.rect(lamp.minX - offsetX, 0, lamp.maxX - lamp.minX, viewHeight);
+    ctx.clip();
     ctx.globalCompositeOperation = 'lighter';
     const beam = ctx.createLinearGradient(0, topY, 0, bottomY);
     // Bright enough to act as a backdrop the black ninjas read against; still fades toward the floor.

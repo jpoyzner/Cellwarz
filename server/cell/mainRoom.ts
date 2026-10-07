@@ -95,6 +95,8 @@ export class MainRoom extends Cell {
       topY: OUTER_WALL_SIZE * CellData.ANIMATION_STEP,
       bottomY: GRID_FLOOR_Y * CellData.ANIMATION_STEP,
       halfWidth: LAMP_FLOOR_HALF_WIDTH_PX,
+      minX: OUTER_WALL_SIZE * CellData.ANIMATION_STEP,
+      maxX: ROOM_WIDTH_PX - OUTER_WALL_SIZE * CellData.ANIMATION_STEP,
     }));
   }
 
