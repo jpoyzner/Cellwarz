@@ -81,6 +81,27 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   for backgrounded/unfocused tabs (this bit a Playwright test with two browser contexts during development;
   see the git history on `src/game/renderer.ts` for the fix), so anything logically load-bearing can't depend
   on it actually running.
+- **Minimap** (`src/game/minimap.ts`, drawn by `Renderer` onto its own `#minimap-canvas`; open/closed toggle is
+  React state in `GameCanvas`): the wire format has no sprite type, so walls vs. avatars/robots are classified
+  from the image path (`/blocks/` vs `/me/`), and a robot is an actor sprite whose id isn't in `avatars` (robots
+  never send a name). The wall layer is cached and only rebuilt when a wall sprite appears/disappears.
+- **Level backdrops** (`Cell.getBackground()` → `'space' | 'temple'`, sent as `background` in the full-state
+  payload and applied in `Renderer.setBackground()`): `MainRoom` uses `'space'` — [spaceBackground.ts](src/game/spaceBackground.ts),
+  a starfield plus drifting tetrominoes ported from the daat/DJ Recognize site, drawn on the game canvas before
+  sprites; pieces live in world coordinates (the server sends `worldWidth`/`worldHeight`) and shatter into flying
+  cells when any avatar's rect overlaps them (the site's mouse-hover became avatar-touch); stars are a
+  screen layer that slowly drifts in one shared random direction. `MainRoom` also has five tall ceiling lamps (`Cell.getLamps()`, sent as `lamps`;
+  [lamps.ts](src/game/lamps.ts)) casting bright, floor-fading triangular light beams drawn behind the sprites that sway back and forth (alternate
+  lamps opposite, so neighbours briefly overlap), so
+  the black ninja actors (avatars, robots) read against them and vanish into the dark outside them (players can
+  hide). Name tags are yellow and centered over the sprite. Purely cosmetic. `'temple'` (the DOM `#canvas-bg`
+  image) is the `Cell` default, kept for the future randomly generated rooms.
+- **Score** (top-right `#score` DOM element): when the *local* avatar shatters a background piece, its shards
+  (`collect` shards in [spaceBackground.ts](src/game/spaceBackground.ts)) burst out, then home in on the HUD
+  (converted to world coordinates by the camera offset) and are counted on arrival; `Renderer` adds 20/block and
+  reports `{ scored: n }` over the socket. The server (`Session.addBlocks`, `POINTS_PER_BLOCK`) keeps the
+  authoritative per-user total, sent back as `score` in the full-state payload. The old top-left analyzer text
+  was removed (`Analyzer` still exists but is no longer drawn).
 - **Stand animation already exists**: `Avatar`'s `STAND_LEFT_ACTION`/`STAND_RIGHT_ACTION` already cycle through
   6 art frames (`me/stand1..6`) at `Engine.QUARTER_STEP` — there's no "frozen idle" gap to fill.
 

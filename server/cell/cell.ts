@@ -17,6 +17,16 @@ import { Wall } from '../sprite/wall';
 
 export const OUTER_WALL_SIZE = CellBlock.SIZE * 4;
 
+export type BackgroundKind = 'space' | 'temple';
+
+/** A ceiling lamp (pixels) casting a triangle of light down to `bottomY`, `halfWidth` either side of `x` there. */
+export interface Lamp {
+  x: number;
+  topY: number;
+  bottomY: number;
+  halfWidth: number;
+}
+
 export abstract class Cell {
   private readonly width: number;
   private readonly height: number;
@@ -183,6 +193,16 @@ export abstract class Cell {
   // Mirrors the original Java bug: returns width, not height. Unused elsewhere; kept for parity.
   getHeight(): number {
     return this.width;
+  }
+
+  /** Which client-side backdrop this room is drawn over; 'temple' is the default for randomly-generated rooms. */
+  getBackground(): BackgroundKind {
+    return 'temple';
+  }
+
+  /** Purely cosmetic client-drawn lighting; lit avatars glow, unlit ones are left in the dark. */
+  getLamps(): Lamp[] {
+    return [];
   }
 
   abstract getMinCellWidth(): number;

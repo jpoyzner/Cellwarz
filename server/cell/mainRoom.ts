@@ -1,5 +1,6 @@
 import type { World } from '../world';
 import { Cell, OUTER_WALL_SIZE } from './cell';
+import type { BackgroundKind, Lamp } from './cell';
 import { ClusteredInitException } from '../errors';
 import { CellData } from '../cellData';
 import { Avatar } from '../sprite/avatar';
@@ -59,6 +60,10 @@ const GRID_FLOOR_Y = GRID_HEIGHT - OUTER_WALL_SIZE - 2;
 const SPAWN_PORTAL_Y = GRID_FLOOR_Y - SpawnPortal.HEIGHT - SPAWN_PORTAL_GAP;
 const STARGATE_Y = ROW_Y[0] - Portal.HEIGHT;
 
+// Lamps are evenly spaced; each beam is narrower than the spacing so dark gaps remain on the floor to hide in.
+const LAMP_COUNT = 5;
+const LAMP_FLOOR_HALF_WIDTH_PX = 300;
+
 // Fixed, deterministic pixel position for the spawn portal, exported so e2e specs (which can't run
 // TypeScript room-building code) can target/assert against it without duplicating this layout math.
 export const SPAWN_ENTRANCE_PIXELS = {
@@ -78,6 +83,19 @@ export const SPAWN_ENTRANCE_PIXELS = {
 export class MainRoom extends Cell {
   constructor(world: World) {
     super(world);
+  }
+
+  override getBackground(): BackgroundKind {
+    return 'space';
+  }
+
+  override getLamps(): Lamp[] {
+    return Array.from({ length: LAMP_COUNT }, (_, i) => ({
+      x: (ROOM_WIDTH_PX * (i + 0.5)) / LAMP_COUNT,
+      topY: OUTER_WALL_SIZE * CellData.ANIMATION_STEP,
+      bottomY: GRID_FLOOR_Y * CellData.ANIMATION_STEP,
+      halfWidth: LAMP_FLOOR_HALF_WIDTH_PX,
+    }));
   }
 
   getMinCellWidth(): number {

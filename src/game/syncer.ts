@@ -56,6 +56,10 @@ export class Syncer {
     this.connection?.send(JSON.stringify({ key, down }));
   }
 
+  sendBlocksCollected(blocks: number): void {
+    this.connection?.send(JSON.stringify({ scored: blocks }));
+  }
+
   close(): void {
     this.connection?.close();
   }

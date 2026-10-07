@@ -126,6 +126,60 @@ assert on in Playwright (no pixel-diffing or WebAudio-output assertions are in p
 built on (sprite positions, the `died` ping) is exercised indirectly by the existing movement/death/multiplayer
 tests above, which would fail if the underlying server behavior changed.
 
+## Minimap
+
+1. While in-game, a mostly-transparent minimap sits in the bottom-right corner (`#minimap`, canvas
+   `#minimap-canvas`) showing the room's walls in blue, other players as yellow dots, robots as red dots, and
+   your own avatar as a larger pulsing white dot with a green outline.
+2. Click the small "x" (`#minimap-toggle`) to collapse it into a much smaller icon in the same corner; click the
+   icon to reopen it. (It's deliberately not a focusable `<button>` so the Spacebar mana-pickup key can't
+   accidentally toggle it.)
+
+**Covered by**: [e2e/minimap.spec.ts](e2e/minimap.spec.ts) (renders content, collapses to an icon, reopens) and
+[src/game/__tests__/minimap.test.ts](src/game/__tests__/minimap.test.ts) (wall vs. avatar image classification).
+The exact colors/dots are manual-only (no canvas pixel-color assertions).
+
+## Space background
+
+1. [MainRoom](server/cell/mainRoom.ts) is drawn over a dark starfield with randomly drifting, glowing tetromino
+   pieces (ported from the DJ Recognize site's background). The server tells the client which backdrop a room
+   uses (`background` in the full-state payload; `Cell.getBackground()`), and the DOM `#canvas-bg` temple image
+   is hidden while the space backdrop is active.
+2. When any avatar (yours or another player's) overlaps a drifting piece, it breaks into its individual blocks
+   that fly apart, and a new piece reappears elsewhere in the room. The pieces drift slowly through the *world*
+   (not the screen), so you can run up to one and touch it; the stars are a screen layer that slowly drifts all
+   in one random direction. The backdrop is purely cosmetic — it never affects physics or collisions.
+3. Tall ceiling lamps (`Cell.getLamps()`, five evenly spaced in MainRoom) cast bright triangular beams of light
+   down over much of the floor, fading toward the bottom, and sway slowly back and forth (alternate lamps in
+   opposite directions) so neighbouring beams briefly overlap. The black ninja avatars (and robots) are drawn over
+   the beams and stand out clearly against them; outside the beams they blend into the dark (you can still see
+   their eyes), so players can hide in the gaps. Lighting is purely cosmetic and doesn't affect gameplay.
+4. Name tags above avatars are bright yellow (with a dark outline) and horizontally centered over the avatar.
+5. The original temple backdrop is kept as the default for non-MainRoom (e.g. future randomly generated) rooms.
+
+**Covered by**: [e2e/space-background.spec.ts](e2e/space-background.spec.ts) (space backdrop active, temple
+element hidden, running into a world-space piece shatters it),
+[src/game/__tests__/spaceBackground.test.ts](src/game/__tests__/spaceBackground.test.ts) (world-wide scatter, shatter,
+star drift, respawn, shard lifetime) and [server/__tests__/cellBackground.test.ts](server/__tests__/cellBackground.test.ts)
+(which room uses which backdrop). The beam/name tag look is manual-only.
+
+## Score
+
+1. Each user has a score, shown in the top-right corner (`#score`, just the number) and starting at 0.
+2. When *your* avatar breaks a background block (see "Space background"), the blocks burst outward, then fly
+   across the screen to the score and disappear on arrival, adding 20 points per block (a tetromino is 4 blocks,
+   so 80). Blocks broken by other players fly apart without scoring for you.
+3. The client reports collected blocks to the server (`scored` message), which keeps the authoritative total on
+   the user's `Session`; it persists across death/respawn and reattach (the full-state payload carries `score`).
+   Scores are in-memory only, like all game state.
+4. The old debug frame-stats text in the top-left corner has been removed.
+
+**Covered by**: [e2e/space-background.spec.ts](e2e/space-background.spec.ts) (breaking a block adds 20 per block to
+the `#score` text), [src/game/__tests__/spaceBackground.test.ts](src/game/__tests__/spaceBackground.test.ts) (only
+the local avatar's blocks fly to the target and are counted) and
+[server/__tests__/session.test.ts](server/__tests__/session.test.ts) (20 points per block, kept across re-plug).
+The flight animation itself is manual-only.
+
 ## Removed workflows
 
 - **Chat** (typing a message and pressing Enter to broadcast it to the room) was removed from both client and

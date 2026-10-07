@@ -1,14 +1,21 @@
 import type { Analyzer } from './analyzer';
 import { AudioManager } from './audio';
+import { drawLamps } from './lamps';
+import type { Lamp } from './lamps';
+import { Minimap } from './minimap';
 import { ParticleSystem } from './particles';
 import { LocalPredictor } from './prediction';
-import type { AvatarsMap, ConnectPayload, IncomingSprite, SpritesMap, StoredSprite, ToolsMap } from './types';
+import { SpaceBackground } from './spaceBackground';
+import type { TouchRect } from './spaceBackground';
+import type { AvatarsMap, BackgroundKind, ConnectPayload, IncomingSprite, SpritesMap, StoredSprite, ToolsMap } from './types';
 
 export interface RendererContext {
   ctx: CanvasRenderingContext2D;
   canvas: HTMLCanvasElement;
   backgroundEl: HTMLElement | null;
   dashboardEl: HTMLElement | null;
+  scoreEl?: HTMLElement | null;
+  minimapCanvas?: HTMLCanvasElement | null;
   images: HTMLImageElement[];
   loginName: string;
   analyzer?: Analyzer;
@@ -29,6 +36,11 @@ const SMOOTHING_TAU_MS = 60;
 // across the screen.
 const RECONCILE_SNAP_THRESHOLD_PX = 32;
 const WARP_DETECTION_THRESHOLD_PX = 64;
+const AVATAR_WIDTH_PX = 48;
+const AVATAR_HEIGHT_PX = 64;
+const NAME_TAG_COLOR = '#ffe14d';
+// Mirrors server/session.ts; the server is authoritative, this only drives the immediate on-screen total.
+const POINTS_PER_BLOCK = 20;
 
 /** Mirrors js/renderer.js: draws directly to canvas every frame, bypassing React reconciliation for perf. */
 export class Renderer {
@@ -36,10 +48,21 @@ export class Renderer {
   avatars: AvatarsMap = {};
   tools: ToolsMap = {};
   imagePaths: string[] = [];
+  backgroundKind: BackgroundKind | undefined;
+  lamps: Lamp[] = [];
+  spaceBackground: SpaceBackground | undefined;
+  score = 0;
+  /** Called with the number of blocks that just reached the score, so it can be reported to the server. */
+  onBlocksCollected: ((blocks: number) => void) | undefined;
+  private scoreTarget: { x: number; y: number } | undefined;
+  private worldWidth = 0;
+  private worldHeight = 0;
 
   private readonly audio = new AudioManager();
   private readonly particles = new ParticleSystem();
   private readonly predictor = new LocalPredictor();
+  private readonly minimap: Minimap | undefined;
+  private minimapOpen = true;
 
   private readonly smoothed = new Map<string, SmoothedPosition>();
   private readonly lastY = new Map<string, number>();
@@ -55,6 +78,7 @@ export class Renderer {
   private readonly windowHeight = window.innerHeight;
 
   private lastFrameTime = performance.now();
+  private lastDtMs = 0;
   private rafHandle: number | undefined;
   private stopped = false;
 
@@ -64,12 +88,27 @@ export class Renderer {
   private flashColor = '';
 
   constructor(private readonly context: RendererContext) {
+    if (context.minimapCanvas) this.minimap = new Minimap(context.minimapCanvas);
+    this.updateScoreDisplay();
     this.rafHandle = requestAnimationFrame(this.tick);
+  }
+
+  private updateScoreDisplay(): void {
+    const { scoreEl } = this.context;
+    if (!scoreEl) return;
+
+    scoreEl.textContent = String(this.score);
+    const rect = scoreEl.getBoundingClientRect();
+    this.scoreTarget = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
   }
 
   stop(): void {
     this.stopped = true;
     if (this.rafHandle !== undefined) cancelAnimationFrame(this.rafHandle);
+  }
+
+  setMinimapOpen(open: boolean): void {
+    this.minimapOpen = open;
   }
 
   getPlayerOffset(): { offsetX: number; offsetY: number; me: StoredSprite | undefined } {
@@ -112,9 +151,16 @@ export class Renderer {
     const before = loginSpriteIdBefore ? this.sprites[loginSpriteIdBefore] : undefined;
 
     this.sprites = data.sprites;
-    this.avatars = data.avatars;
+    // The server sends numeric sprite ids here but string ids (object keys) in redraw frames; normalize so the
+    // strict === comparisons against sprite-map keys (local avatar, shard collection, minimap) always agree.
+    this.avatars = Object.fromEntries(Object.entries(data.avatars).map(([name, id]) => [name, String(id)]));
     this.tools = data.tools;
     this.imagePaths = data.imagePaths;
+    this.setBackground(data.background, data.worldWidth, data.worldHeight);
+    this.lamps = data.lamps ?? [];
+    this.score = data.score ?? 0;
+    this.updateScoreDisplay();
+    this.minimap?.setImagePaths(data.imagePaths);
     this.loadImages();
 
     const loginSpriteIdAfter = this.avatars[this.context.loginName];
@@ -174,6 +220,8 @@ export class Renderer {
         if (avatarSpriteIds.has(spriteId)) {
           this.onAvatarRemoved(spriteId, localSpriteId);
         }
+        const removed = this.sprites[spriteId];
+        if (removed && this.minimap?.kindOf(removed[0]) === 'wall') this.minimap.invalidateWalls();
         delete this.sprites[spriteId];
         this.smoothed.delete(spriteId);
         this.lastY.delete(spriteId);
@@ -183,6 +231,7 @@ export class Renderer {
 
       const [imageIndex, x, y, extraInfo] = newSprite as [number, number, number, Record<string, unknown>?];
       const previousX = this.sprites[spriteId]?.[1];
+      if (previousX === undefined && this.minimap?.kindOf(imageIndex) === 'wall') this.minimap.invalidateWalls();
       this.sprites[spriteId] = [imageIndex, x, y];
 
       if (avatarSpriteIds.has(spriteId)) {
@@ -268,7 +317,7 @@ export class Renderer {
 
     const dtMs = Math.min(now - this.lastFrameTime, 100);
     this.lastFrameTime = now;
-
+    this.lastDtMs = dtMs;
     this.particles.update(dtMs);
     this.advanceRenderPositions(dtMs);
     this.draw(now);
@@ -311,13 +360,28 @@ export class Renderer {
     }
   }
 
+  private setBackground(kind: BackgroundKind, worldWidth: number, worldHeight: number): void {
+    const { canvas, backgroundEl } = this.context;
+
+    if (kind !== this.backgroundKind || worldWidth !== this.worldWidth || worldHeight !== this.worldHeight) {
+      this.backgroundKind = kind;
+      this.worldWidth = worldWidth;
+      this.worldHeight = worldHeight;
+      this.spaceBackground =
+        kind === 'space' ? new SpaceBackground(worldWidth, worldHeight, canvas.width, canvas.height) : undefined;
+    }
+
+    // The temple image is a DOM layer behind the canvas; the space backdrop is drawn on the canvas itself.
+    if (backgroundEl) backgroundEl.style.display = kind === 'temple' ? 'block' : 'none';
+  }
+
   private draw(now: number): void {
     const { ctx, canvas, backgroundEl } = this.context;
 
     if (this.staleMode) {
       ctx.fillStyle = 'gray';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-    } else {
+    } else if (!this.spaceBackground) {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     }
 
@@ -333,12 +397,21 @@ export class Renderer {
     const drawOffsetX = this.offsetX - shakeX;
     const drawOffsetY = this.offsetY - shakeY;
 
-    if (backgroundEl) {
+    if (backgroundEl && this.backgroundKind === 'temple') {
       backgroundEl.style.left = `${(drawOffsetX / 10) * -1 - 55}px`;
       backgroundEl.style.top = `${(drawOffsetY / 50) * -1 - 20}px`;
     }
 
+    if (this.spaceBackground && !this.staleMode) {
+      this.drawSpaceBackground(now, drawOffsetX, drawOffsetY);
+    }
+
+    if (!this.staleMode) {
+      drawLamps(ctx, this.lamps, drawOffsetX, drawOffsetY, canvas.width, canvas.height, now);
+    }
+
     this.drawSprites(drawOffsetX, drawOffsetY);
+    this.spaceBackground?.drawCollectingShards(ctx, drawOffsetX, drawOffsetY);
     this.particles.draw(ctx, drawOffsetX, drawOffsetY);
 
     if (now < this.flashUntil) {
@@ -346,9 +419,58 @@ export class Renderer {
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
 
-    this.addScreenText();
     this.drawAvatarsNames(drawOffsetX, drawOffsetY);
     this.drawDashboardItems();
+    this.drawMinimap(now);
+  }
+
+  /** Every avatar (local or remote) shatters the world-space pieces it overlaps; the backdrop never affects gameplay. */
+  private drawSpaceBackground(now: number, drawOffsetX: number, drawOffsetY: number): void {
+    const space = this.spaceBackground;
+    if (!space) return;
+
+    const touchers: TouchRect[] = [];
+    for (const spriteId of Object.values(this.avatars)) {
+      const sprite = this.sprites[spriteId];
+      if (!sprite) continue;
+      const rendered = this.smoothed.get(spriteId);
+      touchers.push({
+        x: rendered?.x ?? sprite[1],
+        y: rendered?.y ?? sprite[2],
+        width: AVATAR_WIDTH_PX,
+        height: AVATAR_HEIGHT_PX,
+        collects: spriteId === this.localSpriteId,
+      });
+    }
+
+    // The score HUD is in screen space while shards live in the world, so convert the target by the camera offset.
+    const worldTarget = this.scoreTarget && { x: this.scoreTarget.x + drawOffsetX, y: this.scoreTarget.y + drawOffsetY };
+    const collected = space.update(this.lastDtMs, touchers, worldTarget);
+    if (collected > 0) this.collectBlocks(collected);
+
+    space.draw(this.context.ctx, drawOffsetX, drawOffsetY, now);
+  }
+
+  private collectBlocks(blocks: number): void {
+    this.score += blocks * POINTS_PER_BLOCK;
+    this.updateScoreDisplay();
+    this.onBlocksCollected?.(blocks);
+  }
+
+  private drawMinimap(now: number): void {
+    if (!this.minimap || !this.minimapOpen) return;
+
+    this.minimap.draw({
+      sprites: this.sprites,
+      avatarSpriteIds: new Set(Object.values(this.avatars)),
+      localSpriteId: this.localSpriteId,
+      positionOf: (spriteId) => {
+        const rendered = this.smoothed.get(spriteId);
+        const sprite = this.sprites[spriteId];
+        return { x: rendered?.x ?? sprite[1], y: rendered?.y ?? sprite[2] };
+      },
+      now,
+    });
   }
 
   private computeCameraOffset(): void {
@@ -381,19 +503,14 @@ export class Renderer {
     }
   }
 
-  private addScreenText(): void {
-    if (!this.context.analyzer) return;
-
-    const { ctx } = this.context;
-    ctx.fillStyle = '#FF9933';
-    ctx.font = 'bold 16px Arial';
-    ctx.fillText(this.context.analyzer.state, 20, 70);
-  }
-
   private drawAvatarsNames(offsetX: number, offsetY: number): void {
     const { ctx } = this.context;
-    ctx.fillStyle = 'red';
+    ctx.fillStyle = NAME_TAG_COLOR;
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
+    ctx.lineWidth = 3;
+    ctx.lineJoin = 'round';
     ctx.font = 'bold 16px Arial';
+    ctx.textAlign = 'center';
 
     for (const name of Object.keys(this.avatars)) {
       const sprite = this.sprites[this.avatars[name]];
@@ -401,11 +518,17 @@ export class Renderer {
         const rendered = this.smoothed.get(this.avatars[name]);
         const x = rendered?.x ?? sprite[1];
         const y = rendered?.y ?? sprite[2];
-        ctx.fillText(name, x - 8 - offsetX, y - 16 - offsetY);
+        const width = this.context.images[sprite[0]]?.width || AVATAR_WIDTH_PX;
+        const tagX = x + width / 2 - offsetX;
+        const tagY = y - 8 - offsetY;
+        ctx.strokeText(name, tagX, tagY);
+        ctx.fillText(name, tagX, tagY);
       } else {
         delete this.avatars[name];
       }
     }
+
+    ctx.textAlign = 'start';
   }
 
   private drawDashboardItems(): void {

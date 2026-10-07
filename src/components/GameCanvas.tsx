@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Analyzer } from '../game/analyzer';
 import { Renderer } from '../game/renderer';
 import { Syncer } from '../game/syncer';
@@ -20,6 +20,14 @@ export function GameCanvas({ loginName, jump }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const backgroundRef = useRef<HTMLDivElement | null>(null);
   const dashboardRef = useRef<HTMLDivElement | null>(null);
+  const scoreRef = useRef<HTMLDivElement | null>(null);
+  const minimapCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const rendererRef = useRef<Renderer | null>(null);
+  const [minimapOpen, setMinimapOpen] = useState(true);
+
+  useEffect(() => {
+    rendererRef.current?.setMinimapOpen(minimapOpen);
+  }, [minimapOpen]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -38,13 +46,17 @@ export function GameCanvas({ loginName, jump }: GameCanvasProps) {
       canvas,
       backgroundEl: backgroundRef.current,
       dashboardEl: dashboardRef.current,
+      scoreEl: scoreRef.current,
+      minimapCanvas: minimapCanvasRef.current,
       images: [],
       loginName,
       analyzer,
     });
+    rendererRef.current = renderer;
 
     const syncer = new Syncer(renderer, loginName, jump, analyzer);
     syncer.connect();
+    renderer.onBlocksCollected = (blocks) => syncer.sendBlocksCollected(blocks);
 
     const detachInput = attachInputHandlers((key, down) => {
       syncer.sendKey(key, down);
@@ -57,6 +69,7 @@ export function GameCanvas({ loginName, jump }: GameCanvasProps) {
       detachInput();
       syncer.close();
       renderer.stop();
+      rendererRef.current = null;
       analyzer.stop();
       delete window.__cellwarz;
     };
@@ -64,11 +77,25 @@ export function GameCanvas({ loginName, jump }: GameCanvasProps) {
 
   return (
     <>
-      <div id="canvas-bg" ref={backgroundRef} style={{ display: 'block' }} />
+      <div id="canvas-bg" ref={backgroundRef} />
       <canvas id="canvas" ref={canvasRef} />
+      <div id="score" ref={scoreRef} />
       <div id="mana1" className="dash-icon" ref={dashboardRef} />
       <div id="mana2" className="dash-icon" />
       <div id="mana3" className="dash-icon" />
+      {/* Not a <button>: a focused button would also fire on Space, which is the in-game mana pickup key. */}
+      <div id="minimap" className={minimapOpen ? 'minimap' : 'minimap minimap-closed'}>
+        <canvas id="minimap-canvas" ref={minimapCanvasRef} />
+        <div
+          id="minimap-toggle"
+          role="button"
+          aria-label={minimapOpen ? 'Close minimap' : 'Open minimap'}
+          title={minimapOpen ? 'Close minimap' : 'Open minimap'}
+          onClick={() => setMinimapOpen((open) => !open)}
+        >
+          {minimapOpen ? '\u2715' : '\u25A6'}
+        </div>
+      </div>
     </>
   );
 }

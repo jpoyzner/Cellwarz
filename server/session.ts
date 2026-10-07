@@ -1,9 +1,12 @@
 import type { Avatar } from './sprite/avatar';
 import { UI } from './ui';
 
+export const POINTS_PER_BLOCK = 20;
+
 export class Session {
   private avatar: Avatar | undefined;
   private readonly ui: UI;
+  private score = 0;
 
   constructor(avatar: Avatar) {
     this.avatar = avatar;
@@ -13,6 +16,14 @@ export class Session {
 
   getUI(): UI {
     return this.ui;
+  }
+
+  getScore(): number {
+    return this.score;
+  }
+
+  addBlocks(blocks: number): void {
+    this.score += blocks * POINTS_PER_BLOCK;
   }
 
   getAvatar(): Avatar | undefined {

@@ -13,9 +13,14 @@ const SPRITES_KEY = 'sprites';
 const AVATARS_KEY = 'avatars';
 const TOOLS_KEY = 'tools';
 const IMAGE_PATHS_KEY = 'imagePaths';
+const BACKGROUND_KEY = 'background';
 const KEY_PARAM = 'key';
 const DOWN_PARAM = 'down';
 const DIED_PARAM = 'died';
+const SCORED_PARAM = 'scored';
+const SCORE_KEY = 'score';
+// Sanity cap on one report; a client reports a few blocks at a time.
+const MAX_BLOCKS_PER_REPORT = 100;
 const TIMEOUT = 3000;
 
 export class SocketHub {
@@ -44,9 +49,21 @@ export class SocketHub {
   private onTextMessage(data: Record<string, unknown>): void {
     if (CONNECT_PARAM in data) {
       this.handleLogin(data);
+    } else if (SCORED_PARAM in data) {
+      this.handleScored(data);
     } else {
       this.reactToKey(data);
     }
+  }
+
+  // The block-break itself is a client-side cosmetic, so the client reports how many blocks reached its score.
+  private handleScored(data: Record<string, unknown>): void {
+    if (!this.login) return;
+    const session = this.world.getZion().getHardlines().get(this.login);
+    const blocks = Math.floor(Number(data[SCORED_PARAM]));
+    if (!session || !Number.isFinite(blocks) || blocks <= 0) return;
+
+    session.addBlocks(Math.min(blocks, MAX_BLOCKS_PER_REPORT));
   }
 
   private handleLogin(data: Record<string, unknown>): void {
@@ -149,6 +166,7 @@ export class SocketHub {
     }
 
     const sessionAvatar = this.login ? this.world.getZion().getHardlines().get(this.login)?.getAvatar() : undefined;
+    const score = this.login ? (this.world.getZion().getHardlines().get(this.login)?.getScore() ?? 0) : 0;
 
     return {
       [CONNECT_PARAM]: '0',
@@ -156,6 +174,11 @@ export class SocketHub {
       [AVATARS_KEY]: avatars,
       [TOOLS_KEY]: sessionAvatar ? getTools(sessionAvatar) : {},
       [IMAGE_PATHS_KEY]: cell.getCellData().getImagePaths(),
+      [BACKGROUND_KEY]: cell.getBackground(),
+      worldWidth: cell.getMinCellWidth(),
+      worldHeight: cell.getMinCellHeight(),
+      lamps: cell.getLamps(),
+      [SCORE_KEY]: score,
     };
   }
 

@@ -36,6 +36,16 @@ body {
   padding: 20px;
 }
 
+#score {
+  color: #ffe14d;
+  font: bold 28px Arial, sans-serif;
+  pointer-events: none;
+  position: fixed;
+  right: 16px;
+  text-shadow: 0 0 6px rgba(0, 0, 0, 0.9), 0 0 2px #000;
+  top: 10px;
+}
+
 .dash-icon {
   height: 96px;
   left: 90%;
@@ -44,13 +54,66 @@ body {
 }
 
 #mana1 {
-  top: 10px;
+  top: 60px;
 }
 
 #mana2 {
-  top: 70px;
+  top: 120px;
 }
 
 #mana3 {
-  top: 130px;
+  top: 180px;
+}
+
+.minimap {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 4px;
+  bottom: 12px;
+  height: 140px;
+  opacity: 0.6;
+  position: fixed;
+  right: 12px;
+  width: 220px;
+}
+
+.minimap:hover {
+  opacity: 0.9;
+}
+
+.minimap canvas {
+  display: block;
+  height: 100%;
+  width: 100%;
+}
+
+#minimap-toggle {
+  color: #fff;
+  cursor: pointer;
+  font: bold 14px Arial, sans-serif;
+  line-height: 18px;
+  position: absolute;
+  right: 2px;
+  text-align: center;
+  top: 2px;
+  user-select: none;
+  width: 18px;
+}
+
+.minimap-closed {
+  height: 28px;
+  width: 28px;
+}
+
+.minimap-closed canvas {
+  display: none;
+}
+
+.minimap-closed #minimap-toggle {
+  font-size: 18px;
+  height: 100%;
+  line-height: 28px;
+  right: 0;
+  top: 0;
+  width: 100%;
 }
