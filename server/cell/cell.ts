@@ -1,6 +1,8 @@
 import { CellData } from '../cellData';
 import { ClusteredInitException } from '../errors';
 import type { Engine } from '../engine';
+import { PlanetField } from '../planet';
+import type { PlanetState } from '../planet';
 import { randomInt } from '../random';
 import type { World } from '../world';
 import { Avatar } from '../sprite/avatar';
@@ -30,6 +32,16 @@ export interface Lamp {
   maxX: number;
 }
 
+/** A background TV screen (pixels, top-left origin) the client plays video on; never collides with anything. */
+export interface Tv {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** Where the two chains holding the TV up end, on the wall directly above it. */
+  chainTopY: number;
+}
+
 export abstract class Cell {
   private readonly width: number;
   private readonly height: number;
@@ -39,12 +51,16 @@ export abstract class Cell {
   private engine!: Engine;
   // Multiple deposit points (spawn/warp-arrival) are supported; addAvatarAtEntrance picks one at random.
   protected entrances: Entrance[] = [];
+  private readonly planets: PlanetField | undefined;
 
   constructor(world: World) {
     this.world = world;
     this.width = Math.floor(this.getMinCellWidth() / CellData.ANIMATION_STEP);
     this.height = Math.floor(this.getMinCellHeight() / CellData.ANIMATION_STEP);
-    this.data = new CellData(this.width, this.height, world);
+    this.data = new CellData(this.width, this.height, world, this.wrapsAtEdges());
+    if (this.usesPlanets()) {
+      this.planets = new PlanetField(this.getMinCellWidth(), this.getMinCellHeight(), Avatar.HEIGHT * CellData.ANIMATION_STEP);
+    }
   }
 
   init(): Cell {
@@ -163,6 +179,10 @@ export abstract class Cell {
     return this.data;
   }
 
+  protected wrapsAtEdges(): boolean {
+    return false;
+  }
+
   addAvatarAtEntrance(name: string): Avatar | undefined {
     if (this.entrances.length === 0) return undefined;
     const entrance = this.entrances[randomInt(this.entrances.length)];
@@ -175,7 +195,21 @@ export abstract class Cell {
     }
   }
 
-  process(): void {}
+  process(): void {
+    if (!this.planets) return;
+
+    const physics = this.world.getPhysics();
+    this.planets.step();
+    this.planets.advanceConsumed(physics);
+    for (const sprite of this.data.getSprites()) {
+      if (sprite.isAffectedByPlanets()) this.planets.applyPull(sprite, physics);
+    }
+  }
+
+  /** The room's current background planet (if it has any), for clients to draw and to gravitate sprites. */
+  getPlanet(): PlanetState | undefined {
+    return this.planets?.getState();
+  }
 
   getWorld(): World {
     return this.world;
@@ -203,8 +237,18 @@ export abstract class Cell {
     return 'temple';
   }
 
+  /** Whether one gas giant at a time flies through this room's background, pulling nearby sprites toward it. */
+  protected usesPlanets(): boolean {
+    return false;
+  }
+
   /** Purely cosmetic client-drawn lighting; lit avatars glow, unlit ones are left in the dark. */
   getLamps(): Lamp[] {
+    return [];
+  }
+
+  /** Purely cosmetic client-drawn background TVs; the client picks and plays the video. */
+  getTvs(): Tv[] {
     return [];
   }
 

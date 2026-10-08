@@ -45,4 +45,24 @@ describe('Physics', () => {
 
     expect(avatar.getY()).toBe(12);
   });
+
+  it('wraps moving sprites across the room edges when edge wrapping is enabled', () => {
+    const { cell, physics } = createTestCell(30, 30, undefined, true);
+    CellBlock.init(cell.getCellData());
+    Avatar.init(cell.getCellData());
+    const avatar = new Avatar('wrap-test', 0, 10, false, cell);
+
+    physics.move(avatar, Physics.LEFT, Physics.NONE, 1);
+    expect(avatar.getX()).toBe(30 - Avatar.WIDTH);
+
+    physics.move(avatar, Physics.RIGHT, Physics.NONE, 1);
+    expect(avatar.getX()).toBe(0);
+
+    physics.moveTo(avatar, 10, 0);
+    physics.move(avatar, Physics.NONE, Physics.UP, 1);
+    expect(avatar.getY()).toBe(30 - Avatar.HEIGHT);
+
+    physics.move(avatar, Physics.NONE, Physics.DOWN, 1);
+    expect(avatar.getY()).toBe(0);
+  });
 });

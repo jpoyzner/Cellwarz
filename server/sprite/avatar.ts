@@ -212,6 +212,14 @@ export class Avatar extends Sprite {
     return Physics.OBJECT_LAYER;
   }
 
+  override isAffectedByPlanets(): boolean {
+    return true;
+  }
+
+  override onConsumed(): void {
+    this.die();
+  }
+
   runLeft(): void {
     if (!this.structure) {
       this.xPower = Physics.LEFT;

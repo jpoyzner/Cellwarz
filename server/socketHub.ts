@@ -19,6 +19,9 @@ const DOWN_PARAM = 'down';
 const DIED_PARAM = 'died';
 const SCORED_PARAM = 'scored';
 const SCORE_KEY = 'score';
+const PLANET_KEY = 'planet';
+// Clients extrapolate the planet from its velocity, so a periodic resync only has to correct small drift.
+const PLANET_RESYNC_MS = 2000;
 // Sanity cap on one report; a client reports a few blocks at a time.
 const MAX_BLOCKS_PER_REPORT = 100;
 const TIMEOUT = 3000;
@@ -28,6 +31,8 @@ export class SocketHub {
   private timer: ReturnType<typeof setInterval> | undefined;
   private inactivityCount = 0;
   private diedNotified = false;
+  private sentPlanetId: number | undefined;
+  private sentPlanetAt = 0;
 
   constructor(
     private readonly world: World,
@@ -88,6 +93,7 @@ export class SocketHub {
       const avatar = cell.addAvatarAtEntrance(this.login);
       if (!avatar) return;
       session.plugin(avatar);
+      this.diedNotified = false;
     } else {
       cell = session.getAvatar()!.getCell();
     }
@@ -129,7 +135,10 @@ export class SocketHub {
 
     const session = this.world.getZion().getHardlines().get(this.login);
     const avatar = session?.getAvatar();
-    if (!session || !avatar) {
+    // A player a robot touched lives on as a robot; their connection keeps rendering the world through it.
+    const robotBody = avatar ? undefined : session?.getRobotBody();
+    const watched = avatar ?? robotBody;
+    if (!session || !watched) {
       // The dying player's own connection otherwise goes silent forever (no avatar left to render for them)
       // — send one final ping so their client can react (screen flash) instead of just freezing on the spot.
       if (session && !this.diedNotified) {
@@ -139,7 +148,13 @@ export class SocketHub {
       return;
     }
 
-    const cell = avatar.getCell();
+    const cell = watched.getCell();
+    if (robotBody && !this.diedNotified) {
+      this.diedNotified = true;
+      this.send({ [DIED_PARAM]: true });
+      this.send(this.getCellState(cell)); // full refresh, telling the client which sprite its camera now follows
+    }
+    this.sendPlanetIfDue(cell);
     const needsRefresh = this.world.getZion().stale(this.login);
 
     // Redraw-only frames are the sprite map itself (flat, unwrapped) — matches the original terse wire protocol.
@@ -156,6 +171,22 @@ export class SocketHub {
     this.inactivityCount++;
   }
 
+  // A separate one-shot message (not a key in the flat redraw frame) so the terse sprite-map wire format stays intact.
+  private sendPlanetIfDue(cell: Cell): void {
+    const planet = cell.getPlanet();
+    if (!planet) return;
+
+    if (planet.id !== this.sentPlanetId || Date.now() - this.sentPlanetAt >= PLANET_RESYNC_MS) {
+      this.send({ [PLANET_KEY]: planet });
+      this.markPlanetSent(planet.id);
+    }
+  }
+
+  private markPlanetSent(planetId: number): void {
+    this.sentPlanetId = planetId;
+    this.sentPlanetAt = Date.now();
+  }
+
   private getCellState(cell: Cell): Record<string, unknown> {
     const avatars: Record<string, number> = {};
     for (const avatarSession of this.world.getZion().getHardlines().values()) {
@@ -165,8 +196,13 @@ export class SocketHub {
       }
     }
 
-    const sessionAvatar = this.login ? this.world.getZion().getHardlines().get(this.login)?.getAvatar() : undefined;
+    const session = this.login ? this.world.getZion().getHardlines().get(this.login) : undefined;
+    const sessionAvatar = session?.getAvatar();
+    const robotBody = sessionAvatar ? undefined : session?.getRobotBody();
     const score = this.login ? (this.world.getZion().getHardlines().get(this.login)?.getScore() ?? 0) : 0;
+
+    const planet = cell.getPlanet();
+    if (planet) this.markPlanetSent(planet.id);
 
     return {
       [CONNECT_PARAM]: '0',
@@ -177,7 +213,10 @@ export class SocketHub {
       [BACKGROUND_KEY]: cell.getBackground(),
       worldWidth: cell.getMinCellWidth(),
       worldHeight: cell.getMinCellHeight(),
+      following: robotBody?.getCellIndex() ?? null,
       lamps: cell.getLamps(),
+      tvs: cell.getTvs(),
+      [PLANET_KEY]: planet ?? null,
       [SCORE_KEY]: score,
     };
   }

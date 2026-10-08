@@ -1,18 +1,30 @@
 import type { Analyzer } from './analyzer';
 import { AudioManager } from './audio';
 import { drawLamps } from './lamps';
+import { TvScreens } from './tvs';
+import type { Tv } from './tvs';
 import type { Lamp } from './lamps';
 import { classifyImagePaths, Minimap } from './minimap';
 import type { ImageKind } from './minimap';
 import { glowColorForPath, NeonSprites } from './neonSprites';
 import type { ActorTint, BakedSprite } from './neonSprites';
 import { ParticleSystem } from './particles';
+import { PlanetView } from './planet';
 import { PostFx } from './postFx';
 import { LocalPredictor } from './prediction';
 import { SpaceBackground } from './spaceBackground';
 import type { TouchRect } from './spaceBackground';
 import { StationBackdrop } from './stationBackdrop';
-import type { AvatarsMap, BackgroundKind, ConnectPayload, IncomingSprite, SpritesMap, StoredSprite, ToolsMap } from './types';
+import type {
+  AvatarsMap,
+  BackgroundKind,
+  ConnectPayload,
+  IncomingSprite,
+  PlanetState,
+  SpritesMap,
+  StoredSprite,
+  ToolsMap,
+} from './types';
 
 export interface RendererContext {
   ctx: CanvasRenderingContext2D;
@@ -58,7 +70,12 @@ export class Renderer {
   imagePaths: string[] = [];
   backgroundKind: BackgroundKind | undefined;
   lamps: Lamp[] = [];
+  tvs: Tv[] = [];
+  /** The shared video behind every background TV (public so e2e can check it plays). */
+  readonly tvScreens = new TvScreens();
   spaceBackground: SpaceBackground | undefined;
+  /** The level's current background gas giant, kept in step with the server (see setPlanet). */
+  planet: PlanetView | undefined;
   score = 0;
   /** Called with the number of blocks that just reached the score, so it can be reported to the server. */
   onBlocksCollected: ((blocks: number) => void) | undefined;
@@ -77,10 +94,14 @@ export class Renderer {
   private readonly minimap: Minimap | undefined;
   private minimapOpen = true;
 
+  /** Sprites a planet is swallowing, by id → how much of their size is left (1 → 0); the server owns the progress. */
+  private readonly shrinks = new Map<string, number>();
   private readonly smoothed = new Map<string, SmoothedPosition>();
   private readonly lastY = new Map<string, number>();
   private readonly verticalState = new Map<string, VerticalState>();
   private localSpriteId: string | undefined;
+  /** The robot the local player was turned into: not an avatar (so it draws as a red robot), but the camera tracks it. */
+  private followSpriteId: string | undefined;
   private hasConnectedOnce = false;
   private staleMode = false;
 
@@ -94,6 +115,9 @@ export class Renderer {
   private lastDtMs = 0;
   private rafHandle: number | undefined;
   private stopped = false;
+  private readonly onVisibilityChange = (): void => {
+    this.minimap?.setPaused(document.hidden, performance.now());
+  };
 
   private shakeUntil = 0;
   private shakeMagnitude = 0;
@@ -101,7 +125,11 @@ export class Renderer {
   private flashColor = '';
 
   constructor(private readonly context: RendererContext) {
-    if (context.minimapCanvas) this.minimap = new Minimap(context.minimapCanvas);
+    if (context.minimapCanvas) {
+      this.minimap = new Minimap(context.minimapCanvas);
+      this.minimap.setPaused(document.hidden, performance.now());
+      document.addEventListener('visibilitychange', this.onVisibilityChange);
+    }
     this.updateScoreDisplay();
     this.rafHandle = requestAnimationFrame(this.tick);
   }
@@ -139,7 +167,9 @@ export class Renderer {
     this.stopped = true;
     if (this.rafHandle !== undefined) cancelAnimationFrame(this.rafHandle);
     if (this.scoreScrambleTimer !== undefined) window.clearInterval(this.scoreScrambleTimer);
+    if (this.minimap) document.removeEventListener('visibilitychange', this.onVisibilityChange);
     this.audio.dispose();
+    this.tvScreens.dispose();
   }
 
   setMinimapOpen(open: boolean): void {
@@ -191,6 +221,7 @@ export class Renderer {
     const before = loginSpriteIdBefore ? this.sprites[loginSpriteIdBefore] : undefined;
 
     this.sprites = data.sprites;
+    this.shrinks.clear();
     // The server sends numeric sprite ids here but string ids (object keys) in redraw frames; normalize so the
     // strict === comparisons against sprite-map keys (local avatar, shard collection, minimap) always agree.
     this.avatars = Object.fromEntries(Object.entries(data.avatars).map(([name, id]) => [name, String(id)]));
@@ -198,6 +229,8 @@ export class Renderer {
     this.imagePaths = data.imagePaths;
     this.setBackground(data.background, data.worldWidth, data.worldHeight);
     this.lamps = data.lamps ?? [];
+    this.tvs = data.tvs ?? [];
+    this.setPlanet(data.planet);
     this.score = data.score ?? 0;
     this.updateScoreDisplay();
     this.minimap?.setImagePaths(data.imagePaths);
@@ -211,6 +244,7 @@ export class Renderer {
       this.smoothed.delete(loginSpriteIdAfter);
     }
     this.localSpriteId = loginSpriteIdAfter;
+    this.followSpriteId = data.following == null ? undefined : String(data.following);
 
     if (after) {
       const dx = after[1] - (before?.[1] ?? after[1]);
@@ -226,14 +260,25 @@ export class Renderer {
     }
 
     this.hasConnectedOnce = true;
-    this.staleMode = false;
+    this.leaveStaleMode();
+  }
+
+  /** Planet updates arrive as their own messages; applied synchronously so state never waits on the draw loop. */
+  setPlanet(state: PlanetState | null | undefined): void {
+    if (!state) {
+      this.planet = undefined;
+    } else if (this.planet) {
+      this.planet.sync(state);
+    } else {
+      this.planet = new PlanetView(state);
+    }
   }
 
   render(data: Record<string, unknown>): void {
     const spriteIds = Object.keys(data);
     if (spriteIds.length === 0) return;
 
-    this.staleMode = false;
+    this.leaveStaleMode();
     this.load(data, spriteIds);
 
     if (this.context.analyzer) {
@@ -242,8 +287,21 @@ export class Renderer {
     }
   }
 
+  /** The server froze the level for inactivity: gray out the screen and silence the music until it wakes up. */
   drawStaleScreen(): void {
     this.staleMode = true;
+    this.audio.setAmbientPaused(true);
+  }
+
+  /** Whether the ambient music is playing (public so e2e can check it stops while the level is frozen). */
+  get isMusicPlaying(): boolean {
+    return this.audio.isAmbientPlaying;
+  }
+
+  private leaveStaleMode(): void {
+    if (!this.staleMode) return;
+    this.staleMode = false;
+    this.audio.setAmbientPaused(false);
   }
 
   private load(data: Record<string, unknown>, spriteIds: string[]): void {
@@ -264,6 +322,7 @@ export class Renderer {
         const removed = this.sprites[spriteId];
         if (removed && this.minimap?.kindOf(removed[0]) === 'wall') this.minimap.invalidateWalls();
         delete this.sprites[spriteId];
+        this.shrinks.delete(spriteId);
         this.smoothed.delete(spriteId);
         this.lastY.delete(spriteId);
         this.verticalState.delete(spriteId);
@@ -280,6 +339,9 @@ export class Renderer {
       }
 
       if (extraInfo) {
+        const shrink = extraInfo['2'] as number | undefined;
+        if (shrink !== undefined) this.shrinks.set(spriteId, shrink);
+
         const avatarName = extraInfo['0'] as string | undefined;
         if (avatarName) {
           this.avatars[avatarName] = spriteId;
@@ -374,7 +436,8 @@ export class Renderer {
       let targetX = sprite[1];
       const targetY = sprite[2];
 
-      if (spriteId === this.localSpriteId) {
+      // Once a planet is swallowing the local avatar the server alone steers it; don't predict its keypresses.
+      if (spriteId === this.localSpriteId && !this.shrinks.has(spriteId)) {
         targetX = this.predictor.getBlendedX(targetX, dtMs);
       }
 
@@ -454,6 +517,8 @@ export class Renderer {
 
     if (!this.staleMode) {
       drawLamps(ctx, this.lamps, drawOffsetX, drawOffsetY, canvas.width, canvas.height, now);
+      // After the lamps: screens emit their own light, so a beam's additive glow mustn't tint them (the ad card is black).
+      this.tvScreens.draw(ctx, this.tvs, drawOffsetX, drawOffsetY, canvas.width, canvas.height, now);
     }
 
     this.drawSprites(drawOffsetX, drawOffsetY);
@@ -475,6 +540,8 @@ export class Renderer {
   private drawSpaceBackground(now: number, drawOffsetX: number, drawOffsetY: number): void {
     const space = this.spaceBackground;
     if (!space) return;
+
+    space.planet = this.planet;
 
     const touchers: TouchRect[] = [];
     for (const spriteId of Object.values(this.avatars)) {
@@ -511,6 +578,7 @@ export class Renderer {
       sprites: this.sprites,
       avatarSpriteIds: new Set(Object.values(this.avatars)),
       localSpriteId: this.localSpriteId,
+      planet: this.planet,
       positionOf: (spriteId) => {
         const rendered = this.smoothed.get(spriteId);
         const sprite = this.sprites[spriteId];
@@ -524,11 +592,11 @@ export class Renderer {
     this.offsetX = 0;
     this.offsetY = 0;
 
-    const localSpriteId = this.avatars[this.context.loginName];
-    this.me = localSpriteId ? this.sprites[localSpriteId] : undefined;
+    const cameraSpriteId = this.avatars[this.context.loginName] ?? this.followSpriteId;
+    this.me = cameraSpriteId ? this.sprites[cameraSpriteId] : undefined;
     if (!this.me) return;
 
-    const rendered = (localSpriteId && this.smoothed.get(localSpriteId)) || undefined;
+    const rendered = (cameraSpriteId && this.smoothed.get(cameraSpriteId)) || undefined;
     const meX = rendered?.x ?? this.me[1];
     const meY = rendered?.y ?? this.me[2];
 
@@ -550,6 +618,17 @@ export class Renderer {
       const x = (rendered?.x ?? sprite[1]) - offsetX;
       const y = (rendered?.y ?? sprite[2]) - offsetY;
 
+      const shrink = this.shrinks.get(spriteId);
+      if (shrink !== undefined) {
+        if (shrink <= 0.02) continue;
+        const centerX = x + image.width / 2;
+        const centerY = y + image.height / 2;
+        ctx.save();
+        ctx.translate(centerX, centerY);
+        ctx.scale(shrink, shrink);
+        ctx.translate(-centerX, -centerY);
+      }
+
       const kind = this.imageKinds[index];
       let baked: BakedSprite | undefined;
       if (kind === 'wall') {
@@ -562,16 +641,17 @@ export class Renderer {
 
       if (baked) {
         ctx.drawImage(baked.source, x - baked.pad, y - baked.pad);
-        continue;
+      } else {
+        const glow = this.glowColors[index];
+        if (glow) {
+          ctx.shadowColor = glow;
+          ctx.shadowBlur = SPRITE_GLOW_BLUR_PX;
+        }
+        ctx.drawImage(image, x, y);
+        if (glow) ctx.shadowBlur = 0;
       }
 
-      const glow = this.glowColors[index];
-      if (glow) {
-        ctx.shadowColor = glow;
-        ctx.shadowBlur = SPRITE_GLOW_BLUR_PX;
-      }
-      ctx.drawImage(image, x, y);
-      if (glow) ctx.shadowBlur = 0;
+      if (shrink !== undefined) ctx.restore();
     }
   }
 
@@ -586,6 +666,7 @@ export class Renderer {
 
     for (const name of Object.keys(this.avatars)) {
       const sprite = this.sprites[this.avatars[name]];
+      if (sprite && this.shrinks.has(this.avatars[name])) continue;
       if (sprite) {
         const rendered = this.smoothed.get(this.avatars[name]);
         const x = rendered?.x ?? sprite[1];

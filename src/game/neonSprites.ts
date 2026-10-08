@@ -47,9 +47,9 @@ export function steelify(pixels: PixelBuffer): void {
       if (data[i + 3] === 0) continue;
 
       const lum = (data[i] + data[i + 1] + data[i + 2]) / 3 / 255;
-      let r = 14 + lum * 40;
-      let g = 18 + lum * 46;
-      let b = 38 + lum * 70;
+      let r = 24 + lum * 55;
+      let g = 30 + lum * 65;
+      let b = 58 + lum * 95;
 
       const rim = x === 0 || y === 0 || x === width - 1 || y === height - 1;
       const rivet = (x === 3 || x === width - 4) && (y === 3 || y === height - 4);

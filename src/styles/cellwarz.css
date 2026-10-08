@@ -33,15 +33,6 @@ body {
   width: 90%;
 }
 
-#login::before {
-  color: #ff2ea6;
-  content: '> CELLWARZ // ORBITAL UPLINK ... establishing secure link';
-  display: block;
-  letter-spacing: 0.1em;
-  padding: 14px 20px 0;
-  text-shadow: 0 0 8px rgba(255, 46, 166, 0.7);
-}
-
 #login input[type='text'] {
   background: #000;
   border: 1px solid #00f6ff;
@@ -138,7 +129,7 @@ body {
 
 .minimap::before {
   color: #00f6ff;
-  content: 'RADAR';
+  content: 'MAIN ROOM';
   font: 9px ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   left: 6px;
   letter-spacing: 0.25em;

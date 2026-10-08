@@ -10,6 +10,9 @@ test('minimap shows the level and can be collapsed to an icon and reopened', asy
   const toggle = page.locator('#minimap-toggle');
 
   await expect(minimapCanvas).toBeVisible();
+  await expect
+    .poll(() => minimap.evaluate((el) => getComputedStyle(el, '::before').content))
+    .toBe('"MAIN ROOM"');
 
   await expect
     .poll(() =>

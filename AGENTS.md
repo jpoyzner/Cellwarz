@@ -30,7 +30,12 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   hole bridged by four straight-up/down stepping-stone columns, scattered decorative blocks, two animated
   `Portal` "stargates" (walking into either warps the avatar to a random other room's spawn portal) in the top
   corners, and one small floating `SpawnPortal` (avatars are deposited/warped-in here) at the bottom center;
-  only its mana/`Robot` pickup positions are still randomized per instance. It's the only room type wired into
+  only its mana/`Robot` pickup positions are still randomized per instance. MainRoom also **wraps at its edges**
+  (`Cell.wrapsAtEdges()` → `CellData` wraps a moved sprite's x/y modulo the grid): the outer walls are kept but have
+  openings — two 4-block floor/ceiling ones inset 30 blocks from the end walls, and two per end wall (second- and
+  third-platform levels, on a ~12-unit sill so they take a jump to reach) — so leaving through one comes out the
+  matching opening on the opposite side. Opening positions are the `*_WRAP_OPENINGS` constants (exported to e2e as
+  `WRAP_OPENING_PIXELS`). It's the only room type wired into
   `Zion` today. [SimpleSmallCell](server/cell/simpleSmallCell.ts) (small, fully-random walls) is kept
   around as a fast fixture for unit tests and as the likely starting point for the future randomly-generated
   "side-quest" room mode (see [TODOS.md](TODOS.md)) — it isn't used in production room selection anymore.
@@ -72,7 +77,9 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   drawn position toward its latest known server position (`SMOOTHING_TAU_MS`) instead of snapping to each new
   snapshot; `prediction.ts`'s `LocalPredictor` additionally predicts the *local* avatar's left/right movement
   the instant a key is pressed (softly reconciling against the server a few frames later, snapping instead on a
-  large mismatch) since the client has no collision geometry to predict jumps/pushes against. `audio.ts`
+  large mismatch) since the client has no collision geometry to predict jumps/pushes against (it stops predicting
+  once the server's x has stalled for ~80ms while a direction is held, so running into a wall doesn't overshoot and
+  slide back). `audio.ts`
   synthesizes short WebAudio blips (no audio asset files were added) and `particles.ts` draws small dust/impact/
   warp bursts, both triggered by diffing incoming sprite positions/deletions (e.g. an avatar sprite disappearing
   ⇒ impact burst; a rendered avatar's y going from falling to flat ⇒ landing dust). **Important**: any state that
@@ -81,6 +88,10 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   for backgrounded/unfocused tabs (this bit a Playwright test with two browser contexts during development;
   see the git history on `src/game/renderer.ts` for the fix), so anything logically load-bearing can't depend
   on it actually running.
+- **Leaving the game (Escape)**: `ui.ts` handles Escape itself — it sends key-up for the movement keys (so the avatar
+  left behind doesn't keep running) and calls `onExit`, which `App` wires to clearing the session so the login
+  screen shows again; `GameCanvas`'s cleanup closes the socket and stops the renderer. The avatar stays in the room
+  (same as closing the tab, see the `Session.unplug()` TODO) and "Reattach!" with the same name picks it back up.
 - **Minimap** (`src/game/minimap.ts`, drawn by `Renderer` onto its own `#minimap-canvas`; open/closed toggle is
   React state in `GameCanvas`): the wire format has no sprite type, so walls vs. avatars/robots are classified
   from the image path (`/blocks/` vs `/me/`), and a robot is an actor sprite whose id isn't in `avatars` (robots
@@ -89,7 +100,7 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   payload and applied in `Renderer.setBackground()`): `MainRoom` uses `'station'` — [spaceBackground.ts](src/game/spaceBackground.ts),
   a starfield plus drifting neon tetrominoes ported from the daat/DJ Recognize site, drawn on the game canvas before
   sprites, with a [stationBackdrop.ts](src/game/stationBackdrop.ts) parallax layer slotted in between the stars and the
-  pieces (city-lit planet limb and ship traffic; `'space'` is the same without that layer); pieces live in world coordinates (the server sends
+  pieces (ship traffic; `'space'` is the same without that layer); pieces live in world coordinates (the server sends
   `worldWidth`/`worldHeight`) and shatter into flying
   cells when any avatar's rect overlaps them (the site's mouse-hover became avatar-touch); stars are a
   screen layer that slowly drifts in one shared random direction. `MainRoom` also has five tall ceiling lamps (`Cell.getLamps()`, sent as `lamps`;
@@ -98,6 +109,21 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   the black ninja actors (avatars, robots) read against them and vanish into the dark outside them (players can
   hide). Name tags are neon cyan and centered over the sprite. Purely cosmetic. `'temple'` (the DOM `#canvas-bg`
   image) is the `Cell` default, kept for the future randomly generated rooms.
+- **Background TVs** (`Cell.getTvs()` → `tvs` in the full-state payload; [tvs.ts](src/game/tvs.ts), drawn by
+  `Renderer` after the lamps and before the sprites — screens emit their own light, so a lamp beam's additive glow
+  mustn't tint them): `MainRoom` has 4 world-space 9:16 screens, each hanging by two chains (`chainTopY`) from the platform row
+  directly above it: two on floor 1 (one avatar height below band center) and two on floor 3 (floors count up from
+  the spawn floor; floors 2 and 4 have none, nor does the spawn portal area).
+  One shared muted `<video>` (kept in the DOM, invisible, since some browsers stop decoding detached videos) is
+  drawn into every visible TV with `drawImage`; it is paused whenever no TV is on screen. It does **not** loop: when it
+  ends every TV shows a plain white "YOUR AD HERE" on black for `AD_DURATION_MS` (5s), then the video restarts from the beginning. Only the first play (on load) seeks to `randomStartTime()` — a random point at least 10s before the end. The TVs
+  show "NO SIGNAL" if no source can be decoded. Each client plays
+  independently (no synced playback). Videos are served from `public/videos/` via a `/videos` Express route (and an
+  rsbuild dev-proxy entry) — a WebM copy exists because Playwright's Chromium has no H.264. The full-size master lives in
+  git-ignored `media-src/`; regenerate the web copies with
+  `ffmpeg -i media-src/IMU_FULL.mov -an -vf scale=360:640,fps=24 -c:v libx264 -profile:v main -pix_fmt yuv420p -crf 30 -preset slow -movflags +faststart public/videos/imu_full.mp4`
+  and `... -c:v libvpx-vp9 -crf 38 -b:v 0 -row-mt 1 -cpu-used 4 public/videos/imu_full.webm`. The ad/contact slots between
+  videos (see TODOS.md) are intentionally not built yet.
 - **Cyberpunk look (all client-side, cosmetic)**: [neonSprites.ts](src/game/neonSprites.ts) re-skins art at load time
   with no new assets — wall tiles become dark steel with a neon rim, the red headband on every `/me/` frame is recolored
   and given a glow halo (cyan = local avatar, magenta = other players, red = robots; both avatars and robots use the
@@ -107,7 +133,30 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   HUD (`CREDITS` score with a digit-scramble on change, `RADAR` minimap with a sweep bar) and a terminal-styled login
   screen are in [cellwarz.css](src/styles/cellwarz.css); [audio.ts](src/game/audio.ts) uses bitcrushed/filter-swept
   synth sounds plus a quiet synthwave ambient bed that starts on the first sound and is torn down by
-  `AudioManager.dispose()` from `Renderer.stop()`.
+  `AudioManager.dispose()` from `Renderer.stop()`. When the server freezes the level for inactivity (`connect: 'inactive'`
+  → `Renderer.drawStaleScreen()`), `AudioManager.setAmbientPaused(true)` silences the bed (sound effects can't restart
+  it); the next frame/full state leaves stale mode and un-pauses it.
+- **Gas giant planet** (`Cell.usesPlanets()`, MainRoom only; server [planet.ts](server/planet.ts), client
+  [planet.ts](src/game/planet.ts)): `PlanetField` keeps one planet at a time crossing the room (random size/speed/
+  height/direction/`seed`), stepped from `Cell.process()`, replaced by a new one once fully off the far side. It
+  is not a `Sprite` (no grid presence/collision); its pull is applied each step to sprites whose
+  `isAffectedByPlanets()` is true (Avatar incl. Robot, Mana subclasses) via ordinary `Physics.move`s with a
+  per-sprite fractional accumulator, so walls/mass still block it. Range = 6 avatar heights from the surface,
+  quadratic falloff, peak `MAX_PULL_PER_FRAME` = 0.55 grid units/frame at the surface (below gravity's 1, so outside
+  the planet it never lifts anything); *inside* its disc the pull is a flat `INSIDE_PULL_PER_FRAME` = 1.2 (client
+  pieces: `PLANET_PIECE_ACCEL_INSIDE`). An upward pull weaker than gravity is ignored to avoid floor jitter, so only the
+  inside pull can lift a sprite. A sprite whose centre gets within `CORE_RADIUS_FRACTION` (0.15) of the planet's radius from
+  its centre is *swallowed*: `PlanetField` tracks it in `consuming`, `advanceConsumed()` slides it to the (moving)
+  centre with `Physics.moveTo` over `CONSUME_FRAMES` (1s) while `Sprite.setConsumeScale()` goes 1 → 0 (and
+  `Sprite.process()` skips `doAction()` so its own gravity/AI/input stop), then `Sprite.onConsumed()` runs
+  (default `removePermanently()`; `Avatar` overrides it to `die()`). The scale rides the terse redraw entry's extra
+  info as key `'2'` (`jsonGenerator.ts`); `Renderer.shrinks` stores it and `drawSprites` scales around the sprite
+  centre (name tag hidden, local prediction off meanwhile). Wire: `planet` in the full-state payload plus separate `{ planet }` messages (on a new
+  planet id and every 2s) from `SocketHub` — deliberately *not* a key in the flat redraw frames. The client
+  extrapolates from `vx`/`vy` (advanced in `SpaceBackground.update`) and snaps on each resync; the look (palette,
+  bands, ring) is derived from `seed`. Background tetrominoes are pulled/swallowed client-side
+  (`SpaceBackground.pullPiece`/`consumePiece`: reaching the core shrinks it away over `PLANET_CONSUME_MS`, no shards); the minimap draws it in amber. `CELLWARZ_PLANET_PULL=off` disables only the server
+  pull (Playwright sets it for its own server).
 - **Score** (top-right `#score` DOM element): when the *local* avatar shatters a background piece, its shards
   (`collect` shards in [spaceBackground.ts](src/game/spaceBackground.ts)) burst out, then home in on the HUD
   (converted to world coordinates by the camera offset) and are counted on arrival; `Renderer` adds 20/block and
@@ -158,8 +207,18 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   further if it shows up). Remaining e2e gaps: death-by-engine-fire specifically (only death-by-missile is
   automated so far), general mana/booster/ice positions elsewhere in the room are still randomized, and robots
   have unit coverage ([server/__tests__/robot.test.ts](server/__tests__/robot.test.ts)) but no e2e coverage yet.
-  `Robot.turnAround()` reverses direction (and keeps patrolling indefinitely) the instant its current direction
-  is blocked by a solid obstacle — re-enabled via `MainRoom.getNumRobots()` now that this is covered.
+  A `Robot` that is blocked by a solid obstacle stands still (facing it) for `TURN_AROUND_PAUSE_FRAMES` (one second),
+  then `Robot.turnAround()` reverses direction, and it keeps patrolling indefinitely — re-enabled via
+  `MainRoom.getNumRobots()` now that this is covered. **Robots are lethal**: every frame `Robot.killTouchedPlayers()`
+  kills any non-robot `Avatar` overlapping or directly adjacent to it (sides, top and bottom; knocked away from the
+  robot), so a wandering robot can now kill an e2e spec's avatar — another reason for the keepout zone above.
+  The victim is **assimilated**: `Robot.assimilate()` dies the avatar (knocked away) then spawns a new `Robot` at the
+  same spot and records it on the player's `Session` (`setRobotBody`/`getRobotBody`, cleared by `plugin()` and
+  treated as gone once destroyed). `SocketHub.renderClient()` then keeps streaming to that player through the robot
+  body — death ping, then one full refresh carrying `following` (the robot's cell index, null otherwise), then ordinary
+  redraw frames — and the client's `Renderer` follows that sprite with the camera (`followSpriteId`) while drawing it
+  as a normal red robot (it isn't in `avatars`, so `neonSprites` tints it as a robot). A `Missile` never wraps at a
+  room's side edges (`Missile.doAction` ends it at the grid boundary even in wrapping rooms like `MainRoom`).
 - A few spots intentionally diverge from the original Java's crash-on-null behavior: e.g.
   `Cell.addAvatarAtEntrance` and `Portal.warpRandomly` fail gracefully (no-op) instead of throwing an NPE when a
   room has no free entrance spot. This is called out with comments at each site.

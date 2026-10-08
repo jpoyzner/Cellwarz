@@ -13,10 +13,9 @@ const ACTOR_HEIGHT_PX = 64;
 const WALL_COLOR = '#00c8e6';
 const PLAYER_COLOR = '#ff2ea6';
 const ROBOT_COLOR = '#ff3b55';
+export const PLANET_COLOR = '#ffae1a';
 const SELF_COLOR = '#ffffff';
 const SELF_OUTLINE_COLOR = '#b6ff3c';
-const SWEEP_PERIOD_MS = 3500;
-const SWEEP_WIDTH_PX = 36;
 
 /** Walls and avatars/robots are only distinguishable by their image path (the wire format has no sprite type). */
 export function classifyImagePaths(paths: string[]): ImageKind[] {
@@ -31,6 +30,8 @@ export interface MinimapFrame {
   sprites: SpritesMap;
   avatarSpriteIds: Set<string>;
   localSpriteId: string | undefined;
+  /** The level's gas giant, in world pixels (it may be partly or wholly off the map while flying in/out). */
+  planet?: { x: number; y: number; radius: number };
   positionOf: (spriteId: string) => { x: number; y: number };
   now: number;
 }
@@ -51,6 +52,8 @@ export class Minimap {
   private scale = 1;
   private offsetX = 0;
   private offsetY = 0;
+  private pausedAt: number | undefined;
+  private pausedDuration = 0;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     canvas.width = MINIMAP_WIDTH;
@@ -70,6 +73,17 @@ export class Minimap {
     this.wallsDirty = true;
   }
 
+  setPaused(paused: boolean, now: number): void {
+    if (paused === (this.pausedAt !== undefined)) return;
+
+    if (paused) {
+      this.pausedAt = now;
+    } else {
+      this.pausedDuration += now - this.pausedAt!;
+      this.pausedAt = undefined;
+    }
+  }
+
   draw(frame: MinimapFrame): void {
     const ctx = this.canvas.getContext('2d');
     if (!ctx) return;
@@ -80,7 +94,9 @@ export class Minimap {
     if (!this.bounds) return;
 
     if (this.wallLayer) ctx.drawImage(this.wallLayer, 0, 0);
+    if (frame.planet) this.drawPlanet(ctx, frame.planet);
 
+    const animationTime = (this.pausedAt ?? frame.now) - this.pausedDuration;
     const robots: { x: number; y: number }[] = [];
     const players: { x: number; y: number }[] = [];
     let self: { x: number; y: number } | undefined;
@@ -100,7 +116,7 @@ export class Minimap {
     this.drawDots(ctx, players, PLAYER_COLOR, 2.5);
 
     if (self) {
-      const pulse = 4 + Math.sin(frame.now / 200);
+      const pulse = 4 + Math.sin(animationTime / 200);
       ctx.beginPath();
       ctx.arc(self.x, self.y, pulse, 0, Math.PI * 2);
       ctx.fillStyle = SELF_COLOR;
@@ -109,18 +125,31 @@ export class Minimap {
       ctx.strokeStyle = SELF_OUTLINE_COLOR;
       ctx.stroke();
     }
-
-    this.drawSweep(ctx, frame.now);
   }
 
-  /** A faint radar scan bar sweeping left to right across the room. */
-  private drawSweep(ctx: CanvasRenderingContext2D, now: number): void {
-    const x = ((now % SWEEP_PERIOD_MS) / SWEEP_PERIOD_MS) * (MINIMAP_WIDTH + SWEEP_WIDTH_PX) - SWEEP_WIDTH_PX;
-    const bar = ctx.createLinearGradient(x, 0, x + SWEEP_WIDTH_PX, 0);
-    bar.addColorStop(0, 'rgba(0, 246, 255, 0)');
-    bar.addColorStop(1, 'rgba(0, 246, 255, 0.28)');
-    ctx.fillStyle = bar;
-    ctx.fillRect(x, 0, SWEEP_WIDTH_PX, MINIMAP_HEIGHT);
+  private drawPlanet(ctx: CanvasRenderingContext2D, planet: { x: number; y: number; radius: number }): void {
+    const b = this.bounds!;
+    const centerX = (planet.x - b.minX) * this.scale + this.offsetX;
+    const centerY = (planet.y - b.minY) * this.scale + this.offsetY;
+    const radius = Math.max(2, planet.radius * this.scale);
+
+    // Flies in from beyond the walls, so the part outside the map is clipped away rather than clamped onto its edge.
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(this.offsetX, this.offsetY, b.width * this.scale, b.height * this.scale);
+    ctx.clip();
+
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    ctx.fillStyle = withAlpha(PLANET_COLOR, 0.55);
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.ellipse(centerX, centerY, radius * 1.8, radius * 0.45, 0, 0, Math.PI * 2);
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = PLANET_COLOR;
+    ctx.stroke();
+    ctx.restore();
   }
 
   private project(worldX: number, worldY: number): { x: number; y: number } {
@@ -187,3 +216,10 @@ export class Minimap {
 }
 
 type StoredPoint = [number, number];
+
+function withAlpha(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}

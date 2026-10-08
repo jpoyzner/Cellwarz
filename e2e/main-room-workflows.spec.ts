@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { SPAWN_ENTRANCE_PIXELS, TEST_FIXTURE_PIXELS } from '../server/cell/mainRoom';
+import { SPAWN_ENTRANCE_PIXELS, TEST_FIXTURE_PIXELS, WRAP_OPENING_PIXELS } from '../server/cell/mainRoom';
 import { findSpriteNear, getAvatarPosition, login, waitForAvatar, waitUntilGrounded, walkTo } from './gameHelpers';
 
 // The fixed Thruster/Launcher sit on the floor at known pixel positions (see server/cell/mainRoom.ts)
@@ -17,6 +17,77 @@ const VICTIM_STAND_X = LAUNCHER_X + 64;
 test.describe.configure({ mode: 'serial' });
 
 test.describe('MainRoom deterministic workflows', () => {
+  test('the outer walls have wrap openings on both sides of the floor/ceiling and at two heights on each end', async ({ page }) => {
+    const loginName = `openings-${Date.now()}`;
+    await login(page, loginName);
+    await waitForAvatar(page, loginName);
+
+    const probes = await page.evaluate((openings) => {
+      const renderer = window.__cellwarz!.renderer;
+      const wallImageIndex = renderer.imagePaths.findIndex((path) => path.includes('/blocks/'));
+      const walls = new Set(
+        Object.values(renderer.sprites)
+          .filter(([imageIndex]) => imageIndex === wallImageIndex)
+          .map(([, x, y]) => `${x},${y}`),
+      );
+      const isWall = (x: number, y: number) => walls.has(`${x},${y}`);
+      const rightX = 4000 - 16;
+      const { verticalLeftX, verticalRightX } = openings;
+
+      return {
+        hasWalls: wallImageIndex >= 0,
+        // Open: through the floor+bottom wall and top wall at both x spans; solid just beside them.
+        verticalOpen: [verticalLeftX, verticalRightX].every(
+          (x) => !isWall(x, 0) && !isWall(x, 1920) && !isWall(x, 1936) && !isWall(x, 1984),
+        ),
+        verticalSolidBeside: [verticalLeftX - 16, verticalLeftX + openings.verticalWidth].every(
+          (x) => isWall(x, 0) && isWall(x, 1920),
+        ),
+        sideOpen: openings.sideOpenings.map(({ top, bottom }) => ({
+          open: [0, rightX].every((x) => !isWall(x, top) && !isWall(x, bottom - 16)),
+          sillBelow: [0, rightX].every((x) => isWall(x, bottom)),
+          lintelAbove: [0, rightX].every((x) => isWall(x, top - 16)),
+        })),
+      };
+    }, WRAP_OPENING_PIXELS);
+
+    expect(probes.hasWalls).toBe(true);
+    expect(probes.verticalOpen).toBe(true);
+    expect(probes.verticalSolidBeside).toBe(true);
+    expect(probes.sideOpen).toHaveLength(2);
+    for (const side of probes.sideOpen) {
+      expect(side).toEqual({ open: true, sillBelow: true, lintelAbove: true });
+    }
+  });
+
+  test('falling through a floor opening wraps back onto the top edge', async ({ page }) => {
+    test.setTimeout(40000);
+    const loginName = `wrap-${Date.now()}`;
+
+    await login(page, loginName);
+    await waitForAvatar(page, loginName);
+    await page.locator('#canvas').click();
+    await waitUntilGrounded(page, loginName);
+
+    await walkTo(page, loginName, 'ArrowLeft', WRAP_OPENING_PIXELS.verticalLeftX + 24, { tolerance: 0, timeoutMs: 30000 });
+    await page.waitForFunction(
+      (name) => {
+        const state = window.__cellwarz;
+        const spriteId = state?.renderer.avatars[name];
+        const sprite = spriteId ? state?.renderer.sprites[spriteId] : undefined;
+        return sprite !== undefined && sprite[2] < 400;
+      },
+      loginName,
+      { timeout: 5000 },
+    );
+
+    const wrapped = await getAvatarPosition(page, loginName);
+    expect(wrapped).not.toBeNull();
+    expect(wrapped!.x).toBeGreaterThanOrEqual(WRAP_OPENING_PIXELS.verticalLeftX);
+    expect(wrapped!.x).toBeLessThan(WRAP_OPENING_PIXELS.verticalLeftX + WRAP_OPENING_PIXELS.verticalWidth);
+    expect(wrapped!.y).toBeLessThan(400);
+  });
+
   // The two stargates sit in the top corners, only reachable by climbing MainRoom's center stepping-stone
   // shaft — deliberately organic, skill-based platforming (jump while drifting between offset columns),
   // not scriptable deterministically. The warp mechanic itself is covered at the engine level

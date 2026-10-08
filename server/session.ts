@@ -1,4 +1,5 @@
 import type { Avatar } from './sprite/avatar';
+import type { Robot } from './sprite/robot';
 import { UI } from './ui';
 
 export const POINTS_PER_BLOCK = 20;
@@ -7,6 +8,8 @@ export class Session {
   private avatar: Avatar | undefined;
   private readonly ui: UI;
   private score = 0;
+  /** The robot this player's body was turned into by a robot's touch; their client keeps watching it. */
+  private robotBody: Robot | undefined;
 
   constructor(avatar: Avatar) {
     this.avatar = avatar;
@@ -30,7 +33,17 @@ export class Session {
     return this.avatar;
   }
 
+  /** The live robot this player became (undefined once it is destroyed, or after they take a new avatar). */
+  getRobotBody(): Robot | undefined {
+    return this.robotBody?.removed() ? undefined : this.robotBody;
+  }
+
+  setRobotBody(robot: Robot): void {
+    this.robotBody = robot;
+  }
+
   plugin(avatar: Avatar): void {
+    this.robotBody = undefined;
     if (this.avatar) {
       this.avatar.setManaDown();
       this.avatar.removePermanently();

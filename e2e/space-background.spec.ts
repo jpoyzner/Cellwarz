@@ -62,3 +62,73 @@ test('blocks broken by the local avatar fly to the top-right score and add 20 po
   const score = await page.evaluate(() => window.__cellwarz!.renderer.score);
   await expect(page.locator('#score')).toHaveText(String(score));
 });
+
+test('one gas giant at a time flies through the background and shows on the minimap in its own colour', async ({ page }) => {
+  await login(page, 'stargazer');
+  await waitForAvatar(page, 'stargazer');
+
+  await expect.poll(() => page.evaluate(() => window.__cellwarz?.renderer.planet?.radius)).toBeGreaterThanOrEqual(140);
+
+  // It really flies: its velocity is non-zero and its position advances.
+  const before = await page.evaluate(() => ({ x: window.__cellwarz!.renderer.planet!.x, vx: window.__cellwarz!.renderer.planet!.vx }));
+  expect(Math.abs(before.vx)).toBeGreaterThanOrEqual(40);
+  await expect
+    .poll(() => page.evaluate(() => window.__cellwarz!.renderer.planet!.x), { timeout: 3000 })
+    .not.toBe(before.x);
+
+  // Park it mid-map (it may still be off-screen on its way in) and look for the minimap's planet colour.
+  const planetPixels = await page.evaluate(async () => {
+    const renderer = window.__cellwarz!.renderer;
+    renderer.planet!.x = 2000;
+    renderer.planet!.y = 1000;
+    renderer.planet!.vx = 0;
+    renderer.planet!.vy = 0;
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+    const canvas = document.getElementById('minimap-canvas') as HTMLCanvasElement;
+    const { data } = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height);
+    let amber = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i] > 240 && data[i + 1] > 160 && data[i + 1] < 190 && data[i + 2] < 50 && data[i + 3] > 0) amber++;
+    }
+    return amber;
+  });
+  expect(planetPixels).toBeGreaterThan(20);
+});
+
+test('background tetrominoes within ~6 avatar heights of the planet fall toward it, and shrink away into its centre instead of breaking', async ({ page }) => {
+  await login(page, 'tidalpull');
+  await waitForAvatar(page, 'tidalpull');
+  await expect.poll(() => page.evaluate(() => window.__cellwarz?.renderer.planet?.radius)).toBeGreaterThan(0);
+
+  // Measured relative to wherever the planet is right now, so a server resync mid-test can't move the goalposts.
+  const pull = await page.evaluate(async () => {
+    const renderer = window.__cellwarz!.renderer;
+    const planet = renderer.planet!;
+    const inRange = renderer.spaceBackground!.pieces[0];
+    const outOfRange = renderer.spaceBackground!.pieces[1];
+
+    Object.assign(inRange, { x: planet.x + planet.radius + 100, y: planet.y, dx: 0, dy: 0 });
+    Object.assign(outOfRange, { x: planet.x + planet.radius + 500, y: planet.y, dx: 0, dy: 0 });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    return { inRangeDx: inRange.dx, outOfRangeDx: outOfRange.dx };
+  });
+  expect(pull.inRangeDx).toBeLessThan(0);
+  expect(pull.outOfRangeDx).toBe(0);
+
+  // Reaching the centre doesn't shatter a piece: it shrinks away, and only then is it gone.
+  await page.evaluate(() => {
+    const renderer = window.__cellwarz!.renderer;
+    const planet = renderer.planet!;
+    const piece = renderer.spaceBackground!.pieces[2];
+    Object.assign(piece, { x: planet.x, y: planet.y, dx: 0, dy: 0 });
+    window.__target = piece;
+  });
+  await expect
+    .poll(() => page.evaluate(() => (window.__target as { consumedMs?: number }).consumedMs ?? 0), { timeout: 2000 })
+    .toBeGreaterThan(0);
+  await page.waitForFunction(() => !window.__cellwarz!.renderer.spaceBackground!.pieces.includes(window.__target!), undefined, {
+    timeout: 3000,
+  });
+});

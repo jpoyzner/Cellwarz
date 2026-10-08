@@ -7,9 +7,21 @@ const SWIPE_THRESHOLD = 30;
 const TAP_THRESHOLD = 10;
 const TAP_MAX_DURATION_MS = 300;
 
-/** Mirrors js/ui.js input handling (chat/typing removed); swipe/tap replaces the old jquery-mobile gestures. */
-export function attachInputHandlers(sendKey: SendKey, renderer: Renderer): () => void {
+const MOVEMENT_KEYS = [37, 38, 39];
+
+/**
+ * Mirrors js/ui.js input handling (chat/typing removed); swipe/tap replaces the old jquery-mobile gestures.
+ * Escape isn't sent to the server: it releases any held movement keys (so the avatar left behind doesn't keep
+ * running) and calls `onExit` to go back to the login screen.
+ */
+export function attachInputHandlers(sendKey: SendKey, renderer: Renderer, onExit?: () => void): () => void {
   const handleKeyDown = (event: KeyboardEvent) => {
+    if (event.key === 'Escape') {
+      for (const key of MOVEMENT_KEYS) sendKey(key, false);
+      onExit?.();
+      return;
+    }
+
     if (ARROW_KEYS.includes(event.keyCode)) {
       event.preventDefault();
     }
@@ -17,6 +29,7 @@ export function attachInputHandlers(sendKey: SendKey, renderer: Renderer): () =>
   };
 
   const handleKeyUp = (event: KeyboardEvent) => {
+    if (event.key === 'Escape') return;
     sendKey(event.keyCode, false);
   };
 

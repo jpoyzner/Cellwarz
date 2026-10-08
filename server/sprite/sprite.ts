@@ -31,6 +31,7 @@ export abstract class Sprite {
 
   private force: Force | undefined;
   private gravitateCount = 0;
+  private consumeScale: number | undefined;
 
   protected readonly cell: Cell;
   protected readonly cellData: CellData;
@@ -220,7 +221,8 @@ export abstract class Sprite {
         this.redrawEcho--;
       }
 
-      this.doAction();
+      // A sprite being swallowed by a planet is steered by the planet alone, not by its own gravity/AI/input.
+      if (this.consumeScale === undefined) this.doAction();
     }
   }
 
@@ -304,6 +306,26 @@ export abstract class Sprite {
   }
 
   isEffect(): boolean {
+    return false;
+  }
+
+  /** Planet-swallow progress: 1 when it starts shrinking away, 0 once gone; undefined if not being swallowed. */
+  getConsumeScale(): number | undefined {
+    return this.consumeScale;
+  }
+
+  setConsumeScale(scale: number): void {
+    this.consumeScale = scale;
+    this.needsRedrawFlag = true;
+  }
+
+  /** Called once a planet has finished swallowing this sprite; avatars override it to die. */
+  onConsumed(): void {
+    this.removePermanently();
+  }
+
+  /** Whether a room's background planet pulls this sprite toward it (avatars/robots and mana blocks do). */
+  isAffectedByPlanets(): boolean {
     return false;
   }
 

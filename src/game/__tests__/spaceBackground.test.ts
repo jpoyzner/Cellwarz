@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { PlanetView } from '../planet';
 import { SpaceBackground } from '../spaceBackground';
 
 function makeSeeded(seed = 1): () => number {
@@ -58,6 +59,25 @@ describe('SpaceBackground', () => {
 
     const replacement = space.pieces[space.pieces.length - 1];
     expect(Math.hypot(replacement.x - avatar.x, replacement.y - avatar.y)).toBeGreaterThan(100);
+  });
+
+  it('only shatters when an avatar actually overlaps one of the piece\'s blocks, not just its surroundings', () => {
+    const space = makeSpace();
+    const target = space.pieces[0];
+    target.dx = 0;
+    target.dy = 0;
+    target.rotation = 0;
+    target.rotationSpeed = 0;
+    const rightEdge = target.x + (Math.max(...target.cells.map((c) => c[0])) + 1) * target.cell - target.cx;
+    const rect = { x: rightEdge + 6, y: target.y - 32, width: 48, height: 64 };
+
+    space.update(0, [rect]);
+    expect(space.pieces).toContain(target);
+    expect(space.shards).toHaveLength(0);
+
+    space.update(0, [{ ...rect, x: rightEdge - 2 }]);
+    expect(space.pieces).not.toContain(target);
+    expect(space.shards).toHaveLength(4);
   });
 
   it('flings shards away and discards them after their lifetime', () => {
@@ -122,5 +142,110 @@ describe('SpaceBackground', () => {
     for (let i = 0; i < 300; i++) collected += space.update(16, [], scoreTarget);
 
     expect(collected).toBe(0);
+  });
+
+  describe('with a planet', () => {
+    const planetAt = (x: number, y: number) => new PlanetView({ id: 1, x, y, vx: 0, vy: 0, radius: 150, seed: 7 });
+
+    function parkedPiece(space: SpaceBackground, x: number, y: number) {
+      const piece = space.pieces[0];
+      Object.assign(piece, { x, y, dx: 0, dy: 0, rotationSpeed: 0 });
+      return piece;
+    }
+
+    it('pulls a piece within ~6 avatar heights of the surface toward the planet', () => {
+      const space = makeSpace();
+      space.planet = planetAt(1000, 1000);
+      const piece = parkedPiece(space, 1000 + 150 + 100, 1000);
+
+      for (let i = 0; i < 10; i++) space.update(16, []);
+
+      expect(piece.dx).toBeLessThan(0);
+      expect(piece.x).toBeLessThan(1250);
+      expect(Math.abs(piece.dy)).toBeLessThan(1e-9);
+    });
+
+    it('pulls a piece harder once it is inside the planet than at its surface', () => {
+      const surface = makeSpace();
+      surface.planet = planetAt(1000, 1000);
+      const near = parkedPiece(surface, 1000 + 152, 1000);
+      surface.update(16, []);
+
+      const inside = makeSpace();
+      inside.planet = planetAt(1000, 1000);
+      const within = parkedPiece(inside, 1000 + 80, 1000);
+      inside.update(16, []);
+
+      expect(Math.abs(within.dx)).toBeGreaterThan(Math.abs(near.dx) * 2);
+    });
+
+    it('leaves a piece beyond that range alone', () => {
+      const space = makeSpace();
+      space.planet = planetAt(1000, 1000);
+      const piece = parkedPiece(space, 1000 + 150 + 450, 1000);
+
+      for (let i = 0; i < 10; i++) space.update(16, []);
+
+      expect(piece.dx).toBe(0);
+      expect(piece.dy).toBe(0);
+    });
+
+    it('does not break a piece that merely gets close to the surface of the planet', () => {
+      const space = makeSpace();
+      space.planet = planetAt(1000, 1000);
+      const piece = parkedPiece(space, 1000 + 100, 1000);
+
+      for (let i = 0; i < 5; i++) space.update(16, []);
+
+      expect(space.pieces).toContain(piece);
+      expect(piece.consumedMs).toBeUndefined();
+      expect(space.shards).toHaveLength(0);
+    });
+
+    it('swallows a piece that reaches the core: it slides to the centre and shrinks away without shattering', () => {
+      const space = makeSpace();
+      space.planet = planetAt(1000, 1000);
+      const count = space.pieces.length;
+      const piece = parkedPiece(space, 1000 + 15, 1000);
+
+      space.update(16, []);
+      space.update(500, []);
+
+      expect(space.pieces).toContain(piece);
+      expect(piece.consumedMs).toBe(500);
+      expect(Math.hypot(piece.x - 1000, piece.y - 1000)).toBeLessThan(15);
+
+      space.update(499, []);
+      expect(space.pieces).toContain(piece);
+      expect(Math.hypot(piece.x - 1000, piece.y - 1000)).toBeLessThan(2);
+
+      space.update(10, []);
+      expect(space.pieces).not.toContain(piece);
+      expect(space.pieces).toHaveLength(count);
+      expect(space.shards).toHaveLength(0);
+    });
+
+    it('cannot shatter a piece that is already being swallowed', () => {
+      const space = makeSpace();
+      space.planet = planetAt(1000, 1000);
+      const piece = parkedPiece(space, 1000, 1000);
+      space.update(16, []);
+
+      space.update(16, [{ x: piece.x - 24, y: piece.y - 32, width: 48, height: 64 }]);
+
+      expect(space.pieces).toContain(piece);
+      expect(space.shards).toHaveLength(0);
+    });
+
+    it('carries the planet along its velocity', () => {
+      const space = makeSpace();
+      const planet = new PlanetView({ id: 1, x: 0, y: 0, vx: 100, vy: -50, radius: 150, seed: 7 });
+      space.planet = planet;
+
+      space.update(1000, []);
+
+      expect(planet.x).toBeCloseTo(100);
+      expect(planet.y).toBeCloseTo(-50);
+    });
   });
 });

@@ -1,6 +1,6 @@
 import type { Analyzer } from './analyzer';
 import type { Renderer } from './renderer';
-import type { ConnectPayload } from './types';
+import type { ConnectPayload, PlanetState } from './types';
 
 /** Mirrors js/syncer.js: owns the WebSocket connection and feeds frames into the Renderer. */
 export class Syncer {
@@ -35,6 +35,8 @@ export class Syncer {
         } else {
           this.renderer.applyFullState(data as ConnectPayload);
         }
+      } else if ('planet' in data) {
+        this.renderer.setPlanet(data.planet as PlanetState | null);
       } else if (data.died) {
         this.renderer.onLocalAvatarDeath();
       } else {

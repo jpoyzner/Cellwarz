@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 
-/** Fills the login form and clicks "Enter randomly!" (shared by the newer, more scenario-heavy specs). */
+/** Fills the login form and clicks "Respawn" (shared by the newer, more scenario-heavy specs). */
 export async function login(page: Page, loginName: string): Promise<void> {
   await page.goto('/');
   await page.locator('#loginName').fill(loginName);

@@ -14,5 +14,5 @@ export function App() {
     return <LoginScreen onEnter={(loginName, jump) => setSession({ loginName, jump })} />;
   }
 
-  return <GameCanvas loginName={session.loginName} jump={session.jump} />;
+  return <GameCanvas loginName={session.loginName} jump={session.jump} onExit={() => setSession(null)} />;
 }

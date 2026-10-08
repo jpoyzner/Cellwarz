@@ -1,6 +1,8 @@
 node_modules/
 dist/
 test-results/
+# Full-size source videos (the small web copies in public/videos/ are what the game serves)
+media-src/
 playwright-report/
 
 # graphify (fully regenerable via `/graphify . --update`)

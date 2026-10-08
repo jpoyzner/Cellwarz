@@ -43,6 +43,10 @@ export abstract class Mana extends Sprite {
     return this.handledFlag ? 0 : 5;
   }
 
+  override isAffectedByPlanets(): boolean {
+    return true;
+  }
+
   getActions(): ManaAction[] {
     return this.actions;
   }

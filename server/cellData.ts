@@ -14,7 +14,12 @@ export class CellData {
 
   private readonly map: (Set<Sprite> | undefined)[][];
 
-  constructor(cellWidth: number, cellHeight: number, world: World) {
+  constructor(
+    cellWidth: number,
+    cellHeight: number,
+    world: World,
+    private readonly wrapsAtEdges = false,
+  ) {
     this.world = world;
     this.map = Array.from({ length: cellWidth }, () => new Array<Set<Sprite> | undefined>(cellHeight));
   }
@@ -54,8 +59,15 @@ export class CellData {
   move(sprite: Sprite, xDirection: number, yDirection: number): void {
     try {
       this.writeDataForSprite(sprite, false);
-      sprite.changeXBy(xDirection);
-      sprite.changeYBy(yDirection);
+      const x = sprite.getX() + xDirection;
+      const y = sprite.getY() + yDirection;
+      if (this.wrapsAtEdges) {
+        sprite.setX(this.wrapPosition(x, this.map.length, sprite.getWidth()));
+        sprite.setY(this.wrapPosition(y, this.map[0].length, sprite.getHeight()));
+      } else {
+        sprite.changeXBy(xDirection);
+        sprite.changeYBy(yDirection);
+      }
       this.writeDataForSprite(sprite, true);
       this.applyClipping(sprite);
       sprite.needsRedraw(true);
@@ -71,8 +83,8 @@ export class CellData {
   moveTo(sprite: Sprite, x: number, y: number): void {
     try {
       this.writeDataForSprite(sprite, false);
-      sprite.setX(x);
-      sprite.setY(y);
+      sprite.setX(this.wrapsAtEdges ? this.wrapPosition(x, this.map.length, sprite.getWidth()) : x);
+      sprite.setY(this.wrapsAtEdges ? this.wrapPosition(y, this.map[0].length, sprite.getHeight()) : y);
       this.writeDataForSprite(sprite, true);
       this.applyClipping(sprite);
       sprite.needsRedraw(true);
@@ -180,7 +192,16 @@ export class CellData {
     return column[y];
   }
 
+  getWidth(): number {
+    return this.map.length;
+  }
+
   getImagePaths(): string[] {
     return this.imagePaths;
+  }
+
+  private wrapPosition(position: number, dimension: number, spriteSize: number): number {
+    const validPositions = dimension - spriteSize + 1;
+    return ((position % validPositions) + validPositions) % validPositions;
   }
 }

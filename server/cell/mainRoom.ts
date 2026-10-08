@@ -1,6 +1,6 @@
 import type { World } from '../world';
 import { Cell, OUTER_WALL_SIZE } from './cell';
-import type { BackgroundKind, Lamp } from './cell';
+import type { BackgroundKind, Lamp, Tv } from './cell';
 import { ClusteredInitException } from '../errors';
 import { CellData } from '../cellData';
 import { Avatar } from '../sprite/avatar';
@@ -60,9 +60,59 @@ const GRID_FLOOR_Y = GRID_HEIGHT - OUTER_WALL_SIZE - 2;
 const SPAWN_PORTAL_Y = GRID_FLOOR_Y - SpawnPortal.HEIGHT - SPAWN_PORTAL_GAP;
 const STARGATE_Y = ROW_Y[0] - Portal.HEIGHT;
 
+interface Span {
+  start: number;
+  end: number;
+}
+
+// Floor/ceiling wrap openings: 4 blocks wide, inset 30 blocks from each end wall. Falling through a bottom one
+// reappears (same x) through the matching top one, since both sit in the same shared outer wall.
+const WRAP_OPENING_WIDTH = CellBlock.SIZE * 4;
+const WRAP_OPENING_INSET = CellBlock.SIZE * 30;
+const VERTICAL_WRAP_OPENINGS: Span[] = [
+  { start: OUTER_WALL_SIZE + WRAP_OPENING_INSET, end: OUTER_WALL_SIZE + WRAP_OPENING_INSET + WRAP_OPENING_WIDTH },
+  {
+    start: GRID_WIDTH - OUTER_WALL_SIZE - WRAP_OPENING_INSET - WRAP_OPENING_WIDTH,
+    end: GRID_WIDTH - OUTER_WALL_SIZE - WRAP_OPENING_INSET,
+  },
+];
+
+// Side wrap openings (through both end walls, same y so walking out one side comes in the other) sit on a sill
+// raised this far above the walkway so they're reached with a jump; well under a full jump's rise.
+const SIDE_OPENING_SILL_HEIGHT = 12;
+const SIDE_OPENING_HEIGHT = Avatar.HEIGHT + CellBlock.SIZE * 2;
+const sideOpeningAbove = (walkwayY: number): Span => ({
+  start: walkwayY - SIDE_OPENING_SILL_HEIGHT - SIDE_OPENING_HEIGHT,
+  end: walkwayY - SIDE_OPENING_SILL_HEIGHT,
+});
+// Top-to-bottom order: one above the second platform row, one above the third.
+const SIDE_WRAP_OPENINGS: Span[] = [sideOpeningAbove(ROW_Y[1]), sideOpeningAbove(ROW_Y[2])];
+
+// Pixel positions of the wrap openings for e2e specs (which can't run the room-building code).
+export const WRAP_OPENING_PIXELS = {
+  verticalLeftX: VERTICAL_WRAP_OPENINGS[0].start * CellData.ANIMATION_STEP,
+  verticalRightX: VERTICAL_WRAP_OPENINGS[1].start * CellData.ANIMATION_STEP,
+  verticalWidth: WRAP_OPENING_WIDTH * CellData.ANIMATION_STEP,
+  sideOpenings: SIDE_WRAP_OPENINGS.map((span) => ({
+    top: span.start * CellData.ANIMATION_STEP,
+    bottom: span.end * CellData.ANIMATION_STEP,
+  })),
+} as const;
+
 // Lamps are evenly spaced; each beam is narrower than the spacing so dark gaps remain on the floor to hide in.
 const LAMP_COUNT = 5;
 const LAMP_FLOOR_HALF_WIDTH_PX = 300;
+
+// Background TVs match the vertical source video's 9:16 shape and hang by two chains from the platform row directly
+// above them: the outer two on floor 3, and two on the ground floor (floor 1), lowered an avatar height below center.
+// Floors 2 and 4 (the band between the second and third platform rows, and the stargate band) have none.
+const TV_HEIGHT_PX = 340;
+const TV_WIDTH_PX = Math.round((TV_HEIGHT_PX * 9) / 16);
+// [platform row the TVs hang under, platform row/floor they stand over, drop below band center, TV center x's]
+const TV_BANDS: ReadonlyArray<readonly [number, number, number, readonly number[]]> = [
+  [ROW_Y[0], ROW_Y[1], 0, [560, 3440]],
+  [ROW_Y[2], GRID_FLOOR_Y, Avatar.HEIGHT * CellData.ANIMATION_STEP, [1000, 3000]],
+];
 
 // Fixed, deterministic pixel position for the spawn portal, exported so e2e specs (which can't run
 // TypeScript room-building code) can target/assert against it without duplicating this layout math.
@@ -74,7 +124,8 @@ export const SPAWN_ENTRANCE_PIXELS = {
 /**
  * The single reusable "main multiplayer mode" room layout: a big rectangle with long
  * horizontal platforms, a center hole (bridged by four stepping-stone columns players
- * can climb straight up/down), scattered decorative blocks, two animated stargate warp
+ * can climb straight up/down), repeating outer boundaries with paired corner/side passages,
+ * scattered decorative blocks, two animated stargate warp
  * portals in the top corners, and one small floating spawn portal at the bottom center
  * (where most avatars first land, and where warping through either stargate deposits
  * them). Built as a deterministic stand-in for the randomly-generated "side-quest" rooms
@@ -89,6 +140,14 @@ export class MainRoom extends Cell {
     return 'station';
   }
 
+  protected override wrapsAtEdges(): boolean {
+    return true;
+  }
+
+  protected override usesPlanets(): boolean {
+    return true;
+  }
+
   override getLamps(): Lamp[] {
     return Array.from({ length: LAMP_COUNT }, (_, i) => ({
       x: (ROOM_WIDTH_PX * (i + 0.5)) / LAMP_COUNT,
@@ -98,6 +157,20 @@ export class MainRoom extends Cell {
       minX: OUTER_WALL_SIZE * CellData.ANIMATION_STEP,
       maxX: ROOM_WIDTH_PX - OUTER_WALL_SIZE * CellData.ANIMATION_STEP,
     }));
+  }
+
+  override getTvs(): Tv[] {
+    return TV_BANDS.flatMap(([hangRow, bottomRow, drop, centers]) => {
+      const bandTop = (hangRow + CellBlock.SIZE) * CellData.ANIMATION_STEP;
+      const y = Math.round((bandTop + bottomRow * CellData.ANIMATION_STEP - TV_HEIGHT_PX) / 2 + drop);
+      return centers.map((centerX) => ({
+        x: centerX - TV_WIDTH_PX / 2,
+        y,
+        width: TV_WIDTH_PX,
+        height: TV_HEIGHT_PX,
+        chainTopY: bandTop,
+      }));
+    });
   }
 
   getMinCellWidth(): number {
@@ -155,34 +228,57 @@ export class MainRoom extends Cell {
   }
 
   private buildOuterWalls(width: number, height: number): void {
-    const wallWidth = Math.floor(width / CellBlock.SIZE);
-    const wallHeight = Math.floor(height / CellBlock.SIZE);
+    const horizontalRows = [
+      0,
+      CellBlock.SIZE,
+      CellBlock.SIZE * 2,
+      CellBlock.SIZE * 3,
+      height - CellBlock.SIZE,
+      height - CellBlock.SIZE * 2,
+      height - CellBlock.SIZE * 3,
+      height - CellBlock.SIZE * 4,
+    ];
+    const verticalColumns = [
+      0,
+      CellBlock.SIZE,
+      CellBlock.SIZE * 2,
+      CellBlock.SIZE * 3,
+      width - CellBlock.SIZE * 4,
+      width - CellBlock.SIZE * 3,
+      width - CellBlock.SIZE * 2,
+      width - CellBlock.SIZE,
+    ];
 
-    new Wall(false, CellBlock.SIZE, 0, wallWidth - CellBlock.SIZE, this);
-    new Wall(false, CellBlock.SIZE, CellBlock.SIZE, wallWidth - CellBlock.SIZE, this);
-    new Wall(false, CellBlock.SIZE, CellBlock.SIZE * 2, wallWidth - CellBlock.SIZE, this);
-    new Wall(false, CellBlock.SIZE, CellBlock.SIZE * 3, wallWidth - CellBlock.SIZE, this);
-    new Wall(true, width - CellBlock.SIZE, 0, wallHeight, this);
-    new Wall(true, width - CellBlock.SIZE * 2, 0, wallHeight, this);
-    new Wall(true, width - CellBlock.SIZE * 3, 0, wallHeight, this);
-    new Wall(true, width - CellBlock.SIZE * 4, 0, wallHeight, this);
-    new Wall(false, CellBlock.SIZE, height - CellBlock.SIZE, wallWidth - CellBlock.SIZE, this);
-    new Wall(false, CellBlock.SIZE, height - CellBlock.SIZE * 2, wallWidth - CellBlock.SIZE, this);
-    new Wall(false, CellBlock.SIZE, height - CellBlock.SIZE * 3, wallWidth - CellBlock.SIZE, this);
-    new Wall(false, CellBlock.SIZE, height - CellBlock.SIZE * 4, wallWidth - CellBlock.SIZE, this);
-    new Wall(true, 0, 0, wallHeight, this);
-    new Wall(true, CellBlock.SIZE, 0, wallHeight, this);
-    new Wall(true, CellBlock.SIZE * 2, 0, wallHeight, this);
-    new Wall(true, CellBlock.SIZE * 3, 0, wallHeight, this);
+    for (const y of horizontalRows) {
+      this.buildWallRun(false, y, CellBlock.SIZE, width - CellBlock.SIZE, VERTICAL_WRAP_OPENINGS);
+    }
+
+    for (const x of verticalColumns) {
+      this.buildWallRun(true, x, 0, height, SIDE_WRAP_OPENINGS);
+    }
   }
 
-  /** Three long horizontal platform rows plus a solid floor, each row missing its center span (the "hole"). */
+  /** A straight run of wall blocks along [from, to) at a fixed row/column, skipping the given sorted openings. */
+  private buildWallRun(vertical: boolean, fixed: number, from: number, to: number, openings: Span[]): void {
+    let cursor = from;
+
+    for (const opening of [...openings, { start: to, end: to }]) {
+      if (cursor < opening.start) {
+        const length = (opening.start - cursor) / CellBlock.SIZE;
+        if (vertical) new Wall(true, fixed, cursor, length, this);
+        else new Wall(false, cursor, fixed, length, this);
+      }
+      cursor = Math.max(cursor, opening.end);
+    }
+  }
+
+  /** Three platforms with center gaps plus a floor with two wrap openings (matching those in the top wall). */
   private buildPlatformRows(width: number, floorY: number): void {
     for (const rowY of ROW_Y) {
       new Wall(false, OUTER_WALL_SIZE, rowY, (HOLE_LEFT - OUTER_WALL_SIZE) / CellBlock.SIZE, this);
       new Wall(false, HOLE_RIGHT, rowY, (width - OUTER_WALL_SIZE - HOLE_RIGHT) / CellBlock.SIZE, this);
     }
-    new Wall(false, OUTER_WALL_SIZE, floorY, (width - OUTER_WALL_SIZE * 2) / CellBlock.SIZE, this);
+    this.buildWallRun(false, floorY, OUTER_WALL_SIZE, width - OUTER_WALL_SIZE, VERTICAL_WRAP_OPENINGS);
   }
 
   /** Four vertical columns of small platforms through the hole, each climbable straight up/down in ~20-unit
@@ -266,7 +362,11 @@ export class MainRoom extends Cell {
   /** Like getRandomX, but rerolls out of the fixed test fixtures' keepout zone. */
   private getRandomTestSafeX(spriteSize: number): number {
     let x = this.getRandomX(spriteSize);
-    while (x + spriteSize >= TEST_FIXTURE_KEEPOUT.min && x <= TEST_FIXTURE_KEEPOUT.max) {
+    while (
+      (x + spriteSize >= TEST_FIXTURE_KEEPOUT.min && x <= TEST_FIXTURE_KEEPOUT.max) ||
+      (x + spriteSize > OUTER_WALL_SIZE && x < OUTER_WALL_SIZE * 2) ||
+      (x + spriteSize > this.getWidth() - OUTER_WALL_SIZE * 2 && x < this.getWidth() - OUTER_WALL_SIZE)
+    ) {
       x = this.getRandomX(spriteSize);
     }
     return x;

@@ -67,6 +67,20 @@ export class AudioManager {
   private ambientNodes: AudioScheduledSourceNode[] = [];
   private arpeggioTimer: number | undefined;
   private arpeggioStep = 0;
+  /** Set while the level is frozen (inactivity): the ambient music stays off even if sound effects are triggered. */
+  private ambientPaused = false;
+
+  /** Whether the ambient music is currently playing. */
+  get isAmbientPlaying(): boolean {
+    return this.ambientNodes.length > 0;
+  }
+
+  /** Stops the ambient music (e.g. the level froze from inactivity); un-pausing brings it back if sound had started. */
+  setAmbientPaused(paused: boolean): void {
+    this.ambientPaused = paused;
+    if (paused) this.stopAmbient();
+    else if (this.ctx && !this.muted) this.startAmbient(this.ctx);
+  }
 
   setMuted(muted: boolean): void {
     this.muted = muted;
@@ -86,7 +100,7 @@ export class AudioManager {
     const ctx = this.ensureContext();
     if (!ctx) return;
 
-    this.startAmbient(ctx);
+    if (!this.ambientPaused) this.startAmbient(ctx);
 
     const now = ctx.currentTime;
     const minGap = MIN_GAP_SECONDS[name] ?? DEFAULT_MIN_GAP_SECONDS;

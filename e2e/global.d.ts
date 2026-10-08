@@ -18,6 +18,11 @@ declare global {
         avatars: Record<string, string>;
         backgroundKind: 'space' | 'station' | 'temple' | undefined;
         score: number;
+        isMusicPlaying: boolean;
+        drawStaleScreen: () => void;
+        tvs: Array<{ x: number; y: number; width: number; height: number; chainTopY: number }>;
+        tvScreens: { isPlaying: boolean; isShowingAd: boolean; hasSignal: boolean };
+        planet?: { x: number; y: number; vx: number; vy: number; radius: number };
         spaceBackground?: {
           pieces: TestPiece[];
           shards: unknown[];

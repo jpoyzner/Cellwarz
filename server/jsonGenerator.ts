@@ -4,6 +4,7 @@ import type { Sprite } from './sprite/sprite';
 const DELETED_CODE = -1;
 const AVATAR_NAME_KEY = '0';
 const DASHBOARD_IMAGE_KEY = '1';
+const CONSUME_SCALE_KEY = '2';
 const TOOLS_DELETED_KEY = '-1';
 
 export type JsonSprite = [number] | [number, number, number] | [number, number, number, Record<string, unknown>];
@@ -36,6 +37,12 @@ export function getSprites(sprites: Sprite[], addExtraInfo: boolean, sessionAvat
         if (sprite === sessionAvatar && extraToolsInfo) {
           extraInfo = { ...(extraInfo ?? {}), [DASHBOARD_IMAGE_KEY]: extraToolsInfo };
         }
+      }
+
+      // A sprite being swallowed by a planet reports how far it has shrunk so clients can draw it smaller.
+      const consumeScale = sprite.getConsumeScale();
+      if (addExtraInfo && consumeScale !== undefined) {
+        extraInfo = { ...(extraInfo ?? {}), [CONSUME_SCALE_KEY]: Math.round(consumeScale * 100) / 100 };
       }
 
       jsonSprite = extraInfo

@@ -42,6 +42,13 @@ export class Missile extends Sprite {
   }
 
   protected override doAction(): void {
+    // Unlike avatars, a missile never wraps around a room's side edges (CellData would wrap it): it just ends.
+    const nextX = this.getX() + this.direction;
+    if (nextX < 0 || nextX + this.getWidth() > this.cellData.getWidth()) {
+      this.removePermanently();
+      return;
+    }
+
     this.physics.move(this, this.direction, Physics.NONE, 1);
 
     for (const sprite of this.physics.getSpritesAtSamePosition(this)) {

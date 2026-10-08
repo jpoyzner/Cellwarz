@@ -12,14 +12,19 @@ export interface TestCellHandle {
 }
 
 /** A minimal fake Cell/World pair for constructing real sprites without a full randomized Cell.init(). */
-export function createTestCell(width: number, height: number, world?: Partial<World>): TestCellHandle {
+export function createTestCell(
+  width: number,
+  height: number,
+  world?: Partial<World>,
+  wrapsAtEdges = false,
+): TestCellHandle {
   const physics = new Physics();
   const fakeWorld = {
     getPhysics: () => physics,
     getZion: () => ({ getHardlines: () => new Map() }),
     ...world,
   } as unknown as World;
-  const cellData = new CellData(width, height, fakeWorld);
+  const cellData = new CellData(width, height, fakeWorld, wrapsAtEdges);
   const fakeEngine = { actionMatchesFrequency: () => true, shouldAnimateFrame: () => false } as unknown as Engine;
   const cell = {
     getCellData: () => cellData,

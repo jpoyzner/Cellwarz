@@ -14,9 +14,15 @@ declare global {
 interface GameCanvasProps {
   loginName: string;
   jump: boolean;
+  /** Called when the player presses Escape to leave the game. */
+  onExit: () => void;
 }
 
-export function GameCanvas({ loginName, jump }: GameCanvasProps) {
+export function GameCanvas({ loginName, jump, onExit }: GameCanvasProps) {
+  // Read through a ref so a new callback identity from the parent never tears down the running game.
+  const onExitRef = useRef(onExit);
+  onExitRef.current = onExit;
+
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const backgroundRef = useRef<HTMLDivElement | null>(null);
   const dashboardRef = useRef<HTMLDivElement | null>(null);
@@ -61,7 +67,7 @@ export function GameCanvas({ loginName, jump }: GameCanvasProps) {
     const detachInput = attachInputHandlers((key, down) => {
       syncer.sendKey(key, down);
       renderer.onLocalKey(key, down);
-    }, renderer);
+    }, renderer, () => onExitRef.current());
 
     window.__cellwarz = { renderer };
 

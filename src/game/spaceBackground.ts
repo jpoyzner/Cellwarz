@@ -3,6 +3,8 @@
 // Pieces/shards live in world coordinates (so you can run up to one); stars are a screen-space layer that
 // slowly drifts in one shared random direction.
 
+import { pullFalloff, PLANET_CONSUME_MS, PLANET_CORE_FRACTION, PLANET_PULL_RANGE_PX } from './planet';
+import type { PlanetView } from './planet';
 import type { StationBackdrop } from './stationBackdrop';
 
 export interface TouchRect {
@@ -49,6 +51,8 @@ export interface Piece {
   cells: ReadonlyArray<readonly [number, number]>;
   color: string;
   hoverRadius: number;
+  /** Set once the piece reaches a planet's core: ms spent shrinking away into it (it is gone at PLANET_CONSUME_MS). */
+  consumedMs?: number;
 }
 
 const TETROMINOES: Record<string, ReadonlyArray<readonly [number, number]>> = {
@@ -77,6 +81,14 @@ const STAR_DRIFT_MIN_SPEED = 0.1;
 const STAR_DRIFT_SPEED_RANGE = 0.1;
 // One piece per this much world area (the website had ~one per 70000px² of screen).
 const WORLD_AREA_PER_PIECE = 100000;
+// Pieces fall toward a planet (px per 60fps-frame², at its surface); they're capped so a slingshot can't fling them
+// across the world, and relax back to their normal drift speed once clear of the planet.
+const PLANET_PIECE_ACCEL = 0.0175;
+// Inside the planet's disc a piece is pulled this much harder (flat), mirroring the stronger server pull there.
+const PLANET_PIECE_ACCEL_INSIDE = 0.04;
+const PLANET_PIECE_MAX_SPEED = 3;
+const PIECE_CRUISE_SPEED = 0.5;
+const PIECE_RELAX_PER_FRAME = 0.99;
 // A respawned piece must appear at least this far from every avatar so it can't instantly shatter again.
 const RESPAWN_CLEARANCE_PX = 400;
 
@@ -84,8 +96,10 @@ const RESPAWN_CLEARANCE_PX = 400;
 export class SpaceBackground {
   pieces: Piece[] = [];
   shards: Shard[] = [];
-  /** Optional layer (planet, ship traffic) drawn between the stars and the pieces. */
+  /** Optional layer (ship traffic) drawn between the stars and the pieces. */
   backdrop: StationBackdrop | undefined;
+  /** The level's current gas giant (if any); it pulls the pieces, and is drawn between the backdrop and them. */
+  planet: PlanetView | undefined;
   private stars: Star[] = [];
   private starDx = 0;
   private starDy = 0;
@@ -106,6 +120,7 @@ export class SpaceBackground {
    */
   update(dtMs: number, touchers: readonly TouchRect[], scoreTarget?: { x: number; y: number }): number {
     const step = dtMs / FRAME_MS;
+    this.planet?.advance(dtMs);
 
     for (const star of this.stars) {
       star.x = this.wrap(star.x + this.starDx * step, this.viewWidth, 0);
@@ -114,7 +129,15 @@ export class SpaceBackground {
 
     for (let i = this.pieces.length - 1; i >= 0; i--) {
       const piece = this.pieces[i];
-      const hits = touchers.filter((rect) => distanceToRect(piece.x, piece.y, rect) < piece.hoverRadius);
+      if (piece.consumedMs !== undefined) {
+        if (this.consumePiece(piece, dtMs)) {
+          this.pieces.splice(i, 1);
+          this.pieces.push(this.makePiece(this.pickRespawnPosition(touchers)));
+        }
+        continue;
+      }
+
+      const hits = touchers.filter((rect) => pieceTouches(piece, rect));
 
       if (hits.length > 0) {
         // If the local avatar is among those touching it, the blocks are the local player's to collect.
@@ -123,6 +146,8 @@ export class SpaceBackground {
         this.pieces.push(this.makePiece(this.pickRespawnPosition(touchers)));
         continue;
       }
+
+      if (this.planet) this.pullPiece(piece, this.planet, step);
 
       const margin = piece.cell * 5;
       piece.x = this.wrap(piece.x + piece.dx * step, this.worldWidth, margin);
@@ -178,7 +203,8 @@ export class SpaceBackground {
       ctx.fill();
     }
 
-    this.backdrop?.draw(ctx, offsetX, offsetY, now);
+    this.backdrop?.draw(ctx, now);
+    this.planet?.draw(ctx, offsetX, offsetY, this.viewWidth, this.viewHeight);
 
     for (const piece of this.pieces) {
       const reach = piece.cell * 5;
@@ -189,6 +215,10 @@ export class SpaceBackground {
       ctx.save();
       ctx.translate(x, y);
       ctx.rotate(piece.rotation);
+      if (piece.consumedMs !== undefined) {
+        const scale = 1 - piece.consumedMs / PLANET_CONSUME_MS;
+        ctx.scale(scale, scale);
+      }
       ctx.shadowBlur = 8;
       ctx.shadowColor = piece.color;
       ctx.fillStyle = piece.color;
@@ -223,6 +253,50 @@ export class SpaceBackground {
     ctx.restore();
   }
 
+  /** Slides a swallowed piece into the planet's centre while it shrinks; returns true once it has vanished. */
+  private consumePiece(piece: Piece, dtMs: number): boolean {
+    const consumedMs = (piece.consumedMs ?? 0) + dtMs;
+    if (consumedMs >= PLANET_CONSUME_MS || !this.planet) return true;
+
+    const blend = Math.min(1, dtMs / (PLANET_CONSUME_MS - (piece.consumedMs ?? 0)));
+    piece.x += (this.planet.x - piece.x) * blend;
+    piece.y += (this.planet.y - piece.y) * blend;
+    piece.rotation += piece.rotationSpeed * (dtMs / FRAME_MS);
+    piece.consumedMs = consumedMs;
+    return false;
+  }
+
+  /** Accelerates a piece toward the planet when it is within range; a piece reaching the core starts being swallowed. */
+  private pullPiece(piece: Piece, planet: PlanetView, step: number): void {
+    const dx = planet.x - piece.x;
+    const dy = planet.y - piece.y;
+    const distance = Math.hypot(dx, dy);
+
+    if (distance <= planet.radius * PLANET_CORE_FRACTION) {
+      piece.consumedMs = 0;
+      piece.dx = 0;
+      piece.dy = 0;
+      return;
+    }
+
+    const falloff = pullFalloff(distance, planet.radius);
+    if (falloff > 0) {
+      const accel = (distance < planet.radius ? PLANET_PIECE_ACCEL_INSIDE : PLANET_PIECE_ACCEL * falloff) * step;
+      piece.dx += (dx / distance) * accel;
+      piece.dy += (dy / distance) * accel;
+    }
+
+    const speed = Math.hypot(piece.dx, piece.dy);
+    if (speed > PLANET_PIECE_MAX_SPEED) {
+      piece.dx *= PLANET_PIECE_MAX_SPEED / speed;
+      piece.dy *= PLANET_PIECE_MAX_SPEED / speed;
+    } else if (falloff === 0 && distance > planet.radius + PLANET_PULL_RANGE_PX && speed > PIECE_CRUISE_SPEED) {
+      const relax = Math.pow(PIECE_RELAX_PER_FRAME, step);
+      piece.dx *= relax;
+      piece.dy *= relax;
+    }
+  }
+
   private populate(): void {
     const count = Math.floor((this.viewWidth * this.viewHeight) / 3500);
     const driftAngle = this.random() * Math.PI * 2;
@@ -253,8 +327,7 @@ export class SpaceBackground {
   }
 
   private makePiece({ x, y }: { x: number; y: number }): Piece {
-    // Bigger than the website's 5-10px cells so pieces read against the game's 16px blocks.
-    const cell = this.random() * 8 + 8;
+    const cell = this.random() * 6 + 6;
     const cells = TETROMINOES[SHAPE_NAMES[Math.floor(this.random() * SHAPE_NAMES.length)]];
     const cx = (Math.max(...cells.map((c) => c[0])) * cell) / 2;
     const cy = (Math.max(...cells.map((c) => c[1])) * cell) / 2;
@@ -273,7 +346,7 @@ export class SpaceBackground {
       cy,
       cells,
       color: COLORS[Math.floor(this.random() * COLORS.length)],
-      hoverRadius: cell * 2.5 + 12,
+      hoverRadius: cell * 3,
     };
   }
 
@@ -310,6 +383,21 @@ export class SpaceBackground {
     const span = size + margin * 2;
     return ((((value + margin) % span) + span) % span) - margin;
   }
+}
+
+function pieceTouches(piece: Piece, rect: TouchRect): boolean {
+  // Cheap reject first: hoverRadius bounds every cell of the piece.
+  if (distanceToRect(piece.x, piece.y, rect) > piece.hoverRadius) return false;
+
+  const cos = Math.cos(piece.rotation);
+  const sin = Math.sin(piece.rotation);
+  const half = piece.cell / 2;
+
+  return piece.cells.some(([cx, cy]) => {
+    const localX = cx * piece.cell - piece.cx + half;
+    const localY = cy * piece.cell - piece.cy + half;
+    return distanceToRect(piece.x + localX * cos - localY * sin, piece.y + localX * sin + localY * cos, rect) < half;
+  });
 }
 
 function distanceToRect(px: number, py: number, rect: TouchRect): number {
