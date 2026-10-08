@@ -57,11 +57,8 @@ export function drawLamps(
     ctx.fill();
     ctx.restore();
 
-    // The fixture hangs from the ceiling and tilts to point along the beam.
+    // The fixture hangs fixed from the ceiling; only the beam sways.
     ctx.save();
-    ctx.translate(x, topY - 40);
-    ctx.rotate(Math.atan2(sway, bottomY - topY));
-    ctx.translate(-x, -(topY - 40));
     ctx.fillStyle = '#3a3d4d';
     ctx.fillRect(x - 3, topY - 40, 6, 40);
     ctx.beginPath();

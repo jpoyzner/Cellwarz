@@ -211,7 +211,7 @@ bottom-to-top wrap).
 3. Tall ceiling lamps (`Cell.getLamps()`, five evenly spaced in MainRoom) cast bright neon (cyan/magenta/amber)
    triangular beams of light down over much of the floor, fading toward the bottom, and
    sway slowly back and forth (alternate lamps in
-   opposite directions) so neighbouring beams briefly overlap. The black ninja avatars (and robots) are drawn over
+   opposite directions) so neighbouring beams briefly overlap; the lamp fixtures themselves stay fixed to the ceiling. The black ninja avatars (and robots) are drawn over
    the beams and stand out clearly against them; outside the beams they blend into the dark (you can still see
    their eyes), so players can hide in the gaps. Lighting is purely cosmetic and doesn't affect gameplay.
 4. Name tags above avatars are neon cyan (with a dark outline) and horizontally centered over the avatar.
