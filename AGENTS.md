@@ -85,17 +85,29 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   React state in `GameCanvas`): the wire format has no sprite type, so walls vs. avatars/robots are classified
   from the image path (`/blocks/` vs `/me/`), and a robot is an actor sprite whose id isn't in `avatars` (robots
   never send a name). The wall layer is cached and only rebuilt when a wall sprite appears/disappears.
-- **Level backdrops** (`Cell.getBackground()` → `'space' | 'temple'`, sent as `background` in the full-state
-  payload and applied in `Renderer.setBackground()`): `MainRoom` uses `'space'` — [spaceBackground.ts](src/game/spaceBackground.ts),
-  a starfield plus drifting tetrominoes ported from the daat/DJ Recognize site, drawn on the game canvas before
-  sprites; pieces live in world coordinates (the server sends `worldWidth`/`worldHeight`) and shatter into flying
+- **Level backdrops** (`Cell.getBackground()` → `'space' | 'station' | 'temple'`, sent as `background` in the full-state
+  payload and applied in `Renderer.setBackground()`): `MainRoom` uses `'station'` — [spaceBackground.ts](src/game/spaceBackground.ts),
+  a starfield plus drifting neon tetrominoes ported from the daat/DJ Recognize site, drawn on the game canvas before
+  sprites, with a [stationBackdrop.ts](src/game/stationBackdrop.ts) parallax layer slotted in between the stars and the
+  pieces (city-lit planet limb and ship traffic; `'space'` is the same without that layer); pieces live in world coordinates (the server sends
+  `worldWidth`/`worldHeight`) and shatter into flying
   cells when any avatar's rect overlaps them (the site's mouse-hover became avatar-touch); stars are a
   screen layer that slowly drifts in one shared random direction. `MainRoom` also has five tall ceiling lamps (`Cell.getLamps()`, sent as `lamps`;
-  [lamps.ts](src/game/lamps.ts)) casting bright, floor-fading triangular light beams drawn behind the sprites that sway back and forth (alternate
+  [lamps.ts](src/game/lamps.ts)) casting bright neon (cyan/magenta/amber), floor-fading triangular light beams drawn behind the sprites that sway back and forth (alternate
   lamps opposite, so neighbours briefly overlap), so
   the black ninja actors (avatars, robots) read against them and vanish into the dark outside them (players can
-  hide). Name tags are yellow and centered over the sprite. Purely cosmetic. `'temple'` (the DOM `#canvas-bg`
+  hide). Name tags are neon cyan and centered over the sprite. Purely cosmetic. `'temple'` (the DOM `#canvas-bg`
   image) is the `Cell` default, kept for the future randomly generated rooms.
+- **Cyberpunk look (all client-side, cosmetic)**: [neonSprites.ts](src/game/neonSprites.ts) re-skins art at load time
+  with no new assets — wall tiles become dark steel with a neon rim, the red headband on every `/me/` frame is recolored
+  and given a glow halo (cyan = local avatar, magenta = other players, red = robots; both avatars and robots use the
+  same `me/` art so each tint gets its own baked copy), and portals/pickups/projectiles get a `shadowBlur` glow chosen
+  from the image path (`glowColorForPath`). [postFx.ts](src/game/postFx.ts) adds a downscaled bright-pass bloom to the
+  whole frame and a short RGB-glitch burst on warp/death. A CSS `#crt` overlay (scanlines + vignette), a monospace
+  HUD (`CREDITS` score with a digit-scramble on change, `RADAR` minimap with a sweep bar) and a terminal-styled login
+  screen are in [cellwarz.css](src/styles/cellwarz.css); [audio.ts](src/game/audio.ts) uses bitcrushed/filter-swept
+  synth sounds plus a quiet synthwave ambient bed that starts on the first sound and is torn down by
+  `AudioManager.dispose()` from `Renderer.stop()`.
 - **Score** (top-right `#score` DOM element): when the *local* avatar shatters a background piece, its shards
   (`collect` shards in [spaceBackground.ts](src/game/spaceBackground.ts)) burst out, then home in on the HUD
   (converted to world coordinates by the camera offset) and are counted on arrival; `Renderer` adds 20/block and

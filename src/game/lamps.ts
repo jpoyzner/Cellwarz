@@ -12,6 +12,13 @@ export interface Lamp {
 const SWAY_AMPLITUDE_PX = 220;
 const SWAY_PERIOD_MS = 7000;
 
+// Neighbouring lamps cycle through these so overlapping beams mix into new neon colors.
+const LAMP_COLORS: ReadonlyArray<{ rgb: string; fixture: string }> = [
+  { rgb: '120, 240, 255', fixture: '#c8fbff' },
+  { rgb: '255, 110, 220', fixture: '#ffd0f2' },
+  { rgb: '255, 190, 90', fixture: '#ffe6bd' },
+];
+
 export function drawLamps(
   ctx: CanvasRenderingContext2D,
   lamps: readonly Lamp[],
@@ -30,6 +37,7 @@ export function drawLamps(
 
     const sway = SWAY_AMPLITUDE_PX * Math.sin((now / SWAY_PERIOD_MS) * Math.PI * 2 + index * Math.PI);
     const baseX = x + sway;
+    const color = LAMP_COLORS[index % LAMP_COLORS.length];
 
     ctx.save();
     ctx.beginPath();
@@ -38,8 +46,8 @@ export function drawLamps(
     ctx.globalCompositeOperation = 'lighter';
     const beam = ctx.createLinearGradient(0, topY, 0, bottomY);
     // Bright enough to act as a backdrop the black ninjas read against; still fades toward the floor.
-    beam.addColorStop(0, 'rgba(255, 240, 180, 0.95)');
-    beam.addColorStop(1, 'rgba(255, 236, 160, 0.5)');
+    beam.addColorStop(0, `rgba(${color.rgb}, 0.9)`);
+    beam.addColorStop(1, `rgba(${color.rgb}, 0.45)`);
     ctx.fillStyle = beam;
     ctx.beginPath();
     ctx.moveTo(x, topY);
@@ -63,9 +71,9 @@ export function drawLamps(
     ctx.lineTo(x + 18, topY + 8);
     ctx.closePath();
     ctx.fill();
-    ctx.shadowColor = '#fff3b0';
+    ctx.shadowColor = color.fixture;
     ctx.shadowBlur = 18;
-    ctx.fillStyle = '#fff8d6';
+    ctx.fillStyle = color.fixture;
     ctx.beginPath();
     ctx.arc(x, topY + 8, 6, 0, Math.PI * 2);
     ctx.fill();

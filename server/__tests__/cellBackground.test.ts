@@ -4,8 +4,8 @@ import { SimpleSmallCell } from '../cell/simpleSmallCell';
 import type { World } from '../world';
 
 describe('Cell background', () => {
-  it('uses the space backdrop for MainRoom', () => {
-    expect(new MainRoom({} as World).getBackground()).toBe('space');
+  it('uses the orbital-station backdrop for MainRoom', () => {
+    expect(new MainRoom({} as World).getBackground()).toBe('station');
   });
 
   it('keeps the temple backdrop as the default for other (e.g. randomly generated) rooms', () => {

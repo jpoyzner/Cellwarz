@@ -7,7 +7,7 @@ export type SpritesMap = Record<string, StoredSprite>;
 export type AvatarsMap = Record<string, string>;
 export type ToolsMap = Record<string, number>;
 
-export type BackgroundKind = 'space' | 'temple';
+export type BackgroundKind = 'space' | 'station' | 'temple';
 
 export interface ConnectPayload {
   connect: string;

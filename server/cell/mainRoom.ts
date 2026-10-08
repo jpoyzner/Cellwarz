@@ -86,7 +86,7 @@ export class MainRoom extends Cell {
   }
 
   override getBackground(): BackgroundKind {
-    return 'space';
+    return 'station';
   }
 
   override getLamps(): Lamp[] {

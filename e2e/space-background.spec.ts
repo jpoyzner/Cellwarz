@@ -1,11 +1,11 @@
 import { expect, test } from '@playwright/test';
 import { login, waitForAvatar, waitUntilGrounded } from './gameHelpers';
 
-test('MainRoom uses the space backdrop, and running into a background tetromino shatters it', async ({ page }) => {
+test('MainRoom uses the orbital-station backdrop, and running into a background tetromino shatters it', async ({ page }) => {
   await login(page, 'spacewalker');
   await waitForAvatar(page, 'spacewalker');
 
-  await expect.poll(() => page.evaluate(() => window.__cellwarz?.renderer.backgroundKind)).toBe('space');
+  await expect.poll(() => page.evaluate(() => window.__cellwarz?.renderer.backgroundKind)).toBe('station');
   await expect(page.locator('#canvas-bg')).toBeHidden();
 
   const start = await waitUntilGrounded(page, 'spacewalker');

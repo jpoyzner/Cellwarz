@@ -10,11 +10,13 @@ const WALL_SIZE_PX = 16;
 const ACTOR_WIDTH_PX = 48;
 const ACTOR_HEIGHT_PX = 64;
 
-const WALL_COLOR = '#7fb3ff';
-const PLAYER_COLOR = '#ffd23f';
-const ROBOT_COLOR = '#ff4d4d';
+const WALL_COLOR = '#00c8e6';
+const PLAYER_COLOR = '#ff2ea6';
+const ROBOT_COLOR = '#ff3b55';
 const SELF_COLOR = '#ffffff';
-const SELF_OUTLINE_COLOR = '#00c853';
+const SELF_OUTLINE_COLOR = '#b6ff3c';
+const SWEEP_PERIOD_MS = 3500;
+const SWEEP_WIDTH_PX = 36;
 
 /** Walls and avatars/robots are only distinguishable by their image path (the wire format has no sprite type). */
 export function classifyImagePaths(paths: string[]): ImageKind[] {
@@ -107,6 +109,18 @@ export class Minimap {
       ctx.strokeStyle = SELF_OUTLINE_COLOR;
       ctx.stroke();
     }
+
+    this.drawSweep(ctx, frame.now);
+  }
+
+  /** A faint radar scan bar sweeping left to right across the room. */
+  private drawSweep(ctx: CanvasRenderingContext2D, now: number): void {
+    const x = ((now % SWEEP_PERIOD_MS) / SWEEP_PERIOD_MS) * (MINIMAP_WIDTH + SWEEP_WIDTH_PX) - SWEEP_WIDTH_PX;
+    const bar = ctx.createLinearGradient(x, 0, x + SWEEP_WIDTH_PX, 0);
+    bar.addColorStop(0, 'rgba(0, 246, 255, 0)');
+    bar.addColorStop(1, 'rgba(0, 246, 255, 0.28)');
+    ctx.fillStyle = bar;
+    ctx.fillRect(x, 0, SWEEP_WIDTH_PX, MINIMAP_HEIGHT);
   }
 
   private project(worldX: number, worldY: number): { x: number; y: number } {

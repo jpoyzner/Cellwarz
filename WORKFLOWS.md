@@ -112,8 +112,10 @@ to the single shared room and each asserts it can see the other's name and sprit
 
 1. Running, jumping, landing, picking up/dropping mana, activating a mana tool, warping through a portal, a
    nearby avatar dying, and your own death now each play a short synthesized sound effect (WebAudio oscillator
-   blips — no audio asset files were added) and, where relevant, a small dust/impact/warp particle puff at the
-   sprite's position.
+   blips — no audio asset files were added; bitcrushed square/saw tones, filter sweeps, noise bursts) and, where
+   relevant, a small dust/impact/warp particle puff at the sprite's position. A quiet synthwave bed (detuned
+   drone plus a sparse arpeggio) starts on the first sound and stops when you leave the game screen.
+   Warping and dying also trigger a brief RGB-glitch burst on the whole screen.
 2. Movement for every avatar, and the camera itself, is smoothed between server updates instead of snapping to
    each new position; your own avatar's left/right movement also predicts locally the instant a key is pressed
    and quietly reconciles against the server a few frames later (large mismatches — a wall, a push, a warp — snap
@@ -128,9 +130,9 @@ tests above, which would fail if the underlying server behavior changed.
 
 ## Minimap
 
-1. While in-game, a mostly-transparent minimap sits in the bottom-right corner (`#minimap`, canvas
-   `#minimap-canvas`) showing the room's walls in blue, other players as yellow dots, robots as red dots, and
-   your own avatar as a larger pulsing white dot with a green outline.
+1. While in-game, a mostly-transparent "radar" (the minimap) sits in the bottom-right corner (`#minimap`, canvas
+   `#minimap-canvas`) showing the room's walls in cyan, other players as magenta dots, robots as red dots, and
+   your own avatar as a larger pulsing white dot with a lime outline, with a faint scan bar sweeping across it.
 2. Click the small "x" (`#minimap-toggle`) to collapse it into a much smaller icon in the same corner; click the
    icon to reopen it. (It's deliberately not a focusable `<button>` so the Spacebar mana-pickup key can't
    accidentally toggle it.)
@@ -139,33 +141,45 @@ tests above, which would fail if the underlying server behavior changed.
 [src/game/__tests__/minimap.test.ts](src/game/__tests__/minimap.test.ts) (wall vs. avatar image classification).
 The exact colors/dots are manual-only (no canvas pixel-color assertions).
 
-## Space background
+## Space background (orbital station)
 
-1. [MainRoom](server/cell/mainRoom.ts) is drawn over a dark starfield with randomly drifting, glowing tetromino
-   pieces (ported from the DJ Recognize site's background). The server tells the client which backdrop a room
-   uses (`background` in the full-state payload; `Cell.getBackground()`), and the DOM `#canvas-bg` temple image
-   is hidden while the space backdrop is active.
+1. [MainRoom](server/cell/mainRoom.ts) is drawn over a dark starfield with randomly drifting, glowing neon tetromino
+   pieces (ported from the DJ Recognize site's background) and a cyberpunk orbital-station backdrop
+   (`'station'` in `Cell.getBackground()`, drawn by [stationBackdrop.ts](src/game/stationBackdrop.ts)): a planet limb
+   with city lights on its night side and ship traffic streaking across. The server tells the
+   client which backdrop a room uses (`background` in the full-state payload), and the DOM `#canvas-bg` temple
+   image is hidden while the station (or plain `'space'`) backdrop is active.
 2. When any avatar (yours or another player's) overlaps a drifting piece, it breaks into its individual blocks
    that fly apart, and a new piece reappears elsewhere in the room. The pieces drift slowly through the *world*
    (not the screen), so you can run up to one and touch it; the stars are a screen layer that slowly drifts all
    in one random direction. The backdrop is purely cosmetic — it never affects physics or collisions.
-3. Tall ceiling lamps (`Cell.getLamps()`, five evenly spaced in MainRoom) cast bright triangular beams of light
-   down over much of the floor, fading toward the bottom, and sway slowly back and forth (alternate lamps in
+3. Tall ceiling lamps (`Cell.getLamps()`, five evenly spaced in MainRoom) cast bright neon (cyan/magenta/amber)
+   triangular beams of light down over much of the floor, fading toward the bottom, and
+   sway slowly back and forth (alternate lamps in
    opposite directions) so neighbouring beams briefly overlap. The black ninja avatars (and robots) are drawn over
    the beams and stand out clearly against them; outside the beams they blend into the dark (you can still see
    their eyes), so players can hide in the gaps. Lighting is purely cosmetic and doesn't affect gameplay.
-4. Name tags above avatars are bright yellow (with a dark outline) and horizontally centered over the avatar.
-5. The original temple backdrop is kept as the default for non-MainRoom (e.g. future randomly generated) rooms.
+4. Name tags above avatars are neon cyan (with a dark outline) and horizontally centered over the avatar.
+5. Art is re-skinned on the client at load time: wall tiles become dark steel with a neon rim, every avatar's
+   headband glows (cyan for you, magenta for other players, red for robots), and portals/pickups/projectiles get a
+   neon glow. The whole frame gets a light bloom, plus a CRT scanline/vignette overlay (`#crt`). The HUD uses a
+   monospace neon style (score is labelled CREDITS and briefly digit-scrambles when it changes; the minimap is
+   labelled RADAR; the login screen is styled as a terminal).
+6. The original temple backdrop is kept as the default for non-MainRoom (e.g. future randomly generated) rooms.
 
-**Covered by**: [e2e/space-background.spec.ts](e2e/space-background.spec.ts) (space backdrop active, temple
+**Covered by**: [e2e/space-background.spec.ts](e2e/space-background.spec.ts) (station backdrop active, temple
 element hidden, running into a world-space piece shatters it),
 [src/game/__tests__/spaceBackground.test.ts](src/game/__tests__/spaceBackground.test.ts) (world-wide scatter, shatter,
-star drift, respawn, shard lifetime) and [server/__tests__/cellBackground.test.ts](server/__tests__/cellBackground.test.ts)
-(which room uses which backdrop). The beam/name tag look is manual-only.
+star drift, respawn, shard lifetime),
+[src/game/__tests__/stationBackdrop.test.ts](src/game/__tests__/stationBackdrop.test.ts) (ship traffic wrapping),
+[src/game/__tests__/neonSprites.test.ts](src/game/__tests__/neonSprites.test.ts) (headband recolor, steel tiles, glow
+colors) and [server/__tests__/cellBackground.test.ts](server/__tests__/cellBackground.test.ts)
+(which room uses which backdrop). The overall look (beams, glow, bloom, CRT, name tags) is manual-only.
 
 ## Score
 
-1. Each user has a score, shown in the top-right corner (`#score`, just the number) and starting at 0.
+1. Each user has a score, shown in the top-right corner (`#score`, just the number, visually labelled CREDITS)
+   and starting at 0.
 2. When *your* avatar breaks a background block (see "Space background"), the blocks burst outward, then fly
    across the screen to the score and disappear on arrival, adding 20 points per block (a tetromino is 4 blocks,
    so 80). Blocks broken by other players fly apart without scoring for you.

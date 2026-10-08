@@ -79,6 +79,7 @@ export function GameCanvas({ loginName, jump }: GameCanvasProps) {
     <>
       <div id="canvas-bg" ref={backgroundRef} />
       <canvas id="canvas" ref={canvasRef} />
+      <div id="crt" />
       <div id="score" ref={scoreRef} />
       <div id="mana1" className="dash-icon" ref={dashboardRef} />
       <div id="mana2" className="dash-icon" />

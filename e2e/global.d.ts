@@ -16,7 +16,7 @@ declare global {
       renderer: {
         sprites: Record<string, [number, number, number]>;
         avatars: Record<string, string>;
-        backgroundKind: 'space' | 'temple' | undefined;
+        backgroundKind: 'space' | 'station' | 'temple' | undefined;
         score: number;
         spaceBackground?: {
           pieces: TestPiece[];

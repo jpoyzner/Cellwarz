@@ -2,8 +2,6 @@
 
 ## Core Gameplay
 
-- give it a cyberpunk flare
-- remove the framerate thng and MAKE THE TETRIS OBJECTS GIVE YOU POINTS WHEN YOU TOUCH THEM! make the blocks fly towards a score that adds. Each tetrino block should be worth 20 points.
 - make it look like a ship? But then it doesn't mesh with the continues movement thing:
 - put holes in the ends of levels 2 and 3 and also near the ends of floor 1 (to drop to floor 4)
 - maybe even add planets floating by that gravitate blocks and avatars towards them!!!
@@ -50,6 +48,8 @@ AND VICE VERSA. Maybe make the tertis pieces float by in the cellwarz levels als
     - Scoring would need to be adapted for game outcomes (e.g. survival time, kills, territory)
 
 ## Game expansions
+
+- Cyberpunk pass follow-up: a hazard room element (electrified floor blocks / laser grids reusing the engine-fire kill + knockback) and in-game renames (mana → data shards, launcher → pulse rifle) were deferred; only the client-side look/sound was done.
 
 - Maybe make a room where people can collaborate on live music somehow!!! Maybe they play instruments synced together in the same room live!?! A realtime interactive DAW?
 

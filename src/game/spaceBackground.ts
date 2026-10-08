@@ -3,6 +3,8 @@
 // Pieces/shards live in world coordinates (so you can run up to one); stars are a screen-space layer that
 // slowly drifts in one shared random direction.
 
+import type { StationBackdrop } from './stationBackdrop';
+
 export interface TouchRect {
   x: number;
   y: number;
@@ -82,6 +84,8 @@ const RESPAWN_CLEARANCE_PX = 400;
 export class SpaceBackground {
   pieces: Piece[] = [];
   shards: Shard[] = [];
+  /** Optional layer (planet, ship traffic) drawn between the stars and the pieces. */
+  backdrop: StationBackdrop | undefined;
   private stars: Star[] = [];
   private starDx = 0;
   private starDy = 0;
@@ -173,6 +177,8 @@ export class SpaceBackground {
       ctx.fillStyle = `rgba(200, 230, 255, ${alpha})`;
       ctx.fill();
     }
+
+    this.backdrop?.draw(ctx, offsetX, offsetY, now);
 
     for (const piece of this.pieces) {
       const reach = piece.cell * 5;

@@ -26,22 +26,23 @@ export function LoginScreen({ onEnter }: LoginScreenProps) {
       </div>
       <div id="desc">
         <p>
-          Welcome to Cell Warz! You are about to enter a multi-player, interactively creative, yet competitively
-          destructive world with nothing but your ninja avatar. But fear not, by wielding the powers of the cell
-          blocks, you can achieve great things!
+          Welcome to Cell Warz! You are about to jack into a multi-player, interactively creative, yet
+          competitively destructive orbital grid with nothing but your ninja avatar. But fear not, by wielding the
+          powers of the cell blocks, you can achieve great things!
           <br />
           <br />
           Instructions:
           <br />
-          You can enter the world in one of two ways: either by re-attaching to an existing avatar or by entering one
-          of the random rooms. Once in a room you can travel to other rooms by entering a doorway portal. Be careful
-          because you can be killed in this world, in which case you will have to re-enter as before (but perhaps
+          You can enter the grid in one of two ways: either by re-attaching to an existing avatar or by entering one
+          of the random rooms. Once in a room you can travel to other rooms by entering a stargate portal. Be careful
+          because you can be flatlined in this world, in which case you will have to re-enter as before (but perhaps
           your cell blocks might not be safe unless you are there).
           <br />
           <br />
           The cell blocks which you will encounter in this world can be activated when you are standing on them, in
           which case you will see "dashboard" icons appear in the top right corner. These will indicate which number
-          keys you can press to use the cell block powers/weapons.
+          keys you can press to use the cell block powers/weapons. Shatter the drifting neon data-blocks in the
+          background to earn credits.
           <br />
           <br />
           Keys:

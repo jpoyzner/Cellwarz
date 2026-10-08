@@ -2,11 +2,16 @@ import type { Analyzer } from './analyzer';
 import { AudioManager } from './audio';
 import { drawLamps } from './lamps';
 import type { Lamp } from './lamps';
-import { Minimap } from './minimap';
+import { classifyImagePaths, Minimap } from './minimap';
+import type { ImageKind } from './minimap';
+import { glowColorForPath, NeonSprites } from './neonSprites';
+import type { ActorTint, BakedSprite } from './neonSprites';
 import { ParticleSystem } from './particles';
+import { PostFx } from './postFx';
 import { LocalPredictor } from './prediction';
 import { SpaceBackground } from './spaceBackground';
 import type { TouchRect } from './spaceBackground';
+import { StationBackdrop } from './stationBackdrop';
 import type { AvatarsMap, BackgroundKind, ConnectPayload, IncomingSprite, SpritesMap, StoredSprite, ToolsMap } from './types';
 
 export interface RendererContext {
@@ -38,9 +43,12 @@ const RECONCILE_SNAP_THRESHOLD_PX = 32;
 const WARP_DETECTION_THRESHOLD_PX = 64;
 const AVATAR_WIDTH_PX = 48;
 const AVATAR_HEIGHT_PX = 64;
-const NAME_TAG_COLOR = '#ffe14d';
+const NAME_TAG_COLOR = '#00f6ff';
 // Mirrors server/session.ts; the server is authoritative, this only drives the immediate on-screen total.
 const POINTS_PER_BLOCK = 20;
+const SCORE_SCRAMBLE_TICKS = 6;
+const SCORE_SCRAMBLE_INTERVAL_MS = 40;
+const SPRITE_GLOW_BLUR_PX = 12;
 
 /** Mirrors js/renderer.js: draws directly to canvas every frame, bypassing React reconciliation for perf. */
 export class Renderer {
@@ -61,6 +69,11 @@ export class Renderer {
   private readonly audio = new AudioManager();
   private readonly particles = new ParticleSystem();
   private readonly predictor = new LocalPredictor();
+  private readonly neon = new NeonSprites();
+  private readonly postFx = new PostFx();
+  private imageKinds: ImageKind[] = [];
+  private glowColors: (string | undefined)[] = [];
+  private scoreScrambleTimer: number | undefined;
   private readonly minimap: Minimap | undefined;
   private minimapOpen = true;
 
@@ -97,7 +110,27 @@ export class Renderer {
     const { scoreEl } = this.context;
     if (!scoreEl) return;
 
-    scoreEl.textContent = String(this.score);
+    const text = String(this.score);
+    if (this.scoreScrambleTimer !== undefined) window.clearInterval(this.scoreScrambleTimer);
+    this.scoreScrambleTimer = undefined;
+
+    if (!scoreEl.textContent || scoreEl.textContent === text) {
+      scoreEl.textContent = text;
+    } else {
+      // Brief "decrypting" digit scramble that always settles on the exact total.
+      let ticks = 0;
+      this.scoreScrambleTimer = window.setInterval(() => {
+        ticks++;
+        if (ticks >= SCORE_SCRAMBLE_TICKS) {
+          window.clearInterval(this.scoreScrambleTimer);
+          this.scoreScrambleTimer = undefined;
+          scoreEl.textContent = text;
+        } else {
+          scoreEl.textContent = text.replace(/\d/g, () => String(Math.floor(Math.random() * 10)));
+        }
+      }, SCORE_SCRAMBLE_INTERVAL_MS);
+    }
+
     const rect = scoreEl.getBoundingClientRect();
     this.scoreTarget = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
   }
@@ -105,6 +138,8 @@ export class Renderer {
   stop(): void {
     this.stopped = true;
     if (this.rafHandle !== undefined) cancelAnimationFrame(this.rafHandle);
+    if (this.scoreScrambleTimer !== undefined) window.clearInterval(this.scoreScrambleTimer);
+    this.audio.dispose();
   }
 
   setMinimapOpen(open: boolean): void {
@@ -131,6 +166,7 @@ export class Renderer {
     this.audio.play('death');
     this.triggerShake(400, 10);
     this.triggerFlash(350, 'rgba(200, 30, 20, 0.35)');
+    this.postFx.triggerGlitch(performance.now(), 450);
 
     if (this.me) {
       this.particles.spawnImpact(this.me[1] + 24, this.me[2] + 32, 18);
@@ -138,6 +174,10 @@ export class Renderer {
   }
 
   loadImages(): void {
+    this.neon.clear();
+    this.imageKinds = classifyImagePaths(this.imagePaths);
+    this.glowColors = this.imagePaths.map(glowColorForPath);
+
     this.imagePaths.forEach((path, i) => {
       const image = new Image();
       image.src = path;
@@ -179,6 +219,7 @@ export class Renderer {
       if (this.hasConnectedOnce && before && Math.hypot(dx, dy) > WARP_DETECTION_THRESHOLD_PX) {
         this.audio.play('portalWarp');
         this.particles.spawnWarp(after[1] + 24, after[2] + 32);
+        this.postFx.triggerGlitch(performance.now(), 350);
       }
 
       this.predictor.reset(after[1]);
@@ -368,7 +409,12 @@ export class Renderer {
       this.worldWidth = worldWidth;
       this.worldHeight = worldHeight;
       this.spaceBackground =
-        kind === 'space' ? new SpaceBackground(worldWidth, worldHeight, canvas.width, canvas.height) : undefined;
+        kind === 'space' || kind === 'station'
+          ? new SpaceBackground(worldWidth, worldHeight, canvas.width, canvas.height)
+          : undefined;
+      if (this.spaceBackground && kind === 'station') {
+        this.spaceBackground.backdrop = new StationBackdrop(canvas.width, canvas.height);
+      }
     }
 
     // The temple image is a DOM layer behind the canvas; the space backdrop is drawn on the canvas itself.
@@ -420,6 +466,7 @@ export class Renderer {
     }
 
     this.drawAvatarsNames(drawOffsetX, drawOffsetY);
+    if (!this.staleMode) this.postFx.apply(ctx, canvas, now);
     this.drawDashboardItems();
     this.drawMinimap(now);
   }
@@ -490,16 +537,41 @@ export class Renderer {
   }
 
   private drawSprites(offsetX: number, offsetY: number): void {
+    const { ctx } = this.context;
+    const playerSpriteIds = new Set(Object.values(this.avatars));
+
     for (const spriteId of Object.keys(this.sprites)) {
       const sprite = this.sprites[spriteId];
-      const image = this.context.images[sprite[0]];
+      const index = sprite[0];
+      const image = this.context.images[index];
       if (!image) continue;
 
       const rendered = this.smoothed.get(spriteId);
-      const x = rendered?.x ?? sprite[1];
-      const y = rendered?.y ?? sprite[2];
+      const x = (rendered?.x ?? sprite[1]) - offsetX;
+      const y = (rendered?.y ?? sprite[2]) - offsetY;
 
-      this.context.ctx.drawImage(image, x - offsetX, y - offsetY);
+      const kind = this.imageKinds[index];
+      let baked: BakedSprite | undefined;
+      if (kind === 'wall') {
+        baked = this.neon.wall(index, image);
+      } else if (kind === 'actor') {
+        const tint: ActorTint =
+          spriteId === this.localSpriteId ? 'local' : playerSpriteIds.has(spriteId) ? 'player' : 'robot';
+        baked = this.neon.actor(index, image, tint);
+      }
+
+      if (baked) {
+        ctx.drawImage(baked.source, x - baked.pad, y - baked.pad);
+        continue;
+      }
+
+      const glow = this.glowColors[index];
+      if (glow) {
+        ctx.shadowColor = glow;
+        ctx.shadowBlur = SPRITE_GLOW_BLUR_PX;
+      }
+      ctx.drawImage(image, x, y);
+      if (glow) ctx.shadowBlur = 0;
     }
   }
 

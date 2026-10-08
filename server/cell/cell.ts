@@ -17,7 +17,7 @@ import { Wall } from '../sprite/wall';
 
 export const OUTER_WALL_SIZE = CellBlock.SIZE * 4;
 
-export type BackgroundKind = 'space' | 'temple';
+export type BackgroundKind = 'space' | 'station' | 'temple';
 
 /** A ceiling lamp (pixels) casting a triangle of light down to `bottomY`, `halfWidth` either side of `x` there. */
 export interface Lamp {
