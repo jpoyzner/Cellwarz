@@ -7,8 +7,10 @@ export default defineConfig({
     {
       command: 'npm run serve',
       url: 'http://localhost:8080',
-      // The planet still flies by, but its pull on avatars/blocks would shove the deterministic movement specs around.
-      env: { CELLWARZ_PLANET_PULL: 'off' },
+      // The planet still flies by, but its pull on avatars/blocks would shove the deterministic movement specs around;
+      // robots and the randomly scattered blocks are left out (only the fixed fixture blocks stay): they would
+      // otherwise kill, shoot or shove test avatars at random.
+      env: { CELLWARZ_PLANET_PULL: 'off', CELLWARZ_ROBOTS: 'off', CELLWARZ_RANDOM_BLOCKS: 'off' },
       reuseExistingServer: !process.env.CI,
     },
     {

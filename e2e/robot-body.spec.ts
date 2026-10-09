@@ -16,7 +16,6 @@ test('after being turned into a robot, the camera keeps following the robot body
       connect: '0',
       sprites: renderer.sprites,
       avatars: {},
-      tools: {},
       imagePaths: renderer.imagePaths,
       background: renderer.backgroundKind,
       worldWidth: 4000,

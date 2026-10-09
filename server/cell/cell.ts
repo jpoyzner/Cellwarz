@@ -8,12 +8,18 @@ import type { World } from '../world';
 import { Avatar } from '../sprite/avatar';
 import { CellBlock } from '../sprite/cellBlock';
 import type { Entrance } from '../sprite/entrance';
+import { GravityBlock } from '../sprite/gravityBlock';
 import { Ice } from '../sprite/ice';
 import { Launcher } from '../sprite/launcher';
 import { Mana } from '../sprite/mana';
+import { Missile } from '../sprite/missile';
 import { Portal } from '../sprite/portal';
+import { RainbowBlock } from '../sprite/rainbowBlock';
 import { Robot } from '../sprite/robot';
+import { RocketLauncher } from '../sprite/rocketLauncher';
+import { Shield } from '../sprite/shield';
 import { SpawnPortal } from '../sprite/spawnPortal';
+import { StickyBlock } from '../sprite/stickyBlock';
 import { Thruster } from '../sprite/thruster';
 import { Wall } from '../sprite/wall';
 
@@ -63,7 +69,8 @@ export abstract class Cell {
     }
   }
 
-  init(): Cell {
+  /** Registers every sprite type's art, always in the same order (the frame tables are shared across rooms). */
+  protected initSprites(): void {
     Avatar.init(this.data);
     CellBlock.init(this.data);
     SpawnPortal.init(this.data);
@@ -71,6 +78,16 @@ export abstract class Cell {
     Thruster.init(this.data);
     Launcher.init(this.data);
     Ice.init(this.data);
+    Shield.init(this.data);
+    GravityBlock.init(this.data);
+    StickyBlock.init(this.data);
+    RainbowBlock.init(this.data);
+    Missile.init(this.data);
+    RocketLauncher.init(this.data);
+  }
+
+  init(): Cell {
+    this.initSprites();
 
     const wallWidth = Math.floor(this.width / CellBlock.SIZE);
     const wallHeight = Math.floor(this.height / CellBlock.SIZE);
@@ -128,43 +145,42 @@ export abstract class Cell {
       }
     }
 
-    for (let i = 0; i < this.getNumBoosters(); i++) {
-      try {
-        new Thruster(this.getRandomX(Mana.SIZE), this.getRandomY(Mana.SIZE), true, this);
-      } catch (e) {
-        if (e instanceof ClusteredInitException) i--;
-        else throw e;
-      }
-    }
+    this.spawnPickupsAndRobots((spriteSize) => this.getRandomX(spriteSize));
 
-    for (let i = 0; i < this.getNumLaunchers(); i++) {
-      try {
-        new Launcher(this.getRandomX(Mana.SIZE), this.getRandomY(Mana.SIZE), true, this);
-      } catch (e) {
-        if (e instanceof ClusteredInitException) i--;
-        else throw e;
-      }
-    }
+    return this;
+  }
 
-    for (let i = 0; i < this.getNumIce(); i++) {
-      try {
-        new Ice(this.getRandomX(Mana.SIZE), this.getRandomY(Mana.SIZE), true, this);
-      } catch (e) {
-        if (e instanceof ClusteredInitException) i--;
-        else throw e;
+  /** Scatters every kind of block and the robots at random spots; `randomX` lets a room keep some columns clear. */
+  protected spawnPickupsAndRobots(randomX: (spriteSize: number) => number): void {
+    const blocks: Array<[number, (x: number, y: number) => Mana]> = [
+      [this.getNumBoosters(), (x, y) => new Thruster(x, y, true, this)],
+      [this.getNumLaunchers(), (x, y) => new Launcher(x, y, true, this)],
+      [this.getNumIce(), (x, y) => new Ice(x, y, true, this)],
+      [this.getNumShields(), (x, y) => new Shield(x, y, true, this)],
+      [this.getNumGravityBlocks(), (x, y) => new GravityBlock(x, y, true, this)],
+      [this.getNumStickyBlocks(), (x, y) => new StickyBlock(x, y, true, this)],
+      [this.getNumRainbowBlocks(), (x, y) => new RainbowBlock(x, y, true, this)],
+    ];
+
+    for (const [count, create] of blocks) {
+      for (let i = 0; i < count; i++) {
+        try {
+          create(randomX(Mana.SIZE), this.getRandomY(Mana.SIZE));
+        } catch (e) {
+          if (e instanceof ClusteredInitException) i--;
+          else throw e;
+        }
       }
     }
 
     for (let i = 0; i < this.getNumRobots(); i++) {
       try {
-        new Robot(this.getRandomX(Avatar.WIDTH), this.getRandomY(Avatar.HEIGHT), true, this);
+        new Robot(randomX(Avatar.WIDTH), this.getRandomY(Avatar.HEIGHT), true, this);
       } catch (e) {
         if (e instanceof ClusteredInitException) i--;
         else throw e;
       }
     }
-
-    return this;
   }
 
   protected getRandomX(spriteSize: number): number {
@@ -250,6 +266,23 @@ export abstract class Cell {
   /** Purely cosmetic client-drawn background TVs; the client picks and plays the video. */
   getTvs(): Tv[] {
     return [];
+  }
+
+  /** Counts of the newer block kinds default to none; rooms opt in by overriding. */
+  getNumShields(): number {
+    return 0;
+  }
+
+  getNumGravityBlocks(): number {
+    return 0;
+  }
+
+  getNumStickyBlocks(): number {
+    return 0;
+  }
+
+  getNumRainbowBlocks(): number {
+    return 0;
   }
 
   abstract getMinCellWidth(): number;

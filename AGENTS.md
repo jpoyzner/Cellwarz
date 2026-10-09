@@ -30,7 +30,8 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   hole bridged by four straight-up/down stepping-stone columns, scattered decorative blocks, two animated
   `Portal` "stargates" (walking into either warps the avatar to a random other room's spawn portal) in the top
   corners, and one small floating `SpawnPortal` (avatars are deposited/warped-in here) at the bottom center;
-  only its mana/`Robot` pickup positions are still randomized per instance. MainRoom also **wraps at its edges**
+  only its coloured-block/`Robot` positions are still randomized per instance (plus three fixed fixture blocks, see
+  the e2e note below). MainRoom also **wraps at its edges**
   (`Cell.wrapsAtEdges()` → `CellData` wraps a moved sprite's x/y modulo the grid): the outer walls are kept but have
   openings — two 4-block floor/ceiling ones inset 30 blocks from the end walls, and two per end wall (second- and
   third-platform levels, on a ~12-unit sill so they take a jump to reach) — so leaving through one comes out the
@@ -43,7 +44,8 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   `[imageIndex, xPixels, yPixels, extraInfo?]` per sprite keyed by cell index, and `[-1]` means "deleted this
   frame" — this is a size/perf optimization for frequent redraw messages, preserve it when touching this path.
   **Redraw-only frames are the sprite map itself (flat, unwrapped)**; only full-refresh frames (on login/stale)
-  wrap it under a `sprites` key alongside `avatars`/`tools`/`imagePaths` — see `SocketHub.renderClient()`.
+  wrap it under a `sprites` key alongside `avatars`/`imagePaths` — see `SocketHub.renderClient()`. (The old `tools`
+  dashboard payload went away with the "tap into a block" mechanic.)
 - **Client** (`src/`, served from `dist/` in production): React app. `App.tsx` switches between `LoginScreen` and
   `GameCanvas`. `GameCanvas` owns the `<canvas>` and, in a single `useEffect`, wires up `game/ui.ts` (input),
   `game/renderer.ts` (canvas drawing from server JSON), `game/syncer.ts` (the `WebSocket` connection), and
@@ -65,8 +67,41 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   decelerating jump *arc* was deliberately **not** added server-side (it would need either shrinking the
   reachable height within the same frame budget, risking breaking existing jump-gap traversal, or subpixel
   positions) — the client's render-smoothing layer below covers the visual want instead.
+- **Coloured blocks ("mana")** (`server/sprite/`): `Mana` is the abstract base (3x3, `OBJECT_LAYER`, mass 1 — light
+  enough that an avatar/robot pushes it; 0 while carried). Its own motion model (not `Physics.gravitate`) lives in
+  `Mana.stepMotion()`: float velocities `vx`/`vy` (cells/frame, sub-cell remainders carried) on a shared
+  [ManaBody](server/sprite/manaBody.ts), gravity 0.1/frame², ground friction (shoves slide a few cells and stop),
+  landing restitution 0.5 (bounce height grows with fall height; tiny rebounds settle), moves made one cell at a time
+  through `Physics.move`. Shoves arrive through the generic `Sprite.onPushed(x, y)` hook that `Physics` calls after a
+  successful push (don't special-case block types in `Physics`). Subclass hooks: `onFrame()` (runs even while
+  carried), `getGravityDirection()`, `getSlideDrive()`, `acceptsImpulses()`, `canBondWith()`, `onTouched()` (an
+  avatar touched or picked it up — `Avatar.touchAdjacentMana()` scans the one-cell ring around the avatar each frame;
+  robots don't), `onImpact(wasThrown)`. Colours → classes: yellow [Thruster](server/sprite/thruster.ts) (reverses
+  gravity once touched/picked up), red [Launcher](server/sprite/launcher.ts) (5s fuse then explosion: kill radius
+  14 with a line-of-sight check to head/middle/feet, shove radius 30), blue [Ice](server/sprite/ice.ts) (constant
+  slide drive, never turns), green [Shield](server/sprite/shield.ts) (+ [ShieldBubble](server/sprite/shieldBubble.ts)),
+  purple [GravityBlock](server/sprite/gravityBlock.ts) (impulses toward itself), orange
+  [StickyBlock](server/sprite/stickyBlock.ts) (merges `ManaBody`s with adjacent blocks), rainbow
+  [RainbowBlock](server/sprite/rainbowBlock.ts) (wall-following crawl, shatters into [Diamond](server/sprite/diamond.ts)s
+  when a thrown one hits something). **Rigid groups**: `Sprite.getRigidGroup()` (generic hook; sticky blocks share a
+  body) makes `Physics.move` move all members as one or none, and `Physics.canInteract` ignores group mates.
+  `Physics.move` is also guarded against re-entrancy (a `moving` set): a sprite already being moved up the call stack is
+  just blocked — two overlapping sprites can each count as "on top" of the other, which used to recurse forever.
+  **Ghost-layer sprites**: visual/effect sprites (`ShieldBubble`, `Explosion`, `Diamond`, `RocketLauncher`) use
+  `Physics.BACKGROUND_LAYER` (nothing treats it as an obstacle), `melts()` true, mass 0, and `isStable()` true so a mover
+  doesn't drag them (a `Shield` re-creates/re-positions its bubble each frame; `Robot`/`Shield` override
+  `removePermanently()` to take their prop/bubble with them). Controls (`server/ui.ts`): Space picks up the block under
+  your feet, or throws it if you're carrying one (`Avatar.throwMana`: launch velocity 0.8 forward, -1.5 up); Down puts it
+  back (`putDownMana`); there is no "tap in"/structure/mana-action/dashboard code any more.
+- **Robot rockets**: `Robot` (`server/sprite/robot.ts`) runs a small `idle → drawing → putting-away` state machine
+  (`updateRocketAttack`): every `EIGHTH_STEP` frames it looks for the nearest real player (`Avatar.isRobot()` false)
+  in range (24–70 cells away, ≤30 cells of height difference) for which `aimAt()` solves a launch velocity and
+  `Missile.pathReaches()` (a dry-run of the same integrator the rocket uses) finds a clear arc. It then stops, spawns a
+  [RocketLauncher](server/sprite/rocketLauncher.ts) prop, fires a `Missile` with a launch vector after ~0.5s (re-aiming at
+  the target's then-position), and puts the prop away. `Missile` takes an optional `{ vx, vy }` launch (gravity
+  `ROCKET_GRAVITY`) and dies on solid walls/blocks, shield bubbles and the room's edges; it never hurts robots.
 - **Death feedback**: `Avatar.die(knockbackXDirection?, knockbackYDirection?)` takes an optional knockback
-  direction (missiles knock back along their flight direction, engine fire knocks upward) applied via one
+  direction (rockets knock back along their flight direction, explosions away from the blast) applied via one
   `Physics.move` before `removePermanently()` — death is still a single hit, this only adds physicality to it.
   Because a dying player's own `SocketHub.renderClient()` otherwise goes silent forever the instant their
   session unplugs (no avatar left to render for them), it sends one one-shot `{ died: true }` message first so
@@ -140,7 +175,7 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   [planet.ts](src/game/planet.ts)): `PlanetField` keeps one planet at a time crossing the room (random size/speed/
   height/direction/`seed`), stepped from `Cell.process()`, replaced by a new one once fully off the far side. It
   is not a `Sprite` (no grid presence/collision); its pull is applied each step to sprites whose
-  `isAffectedByPlanets()` is true (Avatar incl. Robot, Mana subclasses) via ordinary `Physics.move`s with a
+  `isAffectedByPlanets()` is true (Avatar incl. Robot, every Mana subclass except the rainbow block) via ordinary `Physics.move`s with a
   per-sprite fractional accumulator, so walls/mass still block it. Range = 6 avatar heights from the surface,
   quadratic falloff, peak `MAX_PULL_PER_FRAME` = 0.55 grid units/frame at the surface (below gravity's 1, so outside
   the planet it never lifts anything); *inside* its disc the pull is a flat `INSIDE_PULL_PER_FRAME` = 1.2 (client
@@ -157,6 +192,13 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   bands, ring) is derived from `seed`. Background tetrominoes are pulled/swallowed client-side
   (`SpaceBackground.pullPiece`/`consumePiece`: reaching the core shrinks it away over `PLANET_CONSUME_MS`, no shards); the minimap draws it in amber. `CELLWARZ_PLANET_PULL=off` disables only the server
   pull (Playwright sets it for its own server).
+- **Diamonds** (`#diamonds`, under the score, marked with a 💎 via CSS `::before`): `Diamond.collect()` credits
+  `Session.addDiamonds` for the first real player (not a robot) overlapping it; `SocketHub` sends `{ diamonds: n }` as a
+  separate one-shot message when the count changes (and `diamonds` in the full-state payload) so the flat redraw frames
+  stay untouched; `Renderer.setDiamonds()` updates the HUD. Explosions are detected client-side by new sprites whose
+  image path is under `/effects/explosion/` (bang, sparks, a distance-faded shake). New block/effect art lives under
+  `public/images/{mana/*,effects,weapons}` (generated from the original yellow/red tile art by hue-shifting; frame names
+  follow `addAction`: `name1..N`, mirrored frames get an `L` suffix).
 - **Score** (top-right `#score` DOM element): when the *local* avatar shatters a background piece, its shards
   (`collect` shards in [spaceBackground.ts](src/game/spaceBackground.ts)) burst out, then home in on the HUD
   (converted to world coordinates by the camera offset) and are counted on arrival; `Renderer` adds 20/block and
@@ -184,7 +226,13 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   fully custom, deterministic layout (like [MainRoom](server/cell/mainRoom.ts)) can instead override `init()`
   itself — `Cell.entrances` and `Cell.getRandomX`/`getRandomY` are `protected` specifically to support this.
   `Cell.addAvatarAtEntrance` picks a random entry from `entrances` (an avatar can be deposited at any of them,
-  e.g. MainRoom's two `SpawnPortal`s), not just a single fixed spot.
+  e.g. MainRoom's two `SpawnPortal`s), not just a single fixed spot. `Cell.initSprites()` registers every sprite
+  type's art (keep it the single place, in a fixed order), and `Cell.spawnPickupsAndRobots()` scatters the blocks and
+  robots from the `getNum*()` counts (the newer block kinds default to 0 in `Cell`; MainRoom overrides them).
+- Known pre-existing quirk, worth knowing when debugging block interactions: `CellData.adjustClipping` removes the wrong
+  column/row (off by one) when a frame is clipped on the right/bottom, so a standing avatar's map footprint has a
+  phantom extra column beside it. Effect: a block directly beside an avatar can be held down/up by it (a risen yellow
+  block won't rise until the avatar steps away). Left alone on purpose (unrelated, touches all avatar collisions).
 - Sprite subclasses under `server/sprite/` follow a consistent pattern: static `init(CellData)` registers
   animation frames/images once per cell (shared static `Map`, not per-instance — this only stays correct because
   every `CellData` registers images in the same deterministic order), instance constructors take
@@ -194,19 +242,27 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   every "back-reference" is a **type-only import** (`import type`), which is erased at build time — never
   change one of these to a value import without checking the dependency direction first.
 - Because every login shares the one `MainRoom` and avatars are never cleaned up on disconnect (see the
-  `Session.unplug()` TODO below), e2e specs that depend on deterministic positions/timing (mana pickup, portal
-  warp, death/respawn, multiplayer visibility — see [main-room-workflows.spec.ts](e2e/main-room-workflows.spec.ts))
+  `Session.unplug()` TODO below), e2e specs that depend on deterministic positions/timing (block touch/pickup/throw,
+  explosions, portal warp, death/respawn, multiplayer visibility — see [main-room-workflows.spec.ts](e2e/main-room-workflows.spec.ts))
   run inside one `test.describe.configure({ mode: 'serial' })` block so their avatars can't push/collide with
   each other; they also lean on shared helpers in [e2e/gameHelpers.ts](e2e/gameHelpers.ts) (`walkTo` jumps only
   when the avatar's x actually stalls, rather than blindly, to avoid climbing MainRoom's stepping-stone columns
   by accident; `waitUntilGrounded` polls until an avatar's y stops changing, since a fresh spawn now free-falls a
-  short distance from its floating `SpawnPortal` before landing) and a small keepout zone in `MainRoom` so
-  randomly-placed mana/robots can't spawn on the fixed
-  test fixtures or block the floor path e2e tests walk (robots can still *wander* into that zone while
-  patrolling, since only their spawn position is constrained — watch for e2e flakiness from this and tighten
-  further if it shows up). Remaining e2e gaps: death-by-engine-fire specifically (only death-by-missile is
-  automated so far), general mana/booster/ice positions elsewhere in the room are still randomized, and robots
-  have unit coverage ([server/__tests__/robot.test.ts](server/__tests__/robot.test.ts)) but no e2e coverage yet.
+  short distance from its floating `SpawnPortal` before landing; `standOnBlock` backs off, then jumps while running right
+  and lets go over the block to land on it; `hopTo` runs right while jumping every ~600ms to clear fixtures — blocks
+  are shoveable and nothing on the floor stops them, so "walk into it, jump when stuck" doesn't work) and a
+  small keepout zone in `MainRoom` so randomly-placed blocks/robots can't spawn on the fixed fixtures or block the floor
+  path e2e tests walk. The fixed fixtures are a yellow, a green and a red block at `TEST_FIXTURE_PIXELS`, resting
+  on the floor with nothing behind them (the bottom floor is a free-running track: `MainRoom` builds no wall blocks on
+  it and skips any stepping stone within an avatar's height of it, covered by
+  [mainRoomBlocks.test.ts](server/__tests__/mainRoomBlocks.test.ts)); they sit far enough right of the spawn that other specs' short walks never
+  touch them (touching is one-shot for yellow and red). Because blocks and robots now move around on their own, the
+  Playwright config starts the server with `CELLWARZ_PLANET_PULL=off CELLWARZ_ROBOTS=off CELLWARZ_RANDOM_BLOCKS=off`
+  (`MainRoom` reads the last two: no robots, no random blocks — only the fixtures stay). Remaining e2e gaps: robots
+  (unit-tested only: [robot.test.ts](server/__tests__/robot.test.ts) and the rocket tests in
+  [specialBlocks.test.ts](server/__tests__/specialBlocks.test.ts)) and the purple/orange/rainbow/blue/green-bubble
+  behaviors (unit-tested only). A dying player's own client stops receiving frames, so e2e checks a death from a
+  *second* browser context (see the red-block spec).
   A `Robot` that is blocked by a solid obstacle stands still (facing it) for `TURN_AROUND_PAUSE_FRAMES` (one second),
   then `Robot.turnAround()` reverses direction, and it keeps patrolling indefinitely — re-enabled via
   `MainRoom.getNumRobots()` now that this is covered. **Robots are lethal**: every frame `Robot.killTouchedPlayers()`
@@ -218,7 +274,7 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   body — death ping, then one full refresh carrying `following` (the robot's cell index, null otherwise), then ordinary
   redraw frames — and the client's `Renderer` follows that sprite with the camera (`followSpriteId`) while drawing it
   as a normal red robot (it isn't in `avatars`, so `neonSprites` tints it as a robot). A `Missile` never wraps at a
-  room's side edges (`Missile.doAction` ends it at the grid boundary even in wrapping rooms like `MainRoom`).
+  room's edges (`Missile.doAction` ends it at the grid boundary even in wrapping rooms like `MainRoom`).
 - A few spots intentionally diverge from the original Java's crash-on-null behavior: e.g.
   `Cell.addAvatarAtEntrance` and `Portal.warpRandomly` fail gracefully (no-op) instead of throwing an NPE when a
   room has no free entrance spot. This is called out with comments at each site.

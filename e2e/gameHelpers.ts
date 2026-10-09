@@ -102,3 +102,92 @@ export async function walkTo(
     await page.keyboard.up(key);
   }
 }
+
+/** Runs right while jumping every ~600ms until the avatar's x reaches `targetX - tolerance`, hopping over any blocks in the way. */
+export async function hopTo(page: Page, loginName: string, targetX: number, opts: { tolerance?: number; timeoutMs?: number } = {}): Promise<void> {
+  const tolerance = opts.tolerance ?? 40;
+  const deadline = Date.now() + (opts.timeoutMs ?? 30000);
+
+  await page.keyboard.down('ArrowRight');
+  try {
+    while (Date.now() < deadline) {
+      const pos = await getAvatarPosition(page, loginName);
+      if (pos && pos.x >= targetX - tolerance) return;
+
+      await page.keyboard.press('ArrowUp');
+      await page.waitForTimeout(600);
+    }
+    throw new Error(`hopTo timed out before reaching x=${targetX} (loginName=${loginName})`);
+  } finally {
+    await page.keyboard.up('ArrowRight');
+  }
+}
+
+interface BlockSnapshot {
+  avatar: { x: number; y: number } | null;
+  block: { x: number; y: number } | undefined;
+}
+
+async function snapshotAvatarAndBlock(page: Page, loginName: string, blockId: string): Promise<BlockSnapshot> {
+  return page.evaluate(
+    ({ name, id }) => {
+      const state = window.__cellwarz;
+      const spriteId = state?.renderer.avatars[name];
+      const avatar = spriteId !== undefined ? state?.renderer.sprites[spriteId] : undefined;
+      const block = state?.renderer.sprites[id];
+      return { avatar: avatar ? { x: avatar[1], y: avatar[2] } : null, block: block ? { x: block[1], y: block[2] } : undefined };
+    },
+    { name: loginName, id: blockId },
+  );
+}
+
+/** Whether the avatar's feet rest on the block's top edge, overlapping it horizontally (px; avatar is 64px tall). */
+function isStandingOn({ avatar, block }: BlockSnapshot): boolean {
+  return !!avatar && !!block && avatar.y + 64 === block.y && avatar.x + 8 < block.x + 24 && avatar.x + 40 > block.x;
+}
+
+/** Holds `key` until `done` is true for the avatar's x (polling quickly so it stops within a cell or so). */
+async function holdUntil(page: Page, loginName: string, key: 'ArrowLeft' | 'ArrowRight', done: (x: number) => boolean, timeoutMs = 8000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  await page.keyboard.down(key);
+  try {
+    while (Date.now() < deadline) {
+      const pos = await getAvatarPosition(page, loginName);
+      if (pos && done(pos.x)) return;
+      await page.waitForTimeout(30);
+    }
+  } finally {
+    await page.keyboard.up(key);
+  }
+}
+
+/**
+ * Gets the avatar standing on top of a block resting on the floor (a 3-cell block with nothing solid behind it, so
+ * it would be shoved if walked into): backs off to the left of it, then jumps while running right and lets go of
+ * the key once it's above the block, so it drops straight onto it without ever touching its side.
+ */
+export async function standOnBlock(page: Page, loginName: string, blockId: string, attempts = 4): Promise<void> {
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    let snapshot = await snapshotAvatarAndBlock(page, loginName, blockId);
+    if (isStandingOn(snapshot)) return;
+    if (!snapshot.avatar || !snapshot.block) throw new Error(`Avatar or block missing (loginName=${loginName})`);
+
+    const blockX = snapshot.block.x;
+    if (snapshot.avatar.x > blockX - 90) {
+      await holdUntil(page, loginName, 'ArrowLeft', (x) => x <= blockX - 100);
+    } else if (snapshot.avatar.x < blockX - 140) {
+      await walkTo(page, loginName, 'ArrowRight', blockX - 100, { tolerance: 8 });
+    }
+    await page.waitForTimeout(150);
+
+    await page.keyboard.press('ArrowUp');
+    // Releases as soon as the avatar's body (40px of its 48px sprite) overlaps the block's top.
+    await holdUntil(page, loginName, 'ArrowRight', (x) => x + 40 >= blockX + 6, 1500);
+    await waitUntilGrounded(page, loginName);
+
+    snapshot = await snapshotAvatarAndBlock(page, loginName, blockId);
+    if (isStandingOn(snapshot)) return;
+  }
+
+  throw new Error(`Could not climb onto the block (loginName=${loginName})`);
+}

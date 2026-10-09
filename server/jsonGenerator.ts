@@ -3,9 +3,7 @@ import type { Sprite } from './sprite/sprite';
 
 const DELETED_CODE = -1;
 const AVATAR_NAME_KEY = '0';
-const DASHBOARD_IMAGE_KEY = '1';
 const CONSUME_SCALE_KEY = '2';
-const TOOLS_DELETED_KEY = '-1';
 
 export type JsonSprite = [number] | [number, number, number] | [number, number, number, Record<string, unknown>];
 
@@ -13,12 +11,7 @@ export type JsonSprite = [number] | [number, number, number] | [number, number, 
  * A terse per-frame sprite list keyed by cell index: [imageIndex, xPixels, yPixels, extraInfo?].
  * `[-1]` means "deleted this frame". Kept compact intentionally — this is a hot path (48 FPS).
  */
-export function getSprites(sprites: Sprite[], addExtraInfo: boolean, sessionAvatar: Avatar | undefined): Record<string, JsonSprite> {
-  let extraToolsInfo: Record<string, number> | undefined;
-  if (addExtraInfo && sessionAvatar?.needsStructureChangeUpdate()) {
-    extraToolsInfo = getTools(sessionAvatar);
-  }
-
+export function getSprites(sprites: Sprite[], addExtraInfo: boolean): Record<string, JsonSprite> {
   const jsonSprites: Record<string, JsonSprite> = {};
 
   for (const sprite of sprites) {
@@ -32,10 +25,6 @@ export function getSprites(sprites: Sprite[], addExtraInfo: boolean, sessionAvat
       if (addExtraInfo && sprite instanceof Avatar) {
         if (sprite.showName()) {
           extraInfo = { [AVATAR_NAME_KEY]: sprite.getName() };
-        }
-
-        if (sprite === sessionAvatar && extraToolsInfo) {
-          extraInfo = { ...(extraInfo ?? {}), [DASHBOARD_IMAGE_KEY]: extraToolsInfo };
         }
       }
 
@@ -54,20 +43,4 @@ export function getSprites(sprites: Sprite[], addExtraInfo: boolean, sessionAvat
   }
 
   return jsonSprites;
-}
-
-export function getTools(avatar: Avatar): Record<string, number> {
-  const tools: Record<string, number> = {};
-  const structure = avatar.getStructure();
-
-  if (!structure) {
-    tools[TOOLS_DELETED_KEY] = DELETED_CODE;
-  } else {
-    const manas = structure.getManas();
-    for (let i = 0; i < manas.length; i++) {
-      tools[String(i)] = manas[i].getDashboardImageIndex();
-    }
-  }
-
-  return tools;
 }

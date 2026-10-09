@@ -25,8 +25,8 @@ export function GameCanvas({ loginName, jump, onExit }: GameCanvasProps) {
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const backgroundRef = useRef<HTMLDivElement | null>(null);
-  const dashboardRef = useRef<HTMLDivElement | null>(null);
   const scoreRef = useRef<HTMLDivElement | null>(null);
+  const diamondsRef = useRef<HTMLDivElement | null>(null);
   const minimapCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const rendererRef = useRef<Renderer | null>(null);
   const [minimapOpen, setMinimapOpen] = useState(true);
@@ -51,8 +51,8 @@ export function GameCanvas({ loginName, jump, onExit }: GameCanvasProps) {
       ctx,
       canvas,
       backgroundEl: backgroundRef.current,
-      dashboardEl: dashboardRef.current,
       scoreEl: scoreRef.current,
+      diamondsEl: diamondsRef.current,
       minimapCanvas: minimapCanvasRef.current,
       images: [],
       loginName,
@@ -87,10 +87,8 @@ export function GameCanvas({ loginName, jump, onExit }: GameCanvasProps) {
       <canvas id="canvas" ref={canvasRef} />
       <div id="crt" />
       <div id="score" ref={scoreRef} />
-      <div id="mana1" className="dash-icon" ref={dashboardRef} />
-      <div id="mana2" className="dash-icon" />
-      <div id="mana3" className="dash-icon" />
-      {/* Not a <button>: a focused button would also fire on Space, which is the in-game mana pickup key. */}
+      <div id="diamonds" ref={diamondsRef} />
+      {/* Not a <button>: a focused button would also fire on Space, which is the in-game block pickup/throw key. */}
       <div id="minimap" className={minimapOpen ? 'minimap' : 'minimap minimap-closed'}>
         <canvas id="minimap-canvas" ref={minimapCanvasRef} />
         <div

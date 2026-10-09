@@ -1,6 +1,6 @@
 import type { RawData, WebSocket } from 'ws';
 import { Engine } from './engine';
-import { getSprites, getTools } from './jsonGenerator';
+import { getSprites } from './jsonGenerator';
 import type { World } from './world';
 import { Session } from './session';
 import type { Cell } from './cell/cell';
@@ -11,7 +11,6 @@ const LOGIN_PARAM = 'login';
 const JUMP_PARAM = 'jump';
 const SPRITES_KEY = 'sprites';
 const AVATARS_KEY = 'avatars';
-const TOOLS_KEY = 'tools';
 const IMAGE_PATHS_KEY = 'imagePaths';
 const BACKGROUND_KEY = 'background';
 const KEY_PARAM = 'key';
@@ -19,6 +18,7 @@ const DOWN_PARAM = 'down';
 const DIED_PARAM = 'died';
 const SCORED_PARAM = 'scored';
 const SCORE_KEY = 'score';
+const DIAMONDS_KEY = 'diamonds';
 const PLANET_KEY = 'planet';
 // Clients extrapolate the planet from its velocity, so a periodic resync only has to correct small drift.
 const PLANET_RESYNC_MS = 2000;
@@ -33,6 +33,7 @@ export class SocketHub {
   private diedNotified = false;
   private sentPlanetId: number | undefined;
   private sentPlanetAt = 0;
+  private sentDiamonds = 0;
 
   constructor(
     private readonly world: World,
@@ -155,12 +156,13 @@ export class SocketHub {
       this.send(this.getCellState(cell)); // full refresh, telling the client which sprite its camera now follows
     }
     this.sendPlanetIfDue(cell);
+    this.sendDiamondsIfChanged(session.getDiamonds());
     const needsRefresh = this.world.getZion().stale(this.login);
 
     // Redraw-only frames are the sprite map itself (flat, unwrapped) — matches the original terse wire protocol.
     const json: Record<string, unknown> = needsRefresh
       ? this.getCellState(cell)
-      : (getSprites(cell.getEngine().getRedrawSprites(), true, avatar) as Record<string, unknown>);
+      : (getSprites(cell.getEngine().getRedrawSprites(), true) as Record<string, unknown>);
 
     this.send(json);
 
@@ -171,7 +173,14 @@ export class SocketHub {
     this.inactivityCount++;
   }
 
-  // A separate one-shot message (not a key in the flat redraw frame) so the terse sprite-map wire format stays intact.
+  // A separate one-shot message (like the planet's) so the terse sprite-map wire format stays intact.
+  private sendDiamondsIfChanged(diamonds: number): void {
+    if (diamonds === this.sentDiamonds) return;
+
+    this.sentDiamonds = diamonds;
+    this.send({ [DIAMONDS_KEY]: diamonds });
+  }
+
   private sendPlanetIfDue(cell: Cell): void {
     const planet = cell.getPlanet();
     if (!planet) return;
@@ -199,16 +208,17 @@ export class SocketHub {
     const session = this.login ? this.world.getZion().getHardlines().get(this.login) : undefined;
     const sessionAvatar = session?.getAvatar();
     const robotBody = sessionAvatar ? undefined : session?.getRobotBody();
-    const score = this.login ? (this.world.getZion().getHardlines().get(this.login)?.getScore() ?? 0) : 0;
+    const score = session?.getScore() ?? 0;
+    const diamonds = session?.getDiamonds() ?? 0;
+    this.sentDiamonds = diamonds;
 
     const planet = cell.getPlanet();
     if (planet) this.markPlanetSent(planet.id);
 
     return {
       [CONNECT_PARAM]: '0',
-      [SPRITES_KEY]: getSprites(cell.getCellData().getSprites(), false, undefined),
+      [SPRITES_KEY]: getSprites(cell.getCellData().getSprites(), false),
       [AVATARS_KEY]: avatars,
-      [TOOLS_KEY]: sessionAvatar ? getTools(sessionAvatar) : {},
       [IMAGE_PATHS_KEY]: cell.getCellData().getImagePaths(),
       [BACKGROUND_KEY]: cell.getBackground(),
       worldWidth: cell.getMinCellWidth(),
@@ -218,6 +228,7 @@ export class SocketHub {
       tvs: cell.getTvs(),
       [PLANET_KEY]: planet ?? null,
       [SCORE_KEY]: score,
+      [DIAMONDS_KEY]: diamonds,
     };
   }
 

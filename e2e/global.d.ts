@@ -18,6 +18,7 @@ declare global {
         avatars: Record<string, string>;
         backgroundKind: 'space' | 'station' | 'temple' | undefined;
         score: number;
+        diamonds: number;
         isMusicPlaying: boolean;
         drawStaleScreen: () => void;
         tvs: Array<{ x: number; y: number; width: number; height: number; chainTopY: number }>;

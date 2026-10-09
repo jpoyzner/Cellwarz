@@ -34,12 +34,13 @@ export function LoginScreen({ onEnter }: LoginScreenProps) {
           Instructions:
           <br />
           You can enter the grid in one of two ways: either by re-attaching to an existing avatar or by respawning
-          completely. The cell blocks which you will encounter in this world can be activated when you are standing on
-          them, in which case you will see "dashboard" icons appear in the top right corner. These will indicate which
-          number keys you can press to use the cell block powers/weapons.
+          completely. The cell blocks which you will encounter in this world are light enough to shove around, and each
+          colour behaves differently: touch or pick one up and see what happens. Break a rainbow block by throwing it
+          and collect the blue diamonds it leaves behind.
           <br />
           <br />
-          Watch out for the ninja robots! They look like us but they will reprogram you on contact.
+          Watch out for the ninja robots! They look like us but they will reprogram you on contact, and when they spot
+          you from a distance they pull out a rocket launcher.
           <br />
           <br />
           Keys:
@@ -48,9 +49,9 @@ export function LoginScreen({ onEnter }: LoginScreenProps) {
           <br />
           Left/Right: run
           <br />
-          Down: activate/deactivate cell block
+          Down: put down the cell block you are carrying
           <br />
-          Spacebar: pick up or drop a cell block
+          Spacebar: pick up the cell block you are standing on; press it again to throw it
           <br />
           Escape: leave the grid and return to this screen (your avatar stays put; use Reattach! to return to it)
         </p>

@@ -7,7 +7,7 @@ import type { CellData } from '../cellData';
 import { Sprite } from './sprite';
 import { Mana } from './mana';
 import { Portal } from './portal';
-import type { Structure } from './structure';
+import { getAdjacentSprites } from './adjacent';
 import { addAction, addClippedAction } from './frames';
 
 export const STAND_RIGHT_ACTION = 'stand_right';
@@ -24,6 +24,9 @@ export const LAND_LEFT_ACTION = 'land_left';
 const RUN_STEP_DISTANCE = 1;
 const JUMP_DISTANCE = 1;
 const DEATH_KNOCKBACK_DISTANCE = 3;
+// A thrown block's launch velocity (cells per frame): forward and up, so it flies in a short arc.
+const THROW_SPEED_X = 0.8;
+const THROW_SPEED_Y = -1.5;
 
 export const FULL_JUMP_ACTION_LENGTH = 24;
 const JUMP_ACTION_LENGTH = 10;
@@ -51,8 +54,6 @@ export class Avatar extends Sprite {
   private readonly name: string;
 
   private session: Session | undefined;
-  private structure: Structure | undefined;
-  private structureChangeUpdate = 0;
   private firstDraw: number;
   private handledMana: Mana | undefined;
 
@@ -164,34 +165,34 @@ export class Avatar extends Sprite {
       this.slidePower = Physics.NONE;
     }
 
-    this.checkStructureConnection();
+    this.touchAdjacentMana();
 
     if (this.firstDraw !== 0) {
       this.firstDraw--;
-    }
-
-    if (this.structureChangeUpdate !== 0) {
-      this.structureChangeUpdate--;
     }
   }
 
   // TODO: issue when walking under something just tall enough for avatar when handling mana.
   private adjustHandledMana(): void {
+    if (this.handledMana?.removed()) {
+      this.handledMana = undefined;
+    }
+
     if (this.handledMana) {
       this.physics.moveTo(this.handledMana, this.getX() + 1, this.getY() - this.handledMana.getHeight());
     }
   }
 
-  private checkStructureConnection(): void {
-    if (this.structure) {
-      for (const sprite of this.physics.getSpritesUnder(this, Physics.NONE, 0)) {
-        if (sprite instanceof Mana && sprite.getStructure() === this.structure) {
-          return;
-        }
-      }
-
-      this.toggleConnectToStructure();
+  /** Any block standing against, under or over this avatar counts as touched (some blocks react to that). */
+  private touchAdjacentMana(): void {
+    for (const sprite of getAdjacentSprites(this)) {
+      if (sprite instanceof Mana && !sprite.removed()) sprite.touch();
     }
+  }
+
+  /** Robots override this: only real players pick things up, collect diamonds and get hit by rockets. */
+  isRobot(): boolean {
+    return false;
   }
 
   protected override animate(): boolean {
@@ -221,17 +222,13 @@ export class Avatar extends Sprite {
   }
 
   runLeft(): void {
-    if (!this.structure) {
-      this.xPower = Physics.LEFT;
-      this.facingRight = false;
-    }
+    this.xPower = Physics.LEFT;
+    this.facingRight = false;
   }
 
   runRight(): void {
-    if (!this.structure) {
-      this.xPower = Physics.RIGHT;
-      this.facingRight = true;
-    }
+    this.xPower = Physics.RIGHT;
+    this.facingRight = true;
   }
 
   stopRunning(): void {
@@ -240,7 +237,7 @@ export class Avatar extends Sprite {
   }
 
   attemptJump(): void {
-    if (this.structure || this.yPower !== Physics.NONE) {
+    if (this.yPower !== Physics.NONE) {
       return;
     }
 
@@ -274,10 +271,6 @@ export class Avatar extends Sprite {
     return this.firstDraw > 0;
   }
 
-  needsStructureChangeUpdate(): boolean {
-    return this.structureChangeUpdate > 0;
-  }
-
   /** Optional knockback direction gives death a little physicality instead of an instant, silent vanish. */
   die(knockbackXDirection: number = Physics.NONE, knockbackYDirection: number = Physics.NONE): void {
     const session = this.cell.getWorld().getZion().getHardlines().get(this.name);
@@ -292,62 +285,52 @@ export class Avatar extends Sprite {
     this.removePermanently();
   }
 
-  getStructure(): Structure | undefined {
-    return this.structure;
-  }
-
   override melts(): boolean {
     return true;
   }
 
-  // TODO: just gets the first mana's structure, should start search for connecting manas as a structure.
-  toggleConnectToStructure(): void {
-    if (!this.structure) {
-      for (const sprite of this.physics.getSpritesUnder(this, Physics.NONE, 0)) {
-        if (sprite instanceof Mana) {
-          this.setStructure(sprite.getStructure());
-          break;
-        }
-      }
-    } else {
-      this.structure.deactivateAllManaActions();
-      this.setStructure(undefined);
-    }
-  }
-
-  setStructure(structure: Structure | undefined): this {
-    this.structure = structure;
-
-    if (structure) {
-      structure.setAvatar(this);
-    }
-
-    this.structureChangeUpdate = Engine.REDRAW_ECHO_FRAMES;
-    return this;
+  hasHandledMana(): boolean {
+    return this.handledMana !== undefined;
   }
 
   // TODO: need to check if mana can be moved up and whether avatar can be moved down (and vice-versa for setting down).
-  toggleHandleMana(): void {
-    if (!this.handledMana) {
-      for (const sprite of this.physics.getSpritesUnder(this, Physics.NONE, 0)) {
-        if (sprite instanceof Mana) {
-          const mana = sprite;
-          mana.handleMelt();
-          this.physics.move(this, Physics.NONE, Physics.DOWN, mana.getHeight());
-          this.physics.move(mana, Physics.NONE, Physics.UP, this.getHeight());
-          mana.removeHandleMelt();
-          mana.beingHandled();
-          this.handledMana = mana;
-          break;
-        }
+  /** Picks up the block under this avatar's feet (blocks stuck to other blocks can't be picked up). */
+  pickUpMana(): void {
+    if (this.handledMana) return;
+
+    for (const sprite of this.physics.getSpritesUnder(this, Physics.NONE, 0)) {
+      if (sprite instanceof Mana && sprite.canBePickedUp()) {
+        const mana = sprite;
+        mana.handleMelt();
+        this.physics.move(this, Physics.NONE, Physics.DOWN, mana.getHeight());
+        this.physics.move(mana, Physics.NONE, Physics.UP, this.getHeight());
+        mana.removeHandleMelt();
+        mana.beingHandled();
+        this.handledMana = mana;
+        break;
       }
-    } else {
-      this.handledMana.handleMelt();
-      this.physics.move(this.handledMana, Physics.NONE, Physics.DOWN, this.getHeight());
-      this.physics.move(this, Physics.NONE, Physics.UP, this.handledMana.getHeight());
-      this.handledMana.removeHandleMelt();
-      this.setManaDown();
     }
+  }
+
+  /** Puts the carried block back down under this avatar's feet. */
+  putDownMana(): void {
+    if (!this.handledMana) return;
+
+    this.handledMana.handleMelt();
+    this.physics.move(this.handledMana, Physics.NONE, Physics.DOWN, this.getHeight());
+    this.physics.move(this, Physics.NONE, Physics.UP, this.handledMana.getHeight());
+    this.handledMana.removeHandleMelt();
+    this.setManaDown();
+  }
+
+  /** Throws the carried block ahead in an arc, in the direction this avatar faces. */
+  throwMana(): void {
+    const mana = this.handledMana;
+    if (!mana) return;
+
+    this.handledMana = undefined;
+    mana.setDown();
+    mana.launch((this.facingRight ? Physics.RIGHT : Physics.LEFT) * THROW_SPEED_X, THROW_SPEED_Y);
   }
 
   setManaDown(): void {
@@ -355,10 +338,6 @@ export class Avatar extends Sprite {
       this.handledMana.setDown();
       this.handledMana = undefined;
     }
-  }
-
-  activateManaAction(manaIndex: number, actionIndex: number): void {
-    this.getStructure()?.activateManaAction(manaIndex, actionIndex);
   }
 
   getSession(): Session | undefined {

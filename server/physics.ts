@@ -17,7 +17,9 @@ export class Physics {
   private static readonly GRAVITY_ACCELERATION_INTERVAL = 10;
   static readonly FALL_DISTANCE = 1;
 
-  gravitate(sprite: Sprite): boolean {
+  private readonly moving = new Set<Sprite>();
+
+  gravitate(sprite: Sprite, direction: number = Physics.DOWN): boolean {
     if (sprite.getMass() === 0) {
       return false;
     }
@@ -25,7 +27,7 @@ export class Physics {
     const fell = this.move(
       sprite,
       Physics.NONE,
-      Physics.DOWN,
+      direction,
       Physics.FALL_DISTANCE + Math.floor(sprite.getGravitateCount() / Physics.GRAVITY_ACCELERATION_INTERVAL),
     );
 
@@ -38,9 +40,32 @@ export class Physics {
     return fell;
   }
 
-  /** Basic move; push defaults true (matches the Java public 4-arg overload). */
+  /**
+   * Basic move; push defaults true (matches the Java public 4-arg overload). A sprite already being moved further
+   * up the call stack (a pusher and the sprite on top of it can each count as being "on top" of the other, and
+   * stuck-together blocks drag each other) is simply blocked instead of recursing forever.
+   */
   move(sprite: Sprite, xDirection: number, yDirection: number, distance: number, push = true): boolean {
+    const group = sprite.getRigidGroup();
+    const movers = group.length > 1 ? group : [sprite];
+    if (movers.some((mover) => this.moving.has(mover))) return false;
+
+    for (const mover of movers) this.moving.add(mover);
+    try {
+      return this.moveSteps(sprite, xDirection, yDirection, distance, push);
+    } finally {
+      for (const mover of movers) this.moving.delete(mover);
+    }
+  }
+
+  private moveSteps(sprite: Sprite, xDirection: number, yDirection: number, distance: number, push: boolean): boolean {
     for (let i = 0; i < distance; i++) {
+      const group = sprite.getRigidGroup();
+      if (group.length > 1) {
+        if (!this.moveGroupOnce(group, xDirection, yDirection, push)) return false;
+        continue;
+      }
+
       if (this.touchSprite(sprite, xDirection, yDirection, push)) {
         return false;
       }
@@ -61,6 +86,19 @@ export class Physics {
           }
         }
       }
+    }
+
+    return true;
+  }
+
+  /** Moves every sprite of a rigid group one step together, or none of them if any member is blocked. */
+  private moveGroupOnce(group: readonly Sprite[], xDirection: number, yDirection: number, push: boolean): boolean {
+    for (const member of group) {
+      if (this.touchSprite(member, xDirection, yDirection, push)) return false;
+    }
+
+    for (const member of group) {
+      member.getCellData().move(member, xDirection, yDirection);
     }
 
     return true;
@@ -125,7 +163,7 @@ export class Physics {
 
       if (push && !sprite.isEffect()) {
         for (const spriteOnTop of spritesOnTop) {
-          if (!spriteOnTop.isStable()) {
+          if (!spriteOnTop.isStable() && !this.isRigidMate(sprite, spriteOnTop)) {
             this.move(spriteOnTop, xDirection, Physics.NONE, 1);
           }
         }
@@ -136,6 +174,10 @@ export class Physics {
       if (!this.move(pushedSprite, xDirection, yDirection, 1, false)) {
         return true;
       }
+    }
+
+    for (const pushedSprite of pushedSprites) {
+      pushedSprite.onPushed(xDirection, yDirection);
     }
 
     return false;
@@ -204,9 +246,14 @@ export class Physics {
     return sprites;
   }
 
+  private isRigidMate(sprite: Sprite, other: Sprite): boolean {
+    return sprite.getRigidGroup().includes(other);
+  }
+
   private canInteract(sourceSprite: Sprite, targetSprite: Sprite): boolean {
     return (
       targetSprite !== sourceSprite &&
+      !this.isRigidMate(sourceSprite, targetSprite) &&
       targetSprite.getLayer() <= sourceSprite.getLayer() &&
       !(targetSprite.melts() && sourceSprite.melts())
     );

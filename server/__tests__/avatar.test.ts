@@ -53,18 +53,53 @@ describe('Avatar', () => {
     expect(airborne.getY()).toBeGreaterThan(airborneYBefore);
   });
 
-  it('picks up and sets down a mana block beneath it', () => {
+  it('picks up the block beneath it, and puts it back down', () => {
     const { cell } = createTestScene(50, 50);
     const ice = new Ice(10, 20, false, cell);
     const avatar = new Avatar('handler', 10, 12, false, cell);
 
     expect(ice.isBeingHandled()).toBe(false);
 
-    avatar.toggleHandleMana();
+    avatar.pickUpMana();
     expect(ice.isBeingHandled()).toBe(true);
+    expect(avatar.hasHandledMana()).toBe(true);
 
-    avatar.toggleHandleMana();
+    avatar.putDownMana();
     expect(ice.isBeingHandled()).toBe(false);
+    expect(avatar.hasHandledMana()).toBe(false);
+  });
+
+  it('throws the carried block ahead in an arc instead of putting it down', () => {
+    const { cell } = createTestScene(50, 50);
+    const ice = new Ice(10, 20, false, cell);
+    const avatar = new Avatar('thrower', 10, 12, false, cell);
+    avatar.pickUpMana();
+    const xBefore = ice.getX();
+
+    avatar.throwMana();
+    expect(ice.isBeingHandled()).toBe(false);
+    expect(avatar.hasHandledMana()).toBe(false);
+    expect(ice.isThrown()).toBe(true);
+
+    let minY = ice.getY();
+    for (let i = 0; i < 12; i++) {
+      ice['doAction']();
+      minY = Math.min(minY, ice.getY());
+    }
+
+    expect(ice.getX()).toBeGreaterThan(xBefore);
+    expect(minY).toBeLessThan(ice.getY() + 1); // rose first, now on its way back down.
+  });
+
+  it('does not pick up a second block while already carrying one', () => {
+    const { cell } = createTestScene(50, 50);
+    const first = new Ice(10, 20, false, cell);
+    const avatar = new Avatar('greedy', 10, 12, false, cell);
+    avatar.pickUpMana();
+    avatar.pickUpMana();
+
+    expect(first.isBeingHandled()).toBe(true);
+    expect(avatar.hasHandledMana()).toBe(true);
   });
 
   it('dies and removes itself permanently', () => {

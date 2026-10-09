@@ -8,6 +8,7 @@ export class Session {
   private avatar: Avatar | undefined;
   private readonly ui: UI;
   private score = 0;
+  private diamonds = 0;
   /** The robot this player's body was turned into by a robot's touch; their client keeps watching it. */
   private robotBody: Robot | undefined;
 
@@ -27,6 +28,14 @@ export class Session {
 
   addBlocks(blocks: number): void {
     this.score += blocks * POINTS_PER_BLOCK;
+  }
+
+  getDiamonds(): number {
+    return this.diamonds;
+  }
+
+  addDiamonds(diamonds: number): void {
+    this.diamonds += diamonds;
   }
 
   getAvatar(): Avatar | undefined {

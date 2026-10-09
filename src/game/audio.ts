@@ -3,7 +3,6 @@ export type SoundName =
   | 'land'
   | 'manaPickup'
   | 'manaDrop'
-  | 'toolActivate'
   | 'missileImpact'
   | 'portalWarp'
   | 'death';
@@ -30,7 +29,6 @@ const PRESETS: Record<SoundName, SoundPreset> = {
   land: { frequency: 120, duration: 0.1, type: 'square', gain: 0.08, sweepTo: 50, crush: true },
   manaPickup: { frequency: 880, duration: 0.12, type: 'square', gain: 0.06, sweepTo: 1320, crush: true },
   manaDrop: { frequency: 330, duration: 0.1, type: 'square', gain: 0.05, sweepTo: 165, crush: true },
-  toolActivate: { frequency: 400, duration: 0.12, type: 'sawtooth', gain: 0.07, sweepTo: 800, filterFrom: 400, filterTo: 4000 },
   missileImpact: { frequency: 150, duration: 0.3, type: 'sawtooth', gain: 0.11, sweepTo: 35, crush: true, noise: 0.08 },
   portalWarp: { frequency: 200, duration: 0.4, type: 'sawtooth', gain: 0.07, sweepTo: 1600, filterFrom: 300, filterTo: 6000 },
   death: { frequency: 400, duration: 0.5, type: 'sawtooth', gain: 0.09, sweepTo: 40, crush: true, noise: 0.1 },
@@ -39,7 +37,6 @@ const PRESETS: Record<SoundName, SoundPreset> = {
 // Repeated sounds (footsteps in particular) are throttled per-name so they can't turn into a buzzing tone.
 const MIN_GAP_SECONDS: Partial<Record<SoundName, number>> = {
   run: 0.14,
-  toolActivate: 0.15,
 };
 const DEFAULT_MIN_GAP_SECONDS = 0.03;
 

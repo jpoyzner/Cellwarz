@@ -196,6 +196,10 @@ export class CellData {
     return this.map.length;
   }
 
+  getHeight(): number {
+    return this.map[0]?.length ?? 0;
+  }
+
   getImagePaths(): string[] {
     return this.imagePaths;
   }

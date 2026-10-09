@@ -8,6 +8,8 @@ const TAP_THRESHOLD = 10;
 const TAP_MAX_DURATION_MS = 300;
 
 const MOVEMENT_KEYS = [37, 38, 39];
+// Space (pick up / throw) and Down (put down): each press is one action.
+const ONE_SHOT_KEYS = [32, 40];
 
 /**
  * Mirrors js/ui.js input handling (chat/typing removed); swipe/tap replaces the old jquery-mobile gestures.
@@ -25,6 +27,8 @@ export function attachInputHandlers(sendKey: SendKey, renderer: Renderer, onExit
     if (ARROW_KEYS.includes(event.keyCode)) {
       event.preventDefault();
     }
+    // Holding Space (pick up, then throw) or Down (put down) must not auto-repeat into a second action.
+    if (event.repeat && ONE_SHOT_KEYS.includes(event.keyCode)) return;
     sendKey(event.keyCode, true);
   };
 

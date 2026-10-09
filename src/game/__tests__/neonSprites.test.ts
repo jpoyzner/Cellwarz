@@ -47,7 +47,8 @@ describe('neonSprites', () => {
   it('picks neon glow colors from the image path and none for plain art', () => {
     expect(glowColorForPath('/images/doors/stargate/idle1.png')).toBe('#00f6ff');
     expect(glowColorForPath('/images/doors/entrance/idle1.png')).toBe('#ff2ea6');
-    expect(glowColorForPath('/images/mana/engine/fire/fire1.png')).toBe('#ffb347');
+    expect(glowColorForPath('/images/mana/shield/shield.png')).toBe('#3cff7a');
+    expect(glowColorForPath('/images/effects/diamond.png')).toBe('#3aa8ff');
     expect(glowColorForPath('/images/projectiles/missile.png')).toBe('#ff7a29');
     expect(glowColorForPath('/images/blocks/blockC.png')).toBeUndefined();
     expect(glowColorForPath('/images/me/stand1.png')).toBeUndefined();

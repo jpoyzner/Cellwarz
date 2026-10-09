@@ -37,6 +37,8 @@ export class Syncer {
         }
       } else if ('planet' in data) {
         this.renderer.setPlanet(data.planet as PlanetState | null);
+      } else if ('diamonds' in data) {
+        this.renderer.setDiamonds(data.diamonds as number);
       } else if (data.died) {
         this.renderer.onLocalAvatarDeath();
       } else {

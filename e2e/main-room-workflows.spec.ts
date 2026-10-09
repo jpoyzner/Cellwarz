@@ -1,15 +1,13 @@
 import { expect, test } from '@playwright/test';
 import { SPAWN_ENTRANCE_PIXELS, TEST_FIXTURE_PIXELS, WRAP_OPENING_PIXELS } from '../server/cell/mainRoom';
-import { findSpriteNear, getAvatarPosition, login, waitForAvatar, waitUntilGrounded, walkTo } from './gameHelpers';
+import { findSpriteNear, getAvatarPosition, hopTo, login, standOnBlock, waitForAvatar, waitUntilGrounded, walkTo } from './gameHelpers';
 
-// The fixed Thruster/Launcher sit on the floor at known pixel positions (see server/cell/mainRoom.ts)
-// purely so these tests have deterministic targets — the room's other mana positions stay randomized.
+// The fixed yellow, green and red blocks sit on the floor at known pixel positions (see server/cell/mainRoom.ts)
+// purely so these tests have deterministic targets — the room's other block positions stay randomized.
 const THRUSTER_X = TEST_FIXTURE_PIXELS.thrusterX;
-const THRUSTER_Y = 1896;
+const SHIELD_X = TEST_FIXTURE_PIXELS.shieldX;
 const LAUNCHER_X = TEST_FIXTURE_PIXELS.launcherX;
-// Kept close to the launcher (not further down the shared floor) so a stray randomly-placed mana/robot
-// elsewhere in the room can't land in the missile's path and block it before it reaches the victim.
-const VICTIM_STAND_X = LAUNCHER_X + 64;
+const THRUSTER_Y = 1896;
 
 // All of these scenarios rely on avatars sitting at deterministic positions in the single shared MainRoom
 // (see server/zion.ts) — avatars can push each other around, so run them one at a time rather than letting
@@ -108,81 +106,21 @@ test.describe('MainRoom deterministic workflows', () => {
     expect(spawn.y).toBeGreaterThan(SPAWN_ENTRANCE_PIXELS.y);
   });
 
-  // Runs before the mana-pickup test below (which leaves its own avatar sitting near the Thruster) so the
-  // killer/victim have a clear floor to walk across on their way to the Launcher/stand-off point.
-  test('a missile from a Launcher kills another avatar, who then respawns at the spawn portal', async ({ page, browser }) => {
-    test.setTimeout(60000);
-    const killerName = `killer-${Date.now()}`;
-    const victimName = `victim-${Date.now()}`;
+  test('the HUD shows the credits and diamonds counters, and no tool dashboard icons any more', async ({ page }) => {
+    const loginName = `hud-${Date.now()}`;
+    await login(page, loginName);
+    await waitForAvatar(page, loginName);
 
-    await login(page, killerName);
-    await expect(page.locator('#canvas')).toBeVisible();
-    await waitForAvatar(page, killerName);
-    await page.locator('#canvas').click();
-
-    // Get the killer fully off the shared spawn portal tile *before* the victim even logs in — two avatars
-    // spawning on top of each other at the exact same coordinates is a much messier collision to resolve
-    // than either of them individually hopping over a single obstacle later on.
-    await walkTo(page, killerName, 'ArrowRight', LAUNCHER_X, { timeoutMs: 20000 });
-    // Let the killer finish landing on the launcher before trying to connect to it.
-    await page.waitForTimeout(600);
-    await page.keyboard.press('ArrowDown');
-
-    const contextB = await browser.newContext();
-    const pageB = await contextB.newPage();
-
-    try {
-      await login(pageB, victimName);
-      await expect(pageB.locator('#canvas')).toBeVisible();
-      await waitForAvatar(pageB, victimName);
-      await pageB.locator('#canvas').click();
-
-      const spawnPortalPosition = await waitUntilGrounded(pageB, victimName);
-
-      // Victim stands just to the right of the launcher, in the path of a rightward-fired missile.
-      await walkTo(pageB, victimName, 'ArrowRight', VICTIM_STAND_X, { timeoutMs: 20000 });
-      // Let the victim finish landing/settling before it needs to be exactly in the missile's flight row.
-      await page.waitForTimeout(600);
-
-      // Fire a missile to the right (key "2"). Retry the shot a few times rather than treating one
-      // mistimed/unlucky shot (e.g. the victim still mid-air) as a hard failure.
-      let killed = false;
-      for (let attempt = 0; attempt < 5 && !killed; attempt++) {
-        await page.keyboard.press('2');
-        try {
-          await page.waitForFunction(
-            (name) => {
-              const state = window.__cellwarz;
-              return !!state && state.renderer.avatars[name] === undefined;
-            },
-            victimName,
-            { timeout: 3000 },
-          );
-          killed = true;
-        } catch {
-          const stillThere = await getAvatarPosition(pageB, victimName);
-          if (!stillThere) killed = true;
-        }
-      }
-      expect(killed).toBe(true);
-
-      // Reattaching places a fresh avatar back at the (fixed, deterministic) spawn portal.
-      await pageB.reload();
-      await pageB.locator('#loginName').fill(victimName);
-      await pageB.locator('#enter').click();
-      await expect(pageB.locator('#canvas')).toBeVisible();
-      await waitForAvatar(pageB, victimName);
-
-      const respawned = await waitUntilGrounded(pageB, victimName);
-      expect(respawned).toEqual(spawnPortalPosition);
-    } finally {
-      await contextB.close();
-    }
+    await expect(page.locator('#score')).toHaveText('0');
+    await expect(page.locator('#diamonds')).toHaveText('0');
+    await expect(page.locator('.dash-icon')).toHaveCount(0);
   });
 
-  test('connecting, picking up, and setting down a mana block works end to end', async ({ page }) => {
-    test.setTimeout(30000);
-    const loginName = `mana-${Date.now()}`;
+  // The yellow Thruster is an ordinary block until touched. This runs before the other fixture tests: walking
+  // right from the spawn portal touches it first, and once touched it keeps falling upwards for good.
+  test('touching the yellow block makes it fall upwards', async ({ page }) => {
+    test.setTimeout(40000);
+    const loginName = `yellow-${Date.now()}`;
 
     await login(page, loginName);
     await expect(page.locator('#canvas')).toBeVisible();
@@ -191,44 +129,157 @@ test.describe('MainRoom deterministic workflows', () => {
 
     const thrusterId = await findSpriteNear(page, THRUSTER_X, THRUSTER_Y);
     expect(thrusterId).toBeDefined();
+    await waitUntilGrounded(page, loginName);
 
-    await walkTo(page, loginName, 'ArrowRight', THRUSTER_X, { timeoutMs: 15000 });
+    // Untouched, it sits on the floor.
+    await page.waitForTimeout(500);
+    expect((await page.evaluate((id) => window.__cellwarz?.renderer.sprites[id], thrusterId))![2]).toBe(THRUSTER_Y);
 
-    // Let the avatar finish landing on the mana before trying to connect to it.
-    await page.waitForTimeout(600);
+    await walkTo(page, loginName, 'ArrowRight', THRUSTER_X, { timeoutMs: 20000 });
 
-    // Down connects the avatar to the mana's structure — a dashboard tool icon should appear top-right.
-    await page.keyboard.press('ArrowDown');
-    await expect(page.locator('#mana1')).not.toHaveCSS('background-image', 'none', { timeout: 3000 });
+    // An avatar standing right beside the block still overlaps the cells above it, so step away to let it rise.
+    await page.keyboard.down('ArrowLeft');
+    await page.waitForTimeout(500);
+    await page.keyboard.up('ArrowLeft');
+
+    await page.waitForFunction(
+      ({ id, y }) => {
+        const sprite = window.__cellwarz?.renderer.sprites[id];
+        return !!sprite && sprite[2] < y - 48;
+      },
+      { id: thrusterId, y: THRUSTER_Y },
+      { timeout: 10000 },
+    );
+  });
+
+  test('picking up, putting down, and throwing a block works end to end', async ({ page }) => {
+    test.setTimeout(60000);
+    const loginName = `mana-${Date.now()}`;
+
+    await login(page, loginName);
+    await expect(page.locator('#canvas')).toBeVisible();
+    await waitForAvatar(page, loginName);
+    await page.locator('#canvas').click();
+
+    // The green fixture: nothing happens when it's touched, so it's the safe block to practice on.
+    const shieldId = await findSpriteNear(page, SHIELD_X, THRUSTER_Y);
+    expect(shieldId).toBeDefined();
+
+    await walkTo(page, loginName, 'ArrowRight', SHIELD_X - 100, { tolerance: 8, timeoutMs: 25000 });
+    await standOnBlock(page, loginName, shieldId!);
+
+    const isCarried = ({ id, name }: { id: string; name: string }) => {
+      const state = window.__cellwarz;
+      if (!state) return false;
+      const block = state.renderer.sprites[id];
+      const avatarId = state.renderer.avatars[name];
+      const avatar = avatarId !== undefined ? state.renderer.sprites[avatarId] : undefined;
+      return !!block && !!avatar && Math.abs(block[1] - avatar[1]) < 20 && block[2] < avatar[2];
+    };
 
     // Space picks it up — it should now track just above the avatar's position every frame.
     await page.keyboard.press('Space');
+    await page.waitForFunction(isCarried, { id: shieldId, name: loginName }, { timeout: 3000 });
+
+    // It should keep following as the avatar moves while carried.
+    const beforeMove = await getAvatarPosition(page, loginName);
+    await page.keyboard.down('ArrowLeft');
+    await page.waitForTimeout(400);
+    await page.keyboard.up('ArrowLeft');
+    const afterMove = await getAvatarPosition(page, loginName);
+    expect(afterMove!.x).toBeLessThan(beforeMove!.x);
+    const carriedAfterMove = await page.evaluate((id) => window.__cellwarz?.renderer.sprites[id], shieldId);
+    expect(Math.abs(carriedAfterMove![1] - afterMove!.x)).toBeLessThan(20);
+
+    // Down puts it back down: no longer carried above the avatar, which now stands on it instead.
+    await page.keyboard.press('ArrowDown');
     await page.waitForFunction(
       ({ id, name }) => {
         const state = window.__cellwarz;
-        if (!state) return false;
-        const mana = state.renderer.sprites[id];
-        const avatarId = state.renderer.avatars[name];
-        const avatar = avatarId !== undefined ? state.renderer.sprites[avatarId] : undefined;
-        return !!mana && !!avatar && Math.abs(mana[1] - avatar[1]) < 20 && mana[2] < avatar[2];
+        const block = state?.renderer.sprites[id];
+        const avatarId = state?.renderer.avatars[name];
+        const avatar = avatarId !== undefined ? state?.renderer.sprites[avatarId] : undefined;
+        return !!block && !!avatar && block[2] > avatar[2];
       },
-      { id: thrusterId, name: loginName },
+      { id: shieldId, name: loginName },
       { timeout: 3000 },
     );
 
-    // It should keep following as the avatar moves while handled.
-    const beforeMove = await getAvatarPosition(page, loginName);
-    await page.keyboard.down('ArrowRight');
-    await page.waitForTimeout(500);
-    await page.keyboard.up('ArrowRight');
-    const afterMove = await getAvatarPosition(page, loginName);
-    expect(afterMove!.x).toBeGreaterThan(beforeMove!.x);
-
-    const manaAfterMove = await page.evaluate((id) => window.__cellwarz?.renderer.sprites[id], thrusterId);
-    expect(Math.abs(manaAfterMove![1] - afterMove!.x)).toBeLessThan(20);
-
-    // Space again sets it back down.
+    // Pick it up again, face left, and press Space again to throw it: it arcs away (up first, then down).
+    await page.waitForTimeout(300);
     await page.keyboard.press('Space');
+    await page.waitForFunction(isCarried, { id: shieldId, name: loginName }, { timeout: 3000 });
+    await page.keyboard.down('ArrowLeft');
+    await page.waitForTimeout(100);
+    await page.keyboard.up('ArrowLeft');
+    const beforeThrow = await page.evaluate((id) => window.__cellwarz!.renderer.sprites[id], shieldId);
+
+    await page.keyboard.press('Space');
+    const trail: Array<[number, number]> = [];
+    for (let i = 0; i < 24; i++) {
+      await page.waitForTimeout(80);
+      const sprite = await page.evaluate((id) => window.__cellwarz?.renderer.sprites[id], shieldId);
+      if (sprite) trail.push([sprite[1], sprite[2]]);
+    }
+
+    const highest = Math.min(...trail.map(([, y]) => y));
+    const lowest = Math.max(...trail.map(([, y]) => y));
+    expect(highest).toBeLessThan(beforeThrow![2] - 16); // rose in an arc…
+    expect(lowest).toBeGreaterThan(highest + 16); // …and came back down…
+    expect(Math.min(...trail.map(([x]) => x))).toBeLessThan(beforeThrow![1] - 40); // …toward the side the avatar was facing.
+  });
+
+  // Hops right along the floor over the other blocks (which would otherwise be shoved ahead of the avatar, keeping
+  // it from the red block) up to the red one, whose five second fuse starts the moment the avatar touches it. A second browser context far from the blast watches, since the
+  // victim's own connection goes silent the instant it dies.
+  test('a red block explodes five seconds after it is touched, killing the avatar beside it, who then respawns', async ({ page, browser }) => {
+    test.setTimeout(80000);
+    const bomberName = `bomber-${Date.now()}`;
+    const observerName = `observer-${Date.now()}`;
+
+    await login(page, bomberName);
+    await expect(page.locator('#canvas')).toBeVisible();
+    await waitForAvatar(page, bomberName);
+    await page.locator('#canvas').click();
+
+    const launcherId = await findSpriteNear(page, LAUNCHER_X, THRUSTER_Y);
+    expect(launcherId).toBeDefined();
+    const spawnPortalPosition = await waitUntilGrounded(page, bomberName);
+
+    const contextB = await browser.newContext();
+    const pageB = await contextB.newPage();
+
+    try {
+      await login(pageB, observerName);
+      await expect(pageB.locator('#canvas')).toBeVisible();
+      await waitForAvatar(pageB, observerName);
+      await waitForAvatar(pageB, bomberName);
+      await waitUntilGrounded(pageB, observerName);
+
+      await hopTo(page, bomberName, LAUNCHER_X);
+
+      // The fuse burns for ~5s while the avatar stays put beside the block, then it blows up and kills it.
+      await pageB.waitForFunction(
+        (name) => window.__cellwarz?.renderer.avatars[name] === undefined,
+        bomberName,
+        { timeout: 15000 },
+      );
+      expect(await pageB.evaluate((id) => window.__cellwarz?.renderer.sprites[id], launcherId)).toBeUndefined();
+      // The observer, standing far from the blast, is unharmed.
+      expect(await getAvatarPosition(pageB, observerName)).not.toBeNull();
+
+      // Reattaching places a fresh avatar back at the (fixed, deterministic) spawn portal.
+      await page.reload();
+      await page.locator('#loginName').fill(bomberName);
+      await page.locator('#enter').click();
+      await expect(page.locator('#canvas')).toBeVisible();
+      await waitForAvatar(page, bomberName);
+
+      const respawned = await waitUntilGrounded(page, bomberName);
+      expect(respawned.x).toBe(spawnPortalPosition.x);
+    } finally {
+      await contextB.close();
+    }
   });
 
   test('two logins in the shared room see each other rendered and named', async ({ page, browser }) => {

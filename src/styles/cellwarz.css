@@ -95,23 +95,21 @@ body {
   vertical-align: middle;
 }
 
-.dash-icon {
-  height: 96px;
-  left: 90%;
+#diamonds {
+  color: #7fe7ff;
+  font: bold 22px ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  letter-spacing: 0.08em;
+  pointer-events: none;
   position: fixed;
-  width: 96px;
+  right: 16px;
+  text-shadow: 0 0 8px #3aa8ff, 0 0 18px rgba(58, 168, 255, 0.5);
+  top: 46px;
 }
 
-#mana1 {
-  top: 60px;
-}
-
-#mana2 {
-  top: 120px;
-}
-
-#mana3 {
-  top: 180px;
+#diamonds::before {
+  content: '\1F48E ';
+  font-size: 16px;
+  vertical-align: middle;
 }
 
 .minimap {

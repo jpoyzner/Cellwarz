@@ -8,6 +8,8 @@ import { Physics } from '../physics';
 
 export const DEFAULT_ACTION = 'none';
 
+const NO_RIGID_GROUP: readonly Sprite[] = [];
+
 export abstract class Sprite {
   static readonly DEFAULT_IMAGE_DIR = 'images/';
 
@@ -333,6 +335,14 @@ export abstract class Sprite {
   isStable(): boolean {
     return false;
   }
+
+  /** Sprites rigidly joined to this one (including itself) that must all move together; empty when not joined. */
+  getRigidGroup(): readonly Sprite[] {
+    return NO_RIGID_GROUP;
+  }
+
+  /** Called after another sprite's move successfully shoved this one by (xDirection, yDirection). */
+  onPushed(_xDirection: number, _yDirection: number): void {}
 
   getCell(): Cell {
     return this.cell;

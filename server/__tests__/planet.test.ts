@@ -224,9 +224,9 @@ describe('PlanetField', () => {
       field.advanceConsumed(physics);
       const scale = avatar.getConsumeScale()!;
 
-      const sent = getSprites([avatar], true, undefined)[String(avatar.getCellIndex())];
+      const sent = getSprites([avatar], true)[String(avatar.getCellIndex())];
       expect(sent[3]).toMatchObject({ '2': Math.round(scale * 100) / 100 });
-      expect(getSprites([avatar], false, undefined)[String(avatar.getCellIndex())]).toHaveLength(3);
+      expect(getSprites([avatar], false)[String(avatar.getCellIndex())]).toHaveLength(3);
     });
 
     it('leaves swallowing off when pull is disabled', () => {

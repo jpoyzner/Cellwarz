@@ -5,11 +5,10 @@ import { ClusteredInitException } from '../errors';
 import { CellData } from '../cellData';
 import { Avatar } from '../sprite/avatar';
 import { CellBlock } from '../sprite/cellBlock';
-import { Ice } from '../sprite/ice';
 import { Launcher } from '../sprite/launcher';
 import { Mana } from '../sprite/mana';
 import { Portal } from '../sprite/portal';
-import { Robot } from '../sprite/robot';
+import { Shield } from '../sprite/shield';
 import { SpawnPortal } from '../sprite/spawnPortal';
 import { Thruster } from '../sprite/thruster';
 import { Wall } from '../sprite/wall';
@@ -33,14 +32,19 @@ const STEPPING_STONE_COLUMNS: ReadonlyArray<readonly [number, number]> = [
   [RIGHT_COLUMN_X, 20],
 ];
 
-// Fixed mana/launcher fixtures on the (obstacle-free) floor, just right of the warp portal, purely so
-// e2e tests have deterministic targets for the mana-pickup and death/respawn workflows (see WORKFLOWS.md).
-// The rest of the room's boosters/launchers/ice/robots stay randomly placed. Exported in pixels so e2e
-// specs don't need to duplicate the grid-to-pixel math.
-const TEST_THRUSTER_X = 280;
-const TEST_LAUNCHER_X = 320;
+// Fixed block fixtures on the (obstacle-free) floor, just right of the warp portal, purely so e2e tests have
+// deterministic targets for the block-touch, pickup/throw/put-down and explosion workflows (see WORKFLOWS.md).
+// The floor has no wall blocks on it (it's a free-running track), so these are shoveable. The rest of
+// the room's blocks/robots stay randomly placed. Exported in pixels so e2e specs don't need to duplicate the
+// grid-to-pixel math.
+// They sit far enough right of the spawn portal that other specs' short walks (which share this room while
+// running in parallel) never touch them: yellow and red blocks react to being touched, once.
+const TEST_THRUSTER_X = 310;
+const TEST_SHIELD_X = 330;
+const TEST_LAUNCHER_X = 350;
 export const TEST_FIXTURE_PIXELS = {
   thrusterX: TEST_THRUSTER_X * CellData.ANIMATION_STEP,
+  shieldX: TEST_SHIELD_X * CellData.ANIMATION_STEP,
   launcherX: TEST_LAUNCHER_X * CellData.ANIMATION_STEP,
 };
 // Random boosters/launchers/ice reroll their x out of this range so they can't land anywhere along the
@@ -185,31 +189,50 @@ export class MainRoom extends Cell {
     return true;
   }
 
+  // Set CELLWARZ_RANDOM_BLOCKS=off to leave out the randomly scattered blocks (the fixed test fixtures stay), and
+  // CELLWARZ_ROBOTS=off to leave out the robots: both would otherwise shove, kill or shoot the avatars of the
+  // deterministic e2e specs at random (the Playwright run sets them).
+  private readonly randomBlocks = process.env.CELLWARZ_RANDOM_BLOCKS !== 'off';
+  private readonly robots = process.env.CELLWARZ_ROBOTS !== 'off';
+
+  private blocks(count: number): number {
+    return this.randomBlocks ? count : 0;
+  }
+
   getNumBoosters(): number {
-    return 15;
+    return this.blocks(8);
   }
 
   getNumLaunchers(): number {
-    return 20;
+    return this.blocks(10);
   }
 
   getNumIce(): number {
-    return 5;
+    return this.blocks(5);
+  }
+
+  override getNumShields(): number {
+    return this.blocks(8);
+  }
+
+  override getNumGravityBlocks(): number {
+    return this.blocks(6);
+  }
+
+  override getNumStickyBlocks(): number {
+    return this.blocks(6);
+  }
+
+  override getNumRainbowBlocks(): number {
+    return this.blocks(6);
   }
 
   getNumRobots(): number {
-    return 8;
+    return this.robots ? 8 : 0;
   }
 
   override init(): Cell {
-    const data = this.getCellData();
-    Avatar.init(data);
-    CellBlock.init(data);
-    SpawnPortal.init(data);
-    Portal.init(data);
-    Thruster.init(data);
-    Launcher.init(data);
-    Ice.init(data);
+    this.initSprites();
 
     const width = this.getWidth();
     const height = Math.floor(this.getMinCellHeight() / CellData.ANIMATION_STEP);
@@ -286,6 +309,8 @@ export class MainRoom extends Cell {
   private buildSteppingStones(floorY: number): void {
     for (const [x, startOffset] of STEPPING_STONE_COLUMNS) {
       for (let y = ROW_Y[0] + startOffset; y < floorY; y += 20) {
+        // A stone too close above the floor would block the free-running track beneath it.
+        if (y + CellBlock.SIZE > floorY - Avatar.HEIGHT) continue;
         new Wall(false, x, y, STONE_LENGTH, this);
       }
     }
@@ -340,20 +365,21 @@ export class MainRoom extends Cell {
     }
   }
 
-  /** One fixed Thruster and Launcher near spawn, resting on the floor, for deterministic e2e coverage. */
+  /** One fixed Thruster, Shield and Launcher near spawn, resting on the floor, for deterministic e2e coverage. */
   private buildTestFixtures(floorY: number): void {
     const y = floorY - Mana.SIZE;
+    const fixtures: Array<() => Mana> = [
+      () => new Thruster(TEST_THRUSTER_X, y, true, this),
+      () => new Shield(TEST_SHIELD_X, y, true, this),
+      () => new Launcher(TEST_LAUNCHER_X, y, true, this),
+    ];
 
-    try {
-      new Thruster(TEST_THRUSTER_X, y, true, this);
-    } catch (e) {
-      if (!(e instanceof ClusteredInitException)) throw e;
-    }
-
-    try {
-      new Launcher(TEST_LAUNCHER_X, y, true, this);
-    } catch (e) {
-      if (!(e instanceof ClusteredInitException)) throw e;
+    for (const create of fixtures) {
+      try {
+        create();
+      } catch (e) {
+        if (!(e instanceof ClusteredInitException)) throw e;
+      }
     }
   }
 
@@ -371,40 +397,6 @@ export class MainRoom extends Cell {
   }
 
   private buildPickupsAndRobots(): void {
-    for (let i = 0; i < this.getNumBoosters(); i++) {
-      try {
-        new Thruster(this.getRandomTestSafeX(Mana.SIZE), this.getRandomY(Mana.SIZE), true, this);
-      } catch (e) {
-        if (e instanceof ClusteredInitException) i--;
-        else throw e;
-      }
-    }
-
-    for (let i = 0; i < this.getNumLaunchers(); i++) {
-      try {
-        new Launcher(this.getRandomTestSafeX(Mana.SIZE), this.getRandomY(Mana.SIZE), true, this);
-      } catch (e) {
-        if (e instanceof ClusteredInitException) i--;
-        else throw e;
-      }
-    }
-
-    for (let i = 0; i < this.getNumIce(); i++) {
-      try {
-        new Ice(this.getRandomTestSafeX(Mana.SIZE), this.getRandomY(Mana.SIZE), true, this);
-      } catch (e) {
-        if (e instanceof ClusteredInitException) i--;
-        else throw e;
-      }
-    }
-
-    for (let i = 0; i < this.getNumRobots(); i++) {
-      try {
-        new Robot(this.getRandomTestSafeX(Avatar.WIDTH), this.getRandomY(Avatar.HEIGHT), true, this);
-      } catch (e) {
-        if (e instanceof ClusteredInitException) i--;
-        else throw e;
-      }
-    }
+    this.spawnPickupsAndRobots((spriteSize) => this.getRandomTestSafeX(spriteSize));
   }
 }

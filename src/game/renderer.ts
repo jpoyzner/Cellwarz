@@ -23,15 +23,14 @@ import type {
   PlanetState,
   SpritesMap,
   StoredSprite,
-  ToolsMap,
 } from './types';
 
 export interface RendererContext {
   ctx: CanvasRenderingContext2D;
   canvas: HTMLCanvasElement;
   backgroundEl: HTMLElement | null;
-  dashboardEl: HTMLElement | null;
   scoreEl?: HTMLElement | null;
+  diamondsEl?: HTMLElement | null;
   minimapCanvas?: HTMLCanvasElement | null;
   images: HTMLImageElement[];
   loginName: string;
@@ -56,6 +55,9 @@ const WARP_DETECTION_THRESHOLD_PX = 64;
 const AVATAR_WIDTH_PX = 48;
 const AVATAR_HEIGHT_PX = 64;
 const NAME_TAG_COLOR = '#00f6ff';
+// Matches server/sprite/explosion.ts (28 grid cells of 8px); shake fades out over about two screen widths.
+const EXPLOSION_SIZE_PX = 224;
+const EXPLOSION_SHAKE_RANGE_PX = 1600;
 // Mirrors server/session.ts; the server is authoritative, this only drives the immediate on-screen total.
 const POINTS_PER_BLOCK = 20;
 const SCORE_SCRAMBLE_TICKS = 6;
@@ -66,7 +68,6 @@ const SPRITE_GLOW_BLUR_PX = 12;
 export class Renderer {
   sprites: SpritesMap = {};
   avatars: AvatarsMap = {};
-  tools: ToolsMap = {};
   imagePaths: string[] = [];
   backgroundKind: BackgroundKind | undefined;
   lamps: Lamp[] = [];
@@ -77,6 +78,8 @@ export class Renderer {
   /** The level's current background gas giant, kept in step with the server (see setPlanet). */
   planet: PlanetView | undefined;
   score = 0;
+  /** Blue diamonds this player has collected (the server owns the count; see server/session.ts). */
+  diamonds = 0;
   /** Called with the number of blocks that just reached the score, so it can be reported to the server. */
   onBlocksCollected: ((blocks: number) => void) | undefined;
   private scoreTarget: { x: number; y: number } | undefined;
@@ -90,6 +93,7 @@ export class Renderer {
   private readonly postFx = new PostFx();
   private imageKinds: ImageKind[] = [];
   private glowColors: (string | undefined)[] = [];
+  private explosionImages = new Set<number>();
   private scoreScrambleTimer: number | undefined;
   private readonly minimap: Minimap | undefined;
   private minimapOpen = true;
@@ -131,6 +135,7 @@ export class Renderer {
       document.addEventListener('visibilitychange', this.onVisibilityChange);
     }
     this.updateScoreDisplay();
+    this.updateDiamondsDisplay();
     this.rafHandle = requestAnimationFrame(this.tick);
   }
 
@@ -163,6 +168,18 @@ export class Renderer {
     this.scoreTarget = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
   }
 
+  private updateDiamondsDisplay(): void {
+    const { diamondsEl } = this.context;
+    if (diamondsEl) diamondsEl.textContent = String(this.diamonds);
+  }
+
+  /** The server collected diamonds for this player (a separate one-shot message, like the planet's). */
+  setDiamonds(diamonds: number): void {
+    if (diamonds > this.diamonds) this.audio.play('manaPickup');
+    this.diamonds = diamonds;
+    this.updateDiamondsDisplay();
+  }
+
   stop(): void {
     this.stopped = true;
     if (this.rafHandle !== undefined) cancelAnimationFrame(this.rafHandle);
@@ -186,7 +203,7 @@ export class Renderer {
 
     if (down) {
       if (keyCode === 32) this.audio.play('manaPickup');
-      else if (keyCode === 49 || keyCode === 50 || keyCode === 51) this.audio.play('toolActivate');
+      else if (keyCode === 40) this.audio.play('manaDrop');
     }
   }
 
@@ -206,6 +223,9 @@ export class Renderer {
     this.neon.clear();
     this.imageKinds = classifyImagePaths(this.imagePaths);
     this.glowColors = this.imagePaths.map(glowColorForPath);
+    this.explosionImages = new Set(
+      this.imagePaths.flatMap((path, index) => (path.includes('/effects/explosion/') ? [index] : [])),
+    );
 
     this.imagePaths.forEach((path, i) => {
       const image = new Image();
@@ -224,7 +244,6 @@ export class Renderer {
     // The server sends numeric sprite ids here but string ids (object keys) in redraw frames; normalize so the
     // strict === comparisons against sprite-map keys (local avatar, shard collection, minimap) always agree.
     this.avatars = Object.fromEntries(Object.entries(data.avatars).map(([name, id]) => [name, String(id)]));
-    this.tools = data.tools;
     this.imagePaths = data.imagePaths;
     this.setBackground(data.background, data.worldWidth, data.worldHeight);
     this.lamps = data.lamps ?? [];
@@ -232,6 +251,8 @@ export class Renderer {
     this.setPlanet(data.planet);
     this.score = data.score ?? 0;
     this.updateScoreDisplay();
+    this.diamonds = data.diamonds ?? 0;
+    this.updateDiamondsDisplay();
     this.minimap?.setImagePaths(data.imagePaths);
     this.loadImages();
 
@@ -346,16 +367,23 @@ export class Renderer {
           this.avatars[avatarName] = spriteId;
         }
 
-        const newTools = extraInfo['1'] as ToolsMap | undefined;
-        if (newTools) {
-          if (newTools['-1'] !== undefined) {
-            this.removeDashboardItem();
-          } else {
-            this.tools = newTools;
-          }
-        }
+      }
+
+      if (previousX === undefined && this.explosionImages.has(imageIndex)) {
+        this.onExplosion(x, y);
       }
     }
+  }
+
+  /** A block blew up: a bang, a burst of sparks and a little shake, all stronger the closer it is to the camera. */
+  private onExplosion(x: number, y: number): void {
+    const centerX = x + EXPLOSION_SIZE_PX / 2;
+    const centerY = y + EXPLOSION_SIZE_PX / 2;
+    this.audio.play('missileImpact');
+    this.particles.spawnImpact(centerX, centerY, 24);
+
+    const distance = this.me ? Math.hypot(centerX - this.me[1], centerY - this.me[2]) : Infinity;
+    if (distance < EXPLOSION_SHAKE_RANGE_PX) this.triggerShake(300, 8 * (1 - distance / EXPLOSION_SHAKE_RANGE_PX));
   }
 
   private onAvatarRemoved(spriteId: string, localSpriteId: string | undefined): void {
@@ -530,7 +558,6 @@ export class Renderer {
 
     this.drawAvatarsNames(drawOffsetX, drawOffsetY);
     if (!this.staleMode) this.postFx.apply(ctx, canvas, now);
-    this.drawDashboardItems();
     this.drawMinimap(now);
   }
 
@@ -680,21 +707,5 @@ export class Renderer {
     }
 
     ctx.textAlign = 'start';
-  }
-
-  private drawDashboardItems(): void {
-    if (Object.keys(this.tools).length !== 0) {
-      const url = this.imagePaths[this.tools[0]];
-      if (url && this.context.dashboardEl) {
-        this.context.dashboardEl.style.backgroundImage = `url('${url}')`;
-      }
-      delete this.tools[0];
-    }
-  }
-
-  private removeDashboardItem(): void {
-    if (this.context.dashboardEl) {
-      this.context.dashboardEl.style.backgroundImage = 'none';
-    }
   }
 }

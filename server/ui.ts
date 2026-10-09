@@ -19,26 +19,15 @@ export class UI {
       } else if (key === 39) {
         avatar.runRight();
       } else if (key === 40) {
-        avatar.toggleConnectToStructure();
+        avatar.putDownMana();
       } else if (key === 32) {
-        avatar.toggleHandleMana();
-      } else if (key === 49) {
-        avatar.activateManaAction(0, 0);
-      } else if (key === 50) {
-        avatar.activateManaAction(0, 1);
-      } else if (key === 51) {
-        avatar.activateManaAction(0, 2);
+        if (avatar.hasHandledMana()) avatar.throwMana();
+        else avatar.pickUpMana();
       }
     } else if (key === 37 || key === 39) {
       avatar.stopRunning();
     } else if (key === 38) {
       avatar.releaseJump();
-    } else if (key === 49) {
-      avatar.getStructure()?.deactivateManaAction(0, 0);
-    } else if (key === 50) {
-      avatar.getStructure()?.deactivateManaAction(0, 1);
-    } else if (key === 51) {
-      avatar.getStructure()?.deactivateManaAction(0, 2);
     }
   }
 

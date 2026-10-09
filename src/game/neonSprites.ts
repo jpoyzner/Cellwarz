@@ -74,10 +74,16 @@ export function steelify(pixels: PixelBuffer): void {
 export function glowColorForPath(path: string): string | undefined {
   if (path.includes('/doors/stargate/')) return '#00f6ff';
   if (path.includes('/doors/entrance/')) return '#ff2ea6';
-  if (path.includes('/mana/engine/fire/')) return '#ffb347';
   if (path.includes('/mana/engine/')) return '#b6ff3c';
   if (path.includes('/mana/ice/')) return '#7fe7ff';
   if (path.includes('/mana/launcher/')) return '#ff5a3c';
+  if (path.includes('/mana/shield/')) return '#3cff7a';
+  if (path.includes('/mana/gravity/')) return '#b45cff';
+  if (path.includes('/mana/sticky/')) return '#ff9a2e';
+  if (path.includes('/mana/rainbow/')) return '#ffffff';
+  if (path.includes('/effects/bubble')) return '#3cff7a';
+  if (path.includes('/effects/diamond')) return '#3aa8ff';
+  if (path.includes('/effects/explosion/')) return '#ff7a29';
   if (path.includes('/projectiles/')) return '#ff7a29';
   return undefined;
 }
