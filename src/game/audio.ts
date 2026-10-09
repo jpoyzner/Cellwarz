@@ -1,6 +1,5 @@
 export type SoundName =
   | 'run'
-  | 'jump'
   | 'land'
   | 'manaPickup'
   | 'manaDrop'
@@ -28,7 +27,6 @@ interface SoundPreset {
 // sample playback, so there's nothing to fetch/load and no binary assets to add to the repo.
 const PRESETS: Record<SoundName, SoundPreset> = {
   run: { frequency: 140, duration: 0.05, type: 'square', gain: 0.04, crush: true },
-  jump: { frequency: 220, duration: 0.15, type: 'sawtooth', gain: 0.07, sweepTo: 520, crush: true },
   land: { frequency: 120, duration: 0.1, type: 'square', gain: 0.08, sweepTo: 50, crush: true },
   manaPickup: { frequency: 880, duration: 0.12, type: 'square', gain: 0.06, sweepTo: 1320, crush: true },
   manaDrop: { frequency: 330, duration: 0.1, type: 'square', gain: 0.05, sweepTo: 165, crush: true },

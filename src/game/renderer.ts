@@ -185,8 +185,7 @@ export class Renderer {
     this.predictor.setKey(keyCode, down);
 
     if (down) {
-      if (keyCode === 38) this.audio.play('jump');
-      else if (keyCode === 32) this.audio.play('manaPickup');
+      if (keyCode === 32) this.audio.play('manaPickup');
       else if (keyCode === 49 || keyCode === 50 || keyCode === 51) this.audio.play('toolActivate');
     }
   }
@@ -391,7 +390,6 @@ export class Renderer {
 
       if (newState === 'up' && prevState !== 'up') {
         this.particles.spawnDust(x + 12, prevY + 48, 4);
-        if (isLocal) this.audio.play('jump');
       } else if (newState === 'idle' && prevState === 'down') {
         this.particles.spawnDust(x + 12, y + 48, 6);
         if (isLocal) this.audio.play('land');

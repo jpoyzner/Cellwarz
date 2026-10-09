@@ -45,14 +45,14 @@ describe('AudioManager ambient music', () => {
     const audio = new AudioManager();
     expect(audio.isAmbientPlaying).toBe(false);
 
-    audio.play('jump');
+    audio.play('manaPickup');
 
     expect(audio.isAmbientPlaying).toBe(true);
   });
 
   it('stops while paused, and sound effects do not bring it back', () => {
     const audio = new AudioManager();
-    audio.play('jump');
+    audio.play('manaPickup');
 
     audio.setAmbientPaused(true);
     expect(audio.isAmbientPlaying).toBe(false);
@@ -68,7 +68,7 @@ describe('AudioManager ambient music', () => {
     audio.setAmbientPaused(false);
     expect(audio.isAmbientPlaying).toBe(false); // nothing played yet, so no audio context to resume
 
-    audio.play('jump');
+    audio.play('manaPickup');
     audio.setAmbientPaused(true);
     audio.setAmbientPaused(false);
     expect(audio.isAmbientPlaying).toBe(true);
@@ -76,7 +76,7 @@ describe('AudioManager ambient music', () => {
 
   it('stays off when un-pausing while muted', () => {
     const audio = new AudioManager();
-    audio.play('jump');
+    audio.play('manaPickup');
     audio.setMuted(true);
 
     audio.setAmbientPaused(false);

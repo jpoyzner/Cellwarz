@@ -291,12 +291,10 @@ export class MainRoom extends Cell {
     }
   }
 
-  /** Freestanding blocks scattered on top of every elevated platform row ("a lot of blocks"). The floor stays
-   * clear so it can double as an obstacle-free walkway for e2e tests (portal warp, mana pickup, death/respawn). */
+  /** Freestanding blocks scattered on top of the second and third platform rows ("a lot of blocks"). The top row and
+   * the floor stay clear so they can double as obstacle-free walkways for e2e tests (portal warp, mana pickup, death/respawn). */
   private buildClutter(width: number): void {
     const segments: Array<[number, number, number]> = [
-      [OUTER_WALL_SIZE, HOLE_LEFT, ROW_Y[0]],
-      [HOLE_RIGHT, width - OUTER_WALL_SIZE, ROW_Y[0]],
       [OUTER_WALL_SIZE, HOLE_LEFT, ROW_Y[1]],
       [HOLE_RIGHT, width - OUTER_WALL_SIZE, ROW_Y[1]],
       [OUTER_WALL_SIZE, HOLE_LEFT, ROW_Y[2]],

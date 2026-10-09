@@ -133,7 +133,7 @@ to the single shared room and each asserts it can see the other's name and sprit
 
 ## Game feel: audio, particles, screen shake, netcode smoothing
 
-1. Running, jumping, landing, picking up/dropping mana, activating a mana tool, warping through a portal, a
+1. Running, landing, picking up/dropping mana, activating a mana tool, warping through a portal, a
    nearby avatar dying, and your own death now each play a short synthesized sound effect (WebAudio oscillator
    blips — no audio asset files were added; bitcrushed square/saw tones, filter sweeps, noise bursts) and, where
    relevant, a small dust/impact/warp particle puff at the sprite's position. A quiet synthwave bed (detuned
