@@ -4,6 +4,17 @@
 
 - yellow blocks shoulod activate up gravity when you are directly over them, except you are free to walk still...and any blocks touching them are also lifted up with it. Pressing down while over a yellow mana in this way moves it down instead as long as you hold it down (unless you are holding another mana).
 
+- be able to throw ninja stars, that make smaller explosions like the ones that rockets do, but make both rockets and ninja stars only do 20% of the damage, show the avatar in 6 stages of health (100% healthy to 20%)
+
+- make the blue mana look like ice more
+
+- there should always be at least one robot in the main room, they should just warp in, in a random location when this happens
+
+- if I am riding on top of iceblocks or they are pushing me, my avtar should not be jittering back and forth
+
+- flash blocks give you 5 diamonds 
+
+MAYBE JUST PLACE IT GROWING UPSIDE DOWN IN THE TOP MIDDLE!!!:
 - I want a flower spit out mana blocks and shoot them out upward but at random angles so there is more of a chance for the blocks to be spread out to different places when they land. Give me proposals for where you think this should be placed first or any other room modifications you want to make for this to work well.
 
 - make sure all blocks are working correctly (play around with them).
