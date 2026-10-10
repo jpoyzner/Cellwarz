@@ -116,6 +116,32 @@ test.describe('MainRoom deterministic workflows', () => {
     await expect(page.locator('.dash-icon')).toHaveCount(0);
   });
 
+  // Replays what the server sends when this player collects a diamond (the diamond sprite vanishing at their avatar,
+  // plus the new total) — nothing in this room makes diamonds on demand — and checks it flies into the HUD.
+  test('a collected diamond flies to the diamonds counter, which only then counts it', async ({ page }) => {
+    const loginName = `gem-${Date.now()}`;
+    await login(page, loginName);
+    await waitForAvatar(page, loginName);
+    await waitUntilGrounded(page, loginName);
+    await expect(page.locator('#diamonds')).toHaveText('0');
+
+    await page.evaluate((name) => {
+      const { renderer } = window.__cellwarz!;
+      const avatar = renderer.sprites[renderer.avatars[name]];
+      const diamondImage = renderer.imagePaths.findIndex((path) => path.includes('/effects/diamond'));
+      const id = '987654';
+      renderer.render({ [id]: [diamondImage, avatar[1] + 16, avatar[2] + 24] });
+      renderer.render({ [id]: [-1] });
+      renderer.setDiamonds(1);
+    }, loginName);
+
+    // The server's total is in at once, but the counter waits for the diamond to arrive…
+    expect(await page.evaluate(() => window.__cellwarz!.renderer.diamonds)).toBe(1);
+    expect(await page.evaluate(() => window.__cellwarz!.renderer.shownDiamonds)).toBe(0);
+    // …and then shows it.
+    await expect(page.locator('#diamonds')).toHaveText('1', { timeout: 5000 });
+  });
+
   // The yellow Thruster is an ordinary block until touched. This runs before the other fixture tests: walking
   // right from the spawn portal touches it first, and once touched it keeps falling upwards for good.
   test('touching the yellow block makes it fall upwards', async ({ page }) => {
@@ -268,10 +294,23 @@ test.describe('MainRoom deterministic workflows', () => {
       // The observer, standing far from the blast, is unharmed.
       expect(await getAvatarPosition(pageB, observerName)).not.toBeNull();
 
-      // Reattaching places a fresh avatar back at the (fixed, deterministic) spawn portal.
+      // The victim spectates instead of freezing: a message shows, the world keeps moving (the exploded block is gone
+      // from their view too) and the arrow keys pan a free camera.
+      await expect(page.locator('#spectator')).toContainText('YOU DIED');
+      await expect.poll(() => page.evaluate(() => window.__cellwarz!.renderer.spectatorMode)).toBe('free');
+      await expect.poll(() => page.evaluate((id) => window.__cellwarz!.renderer.sprites[id], launcherId)).toBeUndefined();
+      const cameraBefore = await page.evaluate(() => window.__cellwarz!.renderer.getPlayerOffset().offsetX);
+      await page.keyboard.down('ArrowLeft');
+      await page.waitForTimeout(400);
+      await page.keyboard.up('ArrowLeft');
+      const cameraAfter = await page.evaluate(() => window.__cellwarz!.renderer.getPlayerOffset().offsetX);
+      expect(cameraAfter).toBeLessThan(cameraBefore - 100);
+
+      // The dead have nothing to wake up: teleporting in places a fresh avatar back at the (fixed, deterministic) spawn portal.
       await page.reload();
       await page.locator('#loginName').fill(bomberName);
-      await page.locator('#enter').click();
+      await expect(page.locator('#wakeup')).toHaveCount(0);
+      await page.locator('#teleport').click();
       await expect(page.locator('#canvas')).toBeVisible();
       await waitForAvatar(page, bomberName);
 

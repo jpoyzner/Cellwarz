@@ -20,50 +20,178 @@ body {
   width: 100%;
 }
 
+/* The login room: a 960x540 ship interior (canvas) with DOM panels and transporter labels laid over it. */
 #login {
-  background: rgba(5, 8, 22, 0.94);
-  border: 1px solid #00f6ff;
-  box-shadow: 0 0 24px rgba(0, 246, 255, 0.35), inset 0 0 40px rgba(255, 46, 166, 0.08);
+  align-items: center;
+  background: #03040a;
   color: #8ff7ff;
-  height: 90%;
-  left: 5%;
-  overflow: auto;
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  overflow: hidden;
+  position: fixed;
+}
+
+#ship-stage {
+  position: relative;
+}
+
+#ship-canvas {
+  display: block;
+  height: 100%;
+  width: 100%;
+}
+
+.ship-overlay {
+  height: 540px;
+  left: 0;
   position: absolute;
-  top: 5%;
-  width: 90%;
+  top: 0;
+  transform-origin: 0 0;
+  width: 960px;
+}
+
+.ship-panel {
+  background: rgba(4, 10, 24, 0.82);
+  border: 1px solid rgba(0, 246, 255, 0.6);
+  box-shadow: 0 0 12px rgba(0, 246, 255, 0.25), inset 0 0 14px rgba(0, 246, 255, 0.08);
+  box-sizing: border-box;
+  font-size: 10px;
+  position: absolute;
+}
+
+.panel-title {
+  color: #ff2ea6;
+  display: block;
+  font-size: 9px;
+  letter-spacing: 0.22em;
+  text-shadow: 0 0 6px rgba(255, 46, 166, 0.7);
+}
+
+#input {
+  height: 204px;
+  left: 24px;
+  padding: 8px 10px;
+  top: 40px;
+  width: 290px;
 }
 
 #login input[type='text'] {
   background: #000;
   border: 1px solid #00f6ff;
+  box-sizing: border-box;
   caret-color: #ff2ea6;
   color: #00f6ff;
-  font: inherit;
+  font: 14px ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  margin: 4px 0 8px;
   padding: 4px 8px;
+  width: 100%;
 }
 
-#login input[type='submit'] {
-  background: transparent;
-  border: 1px solid #ff2ea6;
-  color: #ff2ea6;
+.swatch-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.swatch-title {
+  color: #8ff7ff;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  width: 100%;
+}
+
+.swatch {
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 2px;
   cursor: pointer;
-  font: inherit;
-  margin-left: 8px;
-  padding: 4px 10px;
+  height: 17px;
+  padding: 0;
+  width: 17px;
 }
 
-#login input[type='submit']:hover {
-  background: rgba(255, 46, 166, 0.18);
-  box-shadow: 0 0 10px rgba(255, 46, 166, 0.7);
+.swatch-default {
+  background: repeating-linear-gradient(45deg, #1a2440 0, #1a2440 3px, #05070f 3px, #05070f 6px);
 }
 
-#input {
-  margin: 20px 0 -10px 40px;
+.swatch-selected {
+  border-color: #fff;
+  box-shadow: 0 0 8px #fff;
+}
+
+.swatch-custom {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  cursor: pointer;
+  height: 19px;
+  padding: 0;
+  width: 19px;
+}
+
+#login-notice {
+  color: #ffae1a;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  position: absolute;
+  bottom: 6px;
+  left: 10px;
+}
+
+#radar {
+  height: 204px;
+  left: 370px;
+  padding: 8px 10px;
+  top: 40px;
+  width: 240px;
+}
+
+#radar canvas {
+  background: rgba(0, 12, 24, 0.7);
+  display: block;
+  height: 140px;
+  margin-top: 4px;
+  width: 220px;
+}
+
+#radar-readout {
+  color: #00f6ff;
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  margin-top: 4px;
+  text-align: center;
 }
 
 #desc {
-  line-height: 1.5;
-  padding: 20px;
+  font-size: 9.5px;
+  height: 204px;
+  left: 626px;
+  line-height: 1.35;
+  overflow: auto;
+  padding: 8px 12px;
+  top: 40px;
+  width: 310px;
+}
+
+#desc p {
+  margin: 0 0 6px;
+}
+
+.transporter-label {
+  background: rgba(4, 10, 24, 0.7);
+  border: 1px solid currentcolor;
+  box-shadow: 0 0 14px currentcolor;
+  cursor: pointer;
+  font: bold 16px ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  height: 30px;
+  letter-spacing: 0.2em;
+  position: absolute;
+  text-shadow: 0 0 8px currentcolor;
+}
+
+.transporter-label:hover {
+  background: rgba(255, 255, 255, 0.12);
 }
 
 #crt {
@@ -110,6 +238,48 @@ body {
   content: '\1F48E ';
   font-size: 16px;
   vertical-align: middle;
+}
+
+#recording {
+  color: #ff3b3b;
+  font: bold 14px ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  left: 16px;
+  letter-spacing: 0.12em;
+  pointer-events: none;
+  position: fixed;
+  text-shadow: 0 0 8px #ff3b3b;
+  top: 12px;
+}
+
+#recording::before {
+  animation: recording-blink 1s steps(2, start) infinite;
+  content: '\25CF ';
+}
+
+@keyframes recording-blink {
+  to {
+    visibility: hidden;
+  }
+}
+
+#spectator {
+  color: #00f6ff;
+  font: bold 14px ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  left: 50%;
+  letter-spacing: 0.12em;
+  pointer-events: none;
+  position: fixed;
+  text-align: center;
+  text-shadow: 0 0 8px #00f6ff, 0 0 18px rgba(0, 246, 255, 0.5);
+  top: 18px;
+  transform: translateX(-50%);
+}
+
+#spectator-title {
+  color: #ff2ea6;
+  font-size: 30px;
+  letter-spacing: 0.25em;
+  text-shadow: 0 0 10px #ff2ea6, 0 0 22px rgba(255, 46, 166, 0.5);
 }
 
 .minimap {

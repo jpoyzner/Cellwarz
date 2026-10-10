@@ -8,19 +8,39 @@ const TAP_THRESHOLD = 10;
 const TAP_MAX_DURATION_MS = 300;
 
 const MOVEMENT_KEYS = [37, 38, 39];
+// Mirrors server/ui.ts: tells the server the player pressed Escape while alive.
+const ESCAPE_KEY = 27;
 // Space (pick up / throw) and Down (put down): each press is one action.
 const ONE_SHOT_KEYS = [32, 40];
 
 /**
  * Mirrors js/ui.js input handling (chat/typing removed); swipe/tap replaces the old jquery-mobile gestures.
- * Escape isn't sent to the server: it releases any held movement keys (so the avatar left behind doesn't keep
- * running) and calls `onExit` to go back to the login screen.
+ * Escape releases any held movement keys (so the avatar left behind doesn't keep running). While the avatar is alive
+ * it tells the server to put it to sleep and the player spectates it; otherwise (dead, asleep, inactive) it calls
+ * `onExit` to go back to the login screen. Backtick calls `onToggleRecording`.
  */
-export function attachInputHandlers(sendKey: SendKey, renderer: Renderer, onExit?: () => void): () => void {
+export function attachInputHandlers(
+  sendKey: SendKey,
+  renderer: Renderer,
+  onExit?: () => void,
+  onToggleRecording?: () => void,
+): () => void {
   const handleKeyDown = (event: KeyboardEvent) => {
+    // Backtick toggles the debug recorder; it's a client-side tool, never sent to the server.
+    if (event.key === '`') {
+      event.preventDefault();
+      if (!event.repeat) onToggleRecording?.();
+      return;
+    }
+
     if (event.key === 'Escape') {
       for (const key of MOVEMENT_KEYS) sendKey(key, false);
-      onExit?.();
+      if (renderer.canFallAsleep()) {
+        // First Escape: the avatar goes to sleep where it stands and the player spectates; the next one leaves.
+        sendKey(ESCAPE_KEY, true);
+      } else {
+        onExit?.();
+      }
       return;
     }
 
@@ -33,7 +53,7 @@ export function attachInputHandlers(sendKey: SendKey, renderer: Renderer, onExit
   };
 
   const handleKeyUp = (event: KeyboardEvent) => {
-    if (event.key === 'Escape') return;
+    if (event.key === 'Escape' || event.key === '`') return;
     sendKey(event.keyCode, false);
   };
 

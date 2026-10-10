@@ -8,8 +8,10 @@ import { addAction } from './frames';
 // Cells per frame (one cell every other frame, same pace as the old patrol).
 const SLIDE_SPEED = 0.5;
 
-/** The blue block: slides along whatever it rests on and keeps sliding — a wall just stops it, it never turns around. */
+/** The blue block: slides along whatever it rests on and keeps sliding — when something blocks it, it turns around. */
 export class Ice extends Mana {
+  private direction = Physics.RIGHT;
+
   private static readonly actionFrames = new Map<string, Frame[]>();
 
   static init(cellData: CellData): void {
@@ -21,6 +23,10 @@ export class Ice extends Mana {
   }
 
   override getSlideDrive(): number {
-    return Physics.RIGHT * SLIDE_SPEED;
+    return this.direction * SLIDE_SPEED;
+  }
+
+  protected override onSlideBlocked(): void {
+    this.direction = -this.direction;
   }
 }

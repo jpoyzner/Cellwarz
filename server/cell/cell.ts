@@ -1,5 +1,5 @@
 import { CellData } from '../cellData';
-import { ClusteredInitException } from '../errors';
+import { ClusteredInitException, EdgeOfCellDataException } from '../errors';
 import type { Engine } from '../engine';
 import { PlanetField } from '../planet';
 import type { PlanetState } from '../planet';
@@ -21,9 +21,14 @@ import { Shield } from '../sprite/shield';
 import { SpawnPortal } from '../sprite/spawnPortal';
 import { StickyBlock } from '../sprite/stickyBlock';
 import { Thruster } from '../sprite/thruster';
+import type { Sprite } from '../sprite/sprite';
 import { Wall } from '../sprite/wall';
 
 export const OUTER_WALL_SIZE = CellBlock.SIZE * 4;
+
+// Random-floor spawning (see addAvatarAtRandomFloor): how many spots to try, and how far (grid units) a robot must be.
+const RANDOM_FLOOR_ATTEMPTS = 400;
+const ROBOT_SAFE_DISTANCE = 24;
 
 export type BackgroundKind = 'space' | 'station' | 'temple';
 
@@ -209,6 +214,75 @@ export abstract class Cell {
       if (e instanceof ClusteredInitException) return undefined;
       throw e;
     }
+  }
+
+  /**
+   * Deposits a new avatar on a random bare patch of floor: a spot is picked, dropped straight down to whatever it
+   * would land on, and only used if it rests on wall blocks with nothing but wall blocks around it (no pickups,
+   * portals or other avatars) and no robot nearby. Falls back to an entrance if no such spot turns up. Set
+   * CELLWARZ_RANDOM_TELEPORT=off to always use the entrances (the deterministic e2e specs rely on that).
+   */
+  addAvatarAtRandomFloor(name: string): Avatar | undefined {
+    if (process.env.CELLWARZ_RANDOM_TELEPORT === 'off') return this.addAvatarAtEntrance(name);
+
+    const robots = this.data.getSprites().filter((sprite): sprite is Avatar => sprite instanceof Avatar && sprite.isRobot());
+    const xRange = this.width - OUTER_WALL_SIZE * 2 - Avatar.WIDTH;
+    const yRange = this.height - OUTER_WALL_SIZE * 2 - Avatar.HEIGHT;
+    if (xRange <= 0 || yRange <= 0) return this.addAvatarAtEntrance(name);
+
+    for (let attempt = 0; attempt < RANDOM_FLOOR_ATTEMPTS; attempt++) {
+      const x = OUTER_WALL_SIZE + randomInt(xRange);
+      const y = this.findBareFloorTop(x, OUTER_WALL_SIZE + randomInt(yRange));
+      if (y === undefined) continue;
+      if (robots.some((robot) => Math.abs(robot.getX() - x) < ROBOT_SAFE_DISTANCE && Math.abs(robot.getY() - y) < ROBOT_SAFE_DISTANCE)) continue;
+
+      try {
+        return new Avatar(name, x, y, true, this);
+      } catch (e) {
+        if (!(e instanceof ClusteredInitException)) throw e;
+      }
+    }
+
+    return this.addAvatarAtEntrance(name);
+  }
+
+  /** The top y an avatar at column `x` would stand at after falling from `startY` onto bare floor, if it can. */
+  private findBareFloorTop(x: number, startY: number): number | undefined {
+    for (let y = startY; y + Avatar.HEIGHT < this.height; y++) {
+      if (y === startY && this.spritesInRect(x, y, Avatar.WIDTH, Avatar.HEIGHT)?.size !== 0) return undefined;
+
+      const below = this.spritesInRect(x, y + Avatar.HEIGHT, Avatar.WIDTH, 1);
+      if (!below) return undefined;
+      if (below.size === 0) continue;
+
+      // The standing frame is clipped a column on each side, so only the inner columns count as resting on something.
+      const supported = (this.spritesInRect(x + 1, y + Avatar.HEIGHT, Avatar.WIDTH - 2, 1)?.size ?? 0) > 0;
+      if (!supported) return undefined;
+
+      const surroundings = this.spritesInRect(x - 1, y - 1, Avatar.WIDTH + 2, Avatar.HEIGHT + 2);
+      const bare = surroundings !== undefined && [...surroundings].every((sprite) => sprite instanceof CellBlock);
+      return bare ? y : undefined;
+    }
+
+    return undefined;
+  }
+
+  /** Every sprite on the grid cells of a rectangle, or undefined if it runs off the grid. */
+  private spritesInRect(x: number, y: number, width: number, height: number): Set<Sprite> | undefined {
+    const found = new Set<Sprite>();
+
+    try {
+      for (let column = x; column < x + width; column++) {
+        for (let row = y; row < y + height; row++) {
+          for (const sprite of this.data.getMapPosition(column, row) ?? []) found.add(sprite);
+        }
+      }
+    } catch (e) {
+      if (e instanceof EdgeOfCellDataException) return undefined;
+      throw e;
+    }
+
+    return found;
   }
 
   process(): void {

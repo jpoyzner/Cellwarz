@@ -122,19 +122,22 @@ describe('block physics', () => {
       expect(ice.getX()).toBeGreaterThanOrEqual(20 + 15);
     });
 
-    it('does not turn around when it hits a wall, it just stays against it', () => {
+    it('turns around when a wall blocks it, so it never stops sliding', () => {
       const { cell } = createScene();
       layWall(cell, 50, FLOOR_Y - 10, FLOOR_Y);
+      layWall(cell, 20, FLOOR_Y - 10, FLOOR_Y);
       const ice = new Ice(30, FLOOR_Y - Ice.SIZE, false, cell);
 
       const xs: number[] = [];
-      for (let frame = 0; frame < 200; frame++) {
+      for (let frame = 0; frame < 400; frame++) {
         ice['doAction']();
         xs.push(ice.getX());
       }
 
-      expect(xs[xs.length - 1]).toBe(50 - Ice.SIZE);
-      for (let i = 1; i < xs.length; i++) expect(xs[i]).toBeGreaterThanOrEqual(xs[i - 1]);
+      expect(Math.max(...xs)).toBe(50 - Ice.SIZE);
+      expect(Math.min(...xs)).toBeLessThanOrEqual(20 + CellBlock.SIZE + 1);
+      // Still moving at the end: the last stretch isn't a standstill.
+      expect(new Set(xs.slice(-10)).size).toBeGreaterThan(1);
     });
   });
 
@@ -176,24 +179,165 @@ describe('block physics', () => {
       expect(thruster.getY()).toBeLessThan(yAfterThrow);
     });
 
-    it('bounces off the ceiling it falls into', () => {
+    it('falls upwards only faintly compared with how a normal block falls', () => {
+      const { cell } = createScene();
+      const thruster = new Thruster(30, FLOOR_Y - Thruster.SIZE, false, cell);
+      const faller = new PlainBlock(60, 20, false, cell);
+      thruster.touch();
+
+      for (let frame = 0; frame < 40; frame++) {
+        thruster['doAction']();
+        faller['doAction']();
+      }
+
+      const rose = FLOOR_Y - Thruster.SIZE - thruster.getY();
+      const fell = faller.getY() - 20;
+      expect(rose).toBeGreaterThan(2);
+      expect(rose).toBeLessThan(fell / 3);
+    });
+
+    it('lets an avatar glide upwards while carrying it, and an inactive one does nothing of the sort', () => {
+      const { cell } = createScene();
+      const thruster = new Thruster(30, FLOOR_Y - Thruster.SIZE, false, cell);
+      const carrier = new Avatar('glider', 30, FLOOR_Y - Thruster.SIZE - Avatar.HEIGHT, false, cell);
+      const bystander = new Avatar('bystander', 80, FLOOR_Y - Avatar.HEIGHT, false, cell);
+      const startY = FLOOR_Y - Thruster.SIZE - Avatar.HEIGHT;
+
+      carrier.pickUpMana();
+      expect(thruster.isReversed()).toBe(true);
+      expect(carrier.hasHandledMana()).toBe(true);
+
+      let previousY = carrier.getY();
+      for (let frame = 0; frame < 60; frame++) {
+        carrier['doAction']();
+        thruster['doAction']();
+        bystander['doAction']();
+        expect(carrier.getY()).toBeLessThanOrEqual(previousY); // never sinks back while carrying
+        previousY = carrier.getY();
+      }
+
+      expect(carrier.getY()).toBeLessThan(startY - 15);
+      expect(bystander.getY()).toBe(FLOOR_Y - Avatar.HEIGHT);
+    });
+
+    it('stops lifting an avatar once the block is put down away from it', () => {
+      const { cell } = createScene();
+      const thruster = new Thruster(30, FLOOR_Y - Thruster.SIZE, false, cell);
+      const carrier = new Avatar('dropper', 30, FLOOR_Y - Thruster.SIZE - Avatar.HEIGHT, false, cell);
+      carrier.pickUpMana();
+      for (let frame = 0; frame < 30; frame++) {
+        carrier['doAction']();
+        thruster['doAction']();
+      }
+
+      carrier.throwMana();
+      const risenTo = carrier.getY();
+      for (let frame = 0; frame < 60; frame++) {
+        thruster['doAction']();
+        carrier['doAction']();
+      }
+
+      expect(carrier.getY()).toBeGreaterThan(risenTo); // free to fall again
+    });
+
+    it('makes a block resting against it much lighter, so it drifts up with it', () => {
+      const { cell } = createScene();
+      const thruster = new Thruster(30, FLOOR_Y - Thruster.SIZE, false, cell);
+      const neighbour = new PlainBlock(33, FLOOR_Y - PlainBlock.SIZE, false, cell);
+      thruster.touch();
+
+      for (let frame = 0; frame < 40; frame++) {
+        thruster['doAction']();
+        neighbour['doAction']();
+      }
+
+      expect(neighbour.getY()).toBeLessThan(FLOOR_Y - PlainBlock.SIZE - 2);
+    });
+
+    it('falls back down (its reversed gravity switches off) once it hits the underside of a wall block', () => {
       const { cell } = createScene();
       layFloor(cell, 20, 0, 120);
       const thruster = new Thruster(30, 70, false, cell);
       thruster.touch();
+      expect(thruster.isReversed()).toBe(true);
 
-      let lowestAfterCeiling = 0;
       let reachedCeiling = false;
-      for (let frame = 0; frame < 300; frame++) {
+      for (let frame = 0; frame < 400; frame++) {
         thruster['doAction']();
         if (thruster.getY() === 22) reachedCeiling = true;
-        if (reachedCeiling) lowestAfterCeiling = Math.max(lowestAfterCeiling, thruster.getY());
       }
 
       expect(reachedCeiling).toBe(true);
-      expect(thruster.getY()).toBe(22);
-      expect(lowestAfterCeiling).toBeGreaterThan(22);
-      expect(lowestAfterCeiling).toBeLessThan(40);
+      expect(thruster.isReversed()).toBe(false);
+      expect(thruster.getY()).toBe(FLOOR_Y - Thruster.SIZE); // back on the floor, for good
+    });
+
+    it('does not rise again just because an avatar stands beside it, but does once it is picked up', () => {
+      const { cell } = createScene();
+      layFloor(cell, 20, 0, 120);
+      const thruster = new Thruster(30, 70, false, cell);
+      thruster.touch();
+      for (let frame = 0; frame < 400; frame++) thruster['doAction']();
+      expect(thruster.getY()).toBe(FLOOR_Y - Thruster.SIZE);
+
+      const avatar = new Avatar('neighbour', 32, FLOOR_Y - Avatar.HEIGHT, false, cell);
+      for (let frame = 0; frame < 60; frame++) {
+        avatar['doAction']();
+        thruster['doAction']();
+      }
+      expect(thruster.isReversed()).toBe(false);
+
+      avatar.pickUpMana();
+      expect(thruster.isReversed()).toBe(true);
+    });
+
+    it('keeps its upward gravity while carried, even by an avatar pressed against a ceiling', () => {
+      const { cell } = createScene();
+      layFloor(cell, 20, 0, 120);
+      const thruster = new Thruster(30, FLOOR_Y - Thruster.SIZE, false, cell);
+      const carrier = new Avatar('holder', 30, FLOOR_Y - Thruster.SIZE - Avatar.HEIGHT, false, cell);
+      carrier.pickUpMana();
+
+      for (let frame = 0; frame < 400; frame++) {
+        carrier['doAction']();
+        thruster['doAction']();
+      }
+
+      expect(carrier.getY()).toBeLessThan(40); // glided right up under the ceiling
+      expect(thruster.isReversed()).toBe(true);
+    });
+
+    it('turns its upward gravity off at the ceiling after being thrown up there', () => {
+      const { cell } = createScene();
+      layFloor(cell, 20, 0, 120);
+      const thruster = new Thruster(30, FLOOR_Y - Thruster.SIZE, false, cell);
+      const carrier = new Avatar('thrower', 30, FLOOR_Y - Thruster.SIZE - Avatar.HEIGHT, false, cell);
+      carrier.pickUpMana();
+      for (let frame = 0; frame < 30; frame++) {
+        carrier['doAction']();
+        thruster['doAction']();
+      }
+      expect(thruster.isReversed()).toBe(true);
+
+      carrier.throwMana();
+      for (let frame = 0; frame < 400; frame++) thruster['doAction']();
+
+      expect(thruster.isReversed()).toBe(false);
+    });
+
+    it('keeps rising while something other than a wall block is above it', () => {
+      const { cell } = createScene();
+      const thruster = new Thruster(30, FLOOR_Y - Thruster.SIZE, false, cell);
+      const lid = new PlainBlock(30, 60, false, cell); // light enough to be shoved up, but let it rest on a ceiling
+      layFloor(cell, 52, 0, 120);
+      thruster.touch();
+
+      for (let frame = 0; frame < 300; frame++) {
+        thruster['doAction']();
+        lid['doAction']();
+      }
+
+      expect(thruster.isReversed()).toBe(true);
     });
   });
 });

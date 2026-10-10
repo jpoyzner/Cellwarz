@@ -1,4 +1,5 @@
 import type { Cell } from '../cell/cell';
+import { EdgeOfCellDataException } from '../errors';
 import { Engine } from '../engine';
 import type { Frame } from '../frame';
 import { Physics } from '../physics';
@@ -27,6 +28,14 @@ const DEATH_KNOCKBACK_DISTANCE = 3;
 // A thrown block's launch velocity (cells per frame): forward and up, so it flies in a short arc.
 const THROW_SPEED_X = 0.8;
 const THROW_SPEED_Y = -1.5;
+// The avatar's own motion (cells per frame, measured over the last few frames) is added to a throw; capped so a
+// warp or knockback can't turn into an absurd launch.
+const MOTION_SAMPLE_FRAMES = Engine.HALF_STEP;
+const MAX_INHERITED_SPEED = 2;
+// While an active yellow block touches the avatar (it carries it, or stands against it) it is lifted: for this many
+// frames after each touch it rises one cell every LIFTED_RISE_FRAMES frames instead of falling — a glide upwards.
+const LIFTED_FRAMES = 3;
+const LIFTED_RISE_FRAMES = 3;
 
 export const FULL_JUMP_ACTION_LENGTH = 24;
 const JUMP_ACTION_LENGTH = 10;
@@ -56,6 +65,8 @@ export class Avatar extends Sprite {
   private session: Session | undefined;
   private firstDraw: number;
   private handledMana: Mana | undefined;
+  private sleeping = false;
+  private liftedFrames = 0;
 
   protected facingRight = true;
   protected yPower = Physics.NONE;
@@ -64,6 +75,7 @@ export class Avatar extends Sprite {
   private coyoteFramesRemaining = 0;
   private jumpBufferedFrames = 0;
   private jumpStartedAt = 0;
+  private readonly recentPositions: { x: number; y: number }[] = [];
 
   getActionFrames(): Map<string, Frame[]> {
     return Avatar.actionFrames;
@@ -101,6 +113,9 @@ export class Avatar extends Sprite {
   }
 
   protected override doAction(): void {
+    const lifted = this.liftedFrames > 0;
+    if (lifted) this.liftedFrames--;
+
     if (this.yPower === Physics.NONE) {
       const grounded = this.physics.touchSprite(this, Physics.NONE, Physics.DOWN, false);
 
@@ -127,7 +142,11 @@ export class Avatar extends Sprite {
         this.setAnimationSequence(this.facingRight ? LAND_RIGHT_ACTION : LAND_LEFT_ACTION);
       }
 
-      this.physics.gravitate(this);
+      if (lifted) {
+        if (this.engine.actionMatchesFrequency(LIFTED_RISE_FRAMES)) this.moveCarrying(Physics.NONE, Physics.UP, 1);
+      } else {
+        this.physics.gravitate(this);
+      }
       this.adjustHandledMana();
     } else {
       if (this.yPower > START_FLOAT_INTERVAL) {
@@ -136,7 +155,7 @@ export class Avatar extends Sprite {
         this.setAnimationSequence(this.facingRight ? FLOAT_RIGHT_ACTION : FLOAT_LEFT_ACTION);
       }
 
-      if (this.physics.move(this, Physics.NONE, Physics.UP, JUMP_DISTANCE)) {
+      if (this.moveCarrying(Physics.NONE, Physics.UP, JUMP_DISTANCE)) {
         this.adjustHandledMana();
       } else {
         this.yPower = 1;
@@ -147,7 +166,7 @@ export class Avatar extends Sprite {
 
     if (this.xPower !== Physics.NONE) {
       if (this.engine.actionMatchesFrequency(Engine.HALF_STEP)) {
-        if (this.physics.move(this, this.xPower, Physics.NONE, RUN_STEP_DISTANCE)) {
+        if (this.moveCarrying(this.xPower, Physics.NONE, RUN_STEP_DISTANCE)) {
           this.adjustHandledMana();
         }
 
@@ -158,7 +177,7 @@ export class Avatar extends Sprite {
         }
       }
     } else if (this.slidePower !== Physics.NONE) {
-      if (this.physics.move(this, this.slidePower, Physics.NONE, RUN_STEP_DISTANCE)) {
+      if (this.moveCarrying(this.slidePower, Physics.NONE, RUN_STEP_DISTANCE)) {
         this.adjustHandledMana();
       }
 
@@ -166,21 +185,44 @@ export class Avatar extends Sprite {
     }
 
     this.touchAdjacentMana();
+    this.recordPosition();
 
     if (this.firstDraw !== 0) {
       this.firstDraw--;
     }
   }
 
-  // TODO: issue when walking under something just tall enough for avatar when handling mana.
+  /**
+   * A move that takes the carried block along: it is refused (like running into a wall) when the block, riding over the
+   * avatar's head, would end up inside a wall or another block.
+   */
+  private moveCarrying(xDirection: number, yDirection: number, distance: number): boolean {
+    const mana = this.handledMana;
+    if (mana && !mana.removed()) {
+      for (let step = 1; step <= distance; step++) {
+        if (!this.isSpotOverHeadFree(mana, xDirection * step, yDirection * step)) return false;
+      }
+    }
+
+    return this.physics.move(this, xDirection, yDirection, distance);
+  }
+
   private adjustHandledMana(): void {
     if (this.handledMana?.removed()) {
       this.handledMana = undefined;
     }
 
-    if (this.handledMana) {
-      this.physics.moveTo(this.handledMana, this.getX() + 1, this.getY() - this.handledMana.getHeight());
+    const mana = this.handledMana;
+    if (!mana) return;
+
+    // Only a shove from outside can get here (the avatar's own moves check first): rather than drag the block into a
+    // wall, the avatar lets go of it where it is.
+    if (!this.isSpotOverHeadFree(mana)) {
+      this.setManaDown();
+      return;
     }
+
+    this.physics.moveTo(mana, this.getHandledManaX(), this.getHandledManaY(mana));
   }
 
   /** Any block standing against, under or over this avatar counts as touched (some blocks react to that). */
@@ -190,13 +232,18 @@ export class Avatar extends Sprite {
     }
   }
 
+  /** An active yellow block is touching this avatar: it drifts upwards for a few frames instead of falling. */
+  lift(): void {
+    this.liftedFrames = LIFTED_FRAMES;
+  }
+
   /** Robots override this: only real players pick things up, collect diamonds and get hit by rockets. */
   isRobot(): boolean {
     return false;
   }
 
   protected override animate(): boolean {
-    return true;
+    return !this.sleeping; // a sleeper stands perfectly still instead of cycling its stand frames.
   }
 
   override getAnimationFrequency(): number {
@@ -267,6 +314,24 @@ export class Avatar extends Sprite {
     return this.name;
   }
 
+  /** A player who pressed Escape or lost their connection while alive: the avatar stands there asleep. */
+  isSleeping(): boolean {
+    return this.sleeping;
+  }
+
+  fallAsleep(): void {
+    this.sleeping = true;
+    this.xPower = Physics.NONE; // no slide either: a sleeper just stands (or finishes falling) where it is.
+    this.slidePower = Physics.NONE;
+    this.setFrame(0); // frozen on the first frame of whatever it is doing (a stand, once it is on the ground).
+    this.needsRedraw(true); // so clients hear about it even if nothing else changes this frame.
+  }
+
+  wakeUp(): void {
+    this.sleeping = false;
+    this.needsRedraw(true);
+  }
+
   showName(): boolean {
     return this.firstDraw > 0;
   }
@@ -294,22 +359,85 @@ export class Avatar extends Sprite {
   }
 
   // TODO: need to check if mana can be moved up and whether avatar can be moved down (and vice-versa for setting down).
-  /** Picks up the block under this avatar's feet (blocks stuck to other blocks can't be picked up). */
+  /**
+   * Picks up the nearest block this avatar is touching (beside, under or over it; a block stuck to others leaves them,
+   * the orange glue frees them all). A block under the feet swaps places with the avatar; one touched from the side or
+   * above is lifted onto the spot over the avatar's head, if that is free.
+   */
   pickUpMana(): void {
     if (this.handledMana) return;
 
-    for (const sprite of this.physics.getSpritesUnder(this, Physics.NONE, 0)) {
-      if (sprite instanceof Mana && sprite.canBePickedUp()) {
-        const mana = sprite;
-        mana.handleMelt();
-        this.physics.move(this, Physics.NONE, Physics.DOWN, mana.getHeight());
-        this.physics.move(mana, Physics.NONE, Physics.UP, this.getHeight());
-        mana.removeHandleMelt();
+    const underFeet = this.physics.getSpritesUnder(this, Physics.NONE, 0);
+    for (const mana of this.getTouchedManaByDistance()) {
+      if (underFeet.has(mana)) {
+        this.liftManaFromUnderFeet(mana);
+        return;
+      }
+
+      if (this.isSpotOverHeadFree(mana)) {
+        mana.detachForCarrying();
+        this.physics.moveTo(mana, this.getHandledManaX(), this.getHandledManaY(mana));
         mana.beingHandled();
         this.handledMana = mana;
-        break;
+        return;
       }
     }
+  }
+
+  private liftManaFromUnderFeet(mana: Mana): void {
+    mana.detachForCarrying();
+    mana.handleMelt();
+    this.physics.move(this, Physics.NONE, Physics.DOWN, mana.getHeight());
+    this.physics.move(mana, Physics.NONE, Physics.UP, this.getHeight());
+    mana.removeHandleMelt();
+    mana.beingHandled();
+    this.handledMana = mana;
+  }
+
+  /** Every pickable block touching this avatar, nearest (centre to centre) first. */
+  private getTouchedManaByDistance(): Mana[] {
+    const touched = new Set<Mana>();
+    const candidates = [...getAdjacentSprites(this), ...this.physics.getSpritesUnder(this, Physics.NONE, 0)];
+    for (const sprite of candidates) {
+      if (sprite instanceof Mana && sprite.canBePickedUp()) touched.add(sprite);
+    }
+
+    const centerX = this.getX() + this.getWidth() / 2;
+    const centerY = this.getY() + this.getHeight() / 2;
+    const distance = (mana: Mana) =>
+      Math.hypot(mana.getX() + mana.getWidth() / 2 - centerX, mana.getY() + mana.getHeight() / 2 - centerY);
+
+    return [...touched].sort((a, b) => distance(a) - distance(b));
+  }
+
+  private getHandledManaX(): number {
+    return this.getX() + 1;
+  }
+
+  private getHandledManaY(mana: Mana): number {
+    return this.getY() - mana.getHeight();
+  }
+
+  /** Whether `mana` fits in the carrying spot over the avatar's head, shifted by the offsets (walls, other blocks and the room's edge block it). */
+  private isSpotOverHeadFree(mana: Mana, xOffset = 0, yOffset = 0): boolean {
+    const left = this.getHandledManaX() + xOffset;
+    const top = this.getHandledManaY(mana) + yOffset;
+
+    try {
+      for (let column = left; column < left + mana.getWidth(); column++) {
+        for (let row = top; row < top + mana.getHeight(); row++) {
+          for (const other of this.getCellData().getMapPosition(column, row) ?? []) {
+            const ignored = other === this || other === mana || mana.getRigidGroup().includes(other);
+            if (!ignored && !other.melts() && other.getLayer() <= mana.getLayer()) return false;
+          }
+        }
+      }
+    } catch (e) {
+      if (e instanceof EdgeOfCellDataException) return false;
+      throw e;
+    }
+
+    return true;
   }
 
   /** Puts the carried block back down under this avatar's feet. */
@@ -323,14 +451,32 @@ export class Avatar extends Sprite {
     this.setManaDown();
   }
 
-  /** Throws the carried block ahead in an arc, in the direction this avatar faces. */
+  private recordPosition(): void {
+    this.recentPositions.push({ x: this.getX(), y: this.getY() });
+    if (this.recentPositions.length > MOTION_SAMPLE_FRAMES + 1) this.recentPositions.shift();
+  }
+
+  /** The avatar's recent velocity in cells per frame (running, jumping, falling), from its actual displacement. */
+  private getRecentVelocity(): { vx: number; vy: number } {
+    const oldest = this.recentPositions[0];
+    if (!oldest) return { vx: 0, vy: 0 };
+
+    const frames = this.recentPositions.length - 1;
+    if (frames < 1) return { vx: 0, vy: 0 };
+
+    const clamp = (v: number) => Math.max(-MAX_INHERITED_SPEED, Math.min(MAX_INHERITED_SPEED, v));
+    return { vx: clamp((this.getX() - oldest.x) / frames), vy: clamp((this.getY() - oldest.y) / frames) };
+  }
+
+  /** Throws the carried block ahead in an arc, in the direction this avatar faces, plus this avatar's own motion. */
   throwMana(): void {
     const mana = this.handledMana;
     if (!mana) return;
 
     this.handledMana = undefined;
     mana.setDown();
-    mana.launch((this.facingRight ? Physics.RIGHT : Physics.LEFT) * THROW_SPEED_X, THROW_SPEED_Y);
+    const { vx, vy } = this.getRecentVelocity();
+    mana.launch((this.facingRight ? Physics.RIGHT : Physics.LEFT) * THROW_SPEED_X + vx, THROW_SPEED_Y + vy);
   }
 
   setManaDown(): void {

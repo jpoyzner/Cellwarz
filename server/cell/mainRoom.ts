@@ -41,7 +41,8 @@ const STEPPING_STONE_COLUMNS: ReadonlyArray<readonly [number, number]> = [
 // running in parallel) never touch them: yellow and red blocks react to being touched, once.
 const TEST_THRUSTER_X = 310;
 const TEST_SHIELD_X = 330;
-const TEST_LAUNCHER_X = 350;
+// Far enough from the green block that its big bubble doesn't reach an avatar standing beside the red one.
+const TEST_LAUNCHER_X = 365;
 export const TEST_FIXTURE_PIXELS = {
   thrusterX: TEST_THRUSTER_X * CellData.ANIMATION_STEP,
   shieldX: TEST_SHIELD_X * CellData.ANIMATION_STEP,
@@ -215,8 +216,9 @@ export class MainRoom extends Cell {
     return this.blocks(8);
   }
 
+  // Purple blocks are switched off for now (the block itself still works); see Cell.getNumGravityBlocks.
   override getNumGravityBlocks(): number {
-    return this.blocks(6);
+    return 0;
   }
 
   override getNumStickyBlocks(): number {

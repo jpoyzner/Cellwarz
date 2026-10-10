@@ -6,6 +6,7 @@ export type StoredSprite = [number, number, number];
 
 export type SpritesMap = Record<string, StoredSprite>;
 export type AvatarsMap = Record<string, string>;
+export type LooksMap = Record<string, [string, string]>;
 
 export type BackgroundKind = 'space' | 'station' | 'temple';
 
@@ -35,4 +36,6 @@ export interface ConnectPayload {
   planet?: PlanetState | null;
   score: number;
   diamonds?: number;
+  /** Players' chosen colours by name: [headband, belt]; players without an entry wear the default tints. */
+  looks?: LooksMap;
 }

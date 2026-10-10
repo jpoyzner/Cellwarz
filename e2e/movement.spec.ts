@@ -5,7 +5,7 @@ test('running right moves the avatar in the world', async ({ page }) => {
 
   await page.goto('/');
   await page.locator('#loginName').fill(loginName);
-  await page.locator('#random').click();
+  await page.locator('#teleport').click();
   await expect(page.locator('#canvas')).toBeVisible();
 
   await page.waitForFunction(

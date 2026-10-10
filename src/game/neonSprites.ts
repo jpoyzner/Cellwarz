@@ -1,6 +1,9 @@
 // Cyberpunk re-skins applied to sprite art at load time (no new art assets): dark steel wall tiles with neon
 // trim, a glowing colored headband on every actor, and per-path neon glow colors for portals/pickups/projectiles.
 
+import { hexToRgb } from './look';
+import type { Look } from './look';
+
 export interface PixelBuffer {
   data: Uint8ClampedArray | number[];
   width: number;
@@ -32,6 +35,32 @@ export function recolorHeadband(pixels: PixelBuffer, rgb: readonly [number, numb
       data[i + 1] = rgb[1];
       data[i + 2] = rgb[2];
     } else if (onlyHeadband) {
+      data[i + 3] = 0;
+    }
+  }
+}
+
+// The red parts of the ninja art: the headband sits in the top rows, the belt (and its trailing tail) from here down.
+export const BELT_MIN_Y = 20;
+
+export type ActorPart = 'headband' | 'belt';
+
+/** Like `recolorHeadband` but colours the headband and belt separately; `only` makes everything else transparent. */
+export function recolorActorParts(
+  pixels: PixelBuffer,
+  headband: readonly [number, number, number],
+  belt: readonly [number, number, number],
+  only?: ActorPart,
+): void {
+  const { data, width } = pixels;
+  for (let i = 0; i < data.length; i += 4) {
+    const part: ActorPart = Math.floor(i / 4 / width) < BELT_MIN_Y ? 'headband' : 'belt';
+    if (isHeadband(data[i], data[i + 1], data[i + 2], data[i + 3]) && (only === undefined || only === part)) {
+      const rgb = part === 'headband' ? headband : belt;
+      data[i] = rgb[0];
+      data[i + 1] = rgb[1];
+      data[i + 2] = rgb[2];
+    } else if (only !== undefined) {
       data[i + 3] = 0;
     }
   }
@@ -106,8 +135,10 @@ export class NeonSprites {
     return this.bake('wall', index, image, () => this.bakeWall(image));
   }
 
-  actor(index: number, image: HTMLImageElement, tint: ActorTint): BakedSprite | undefined {
-    return this.bake(tint, index, image, () => this.bakeActor(image, tint));
+  /** A player's own colours (when they picked some) replace the tint; robots never get one. */
+  actor(index: number, image: HTMLImageElement, tint: ActorTint, look?: Look): BakedSprite | undefined {
+    const table = look ? `look:${look.headband}:${look.belt}` : tint;
+    return this.bake(table, index, image, () => this.bakeActor(image, tint, look));
   }
 
   // Called for every wall tile every frame, so lookups must not allocate.
@@ -152,16 +183,18 @@ export class NeonSprites {
     return { source: read.ctx.canvas, pad: 0 };
   }
 
-  private bakeActor(image: HTMLImageElement, tint: ActorTint): BakedSprite | undefined {
-    const body = this.readPixels(image);
-    const glow = this.readPixels(image);
-    if (!body || !glow) return undefined;
+  private bakeActor(image: HTMLImageElement, tint: ActorTint, look?: Look): BakedSprite | undefined {
+    const { rgb, glow } = ACTOR_COLORS[tint];
+    const headband = look ? hexToRgb(look.headband) : rgb;
+    const belt = look ? hexToRgb(look.belt) : rgb;
+    const headbandGlow = look?.headband ?? glow;
+    const beltGlow = look?.belt ?? glow;
 
-    const { rgb, glow: glowColor } = ACTOR_COLORS[tint];
-    recolorHeadband(body.pixels, rgb);
-    recolorHeadband(glow.pixels, rgb, true);
+    const body = this.readPixels(image);
+    if (!body) return undefined;
+
+    recolorActorParts(body.pixels, headband, belt);
     body.ctx.putImageData(body.pixels, 0, 0);
-    glow.ctx.putImageData(glow.pixels, 0, 0);
 
     const pad = GLOW_BLUR_PX + 2;
     const out = document.createElement('canvas');
@@ -170,10 +203,20 @@ export class NeonSprites {
     const ctx = out.getContext('2d');
     if (!ctx) return undefined;
 
-    ctx.shadowColor = glowColor;
-    ctx.shadowBlur = GLOW_BLUR_PX;
-    ctx.drawImage(glow.ctx.canvas, pad, pad);
-    ctx.drawImage(glow.ctx.canvas, pad, pad);
+    // One glow layer per part, since the two can be different colours.
+    const glows: Array<[ActorPart, string]> = [['headband', headbandGlow], ['belt', beltGlow]];
+    for (const [part, color] of glows) {
+      const layer = this.readPixels(image);
+      if (!layer) return undefined;
+
+      recolorActorParts(layer.pixels, headband, belt, part);
+      layer.ctx.putImageData(layer.pixels, 0, 0);
+      ctx.shadowColor = color;
+      ctx.shadowBlur = GLOW_BLUR_PX;
+      ctx.drawImage(layer.ctx.canvas, pad, pad);
+      ctx.drawImage(layer.ctx.canvas, pad, pad);
+    }
+
     ctx.shadowBlur = 0;
     ctx.drawImage(body.ctx.canvas, pad, pad);
     return { source: out, pad };

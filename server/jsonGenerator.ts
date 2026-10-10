@@ -4,6 +4,7 @@ import type { Sprite } from './sprite/sprite';
 const DELETED_CODE = -1;
 const AVATAR_NAME_KEY = '0';
 const CONSUME_SCALE_KEY = '2';
+const SLEEPING_KEY = '3';
 
 export type JsonSprite = [number] | [number, number, number] | [number, number, number, Record<string, unknown>];
 
@@ -26,6 +27,11 @@ export function getSprites(sprites: Sprite[], addExtraInfo: boolean): Record<str
         if (sprite.showName()) {
           extraInfo = { [AVATAR_NAME_KEY]: sprite.getName() };
         }
+      }
+
+      // Sleeping is sent in full-state payloads too (not just redraws) so a client joining mid-nap sees the Zs at once.
+      if (sprite instanceof Avatar && sprite.isSleeping()) {
+        extraInfo = { ...(extraInfo ?? {}), [SLEEPING_KEY]: 1 };
       }
 
       // A sprite being swallowed by a planet reports how far it has shrunk so clients can draw it smaller.

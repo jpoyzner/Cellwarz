@@ -46,8 +46,8 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   **Redraw-only frames are the sprite map itself (flat, unwrapped)**; only full-refresh frames (on login/stale)
   wrap it under a `sprites` key alongside `avatars`/`imagePaths` — see `SocketHub.renderClient()`. (The old `tools`
   dashboard payload went away with the "tap into a block" mechanic.)
-- **Client** (`src/`, served from `dist/` in production): React app. `App.tsx` switches between `LoginScreen` and
-  `GameCanvas`. `GameCanvas` owns the `<canvas>` and, in a single `useEffect`, wires up `game/ui.ts` (input),
+- **Client** (`src/`, served from `dist/` in production): React app. `App.tsx` switches between `LoginScreen` (the ship-interior
+  "login room", see below) and `GameCanvas`. `GameCanvas` owns the `<canvas>` and, in a single `useEffect`, wires up `game/ui.ts` (input),
   `game/renderer.ts` (canvas drawing from server JSON), `game/syncer.ts` (the `WebSocket` connection), and
   `game/analyzer.ts` (perf HUD) — these draw imperatively outside React's render cycle for performance, same
   design intent as the original Backbone views. `GameCanvas` also exposes `window.__cellwarz` (public game state
@@ -73,16 +73,23 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   [ManaBody](server/sprite/manaBody.ts), gravity 0.1/frame², ground friction (shoves slide a few cells and stop),
   landing restitution 0.5 (bounce height grows with fall height; tiny rebounds settle), moves made one cell at a time
   through `Physics.move`. Shoves arrive through the generic `Sprite.onPushed(x, y)` hook that `Physics` calls after a
-  successful push (don't special-case block types in `Physics`). Subclass hooks: `onFrame()` (runs even while
-  carried), `getGravityDirection()`, `getSlideDrive()`, `acceptsImpulses()`, `canBondWith()`, `onTouched()` (an
+  successful push (don't special-case block types in `Physics`). A carried block rides over the avatar's head: the avatar's
+  own moves go through `Avatar.moveCarrying()`, which refuses a step that would put the block inside a wall/another block
+  (`isSpotOverHeadFree` with an offset), and `adjustHandledMana()` drops the block if an outside shove left no room for it. Subclass hooks: `onFrame()` (runs even while
+  carried), `getGravityDirection()`/`getGravityStrength()` (their product is `getGravityPull()`; `ManaBody` sums the members'
+  pulls for direction and averages the magnitude), `getSlideDrive()`, `acceptsImpulses()`, `canBondWith()`, `onTouched()` (an
   avatar touched or picked it up — `Avatar.touchAdjacentMana()` scans the one-cell ring around the avatar each frame;
   robots don't), `onImpact(wasThrown)`. Colours → classes: yellow [Thruster](server/sprite/thruster.ts) (reverses
-  gravity once touched/picked up), red [Launcher](server/sprite/launcher.ts) (5s fuse then explosion: kill radius
-  14 with a line-of-sight check to head/middle/feet, shove radius 30), blue [Ice](server/sprite/ice.ts) (constant
-  slide drive, never turns), green [Shield](server/sprite/shield.ts) (+ [ShieldBubble](server/sprite/shieldBubble.ts)),
-  purple [GravityBlock](server/sprite/gravityBlock.ts) (impulses toward itself), orange
-  [StickyBlock](server/sprite/stickyBlock.ts) (merges `ManaBody`s with adjacent blocks), rainbow
-  [RainbowBlock](server/sprite/rainbowBlock.ts) (wall-following crawl, shatters into [Diamond](server/sprite/diamond.ts)s
+  gravity once touched/picked up, but only at 15% strength; every frame it calls `lift()` on the `Avatar`s/`Mana` touching it
+  — a lifted avatar rises one cell per 3 frames instead of falling, so a carrier glides upward; a lifted block feels a faint
+  upward pull; both lapse 3 frames after the touch ends). Hitting the underside of a `CellBlock` wall (or the room edge)
+  while rising and *not* carried (`onImpact(wasThrown, direction)` — the new `direction` is the vertical hit direction)
+  switches the reversal off and marks it `spent`, so only being picked up re-arms it (not an avatar standing beside it), red [Launcher](server/sprite/launcher.ts) (5s fuse then explosion: kill radius
+  28 with a line-of-sight check to head/middle/feet, shove radius 30), blue [Ice](server/sprite/ice.ts) (constant
+  slide drive, reverses when blocked so it never stops), green [Shield](server/sprite/shield.ts) (+ [ShieldBubble](server/sprite/shieldBubble.ts)),
+  purple [GravityBlock](server/sprite/gravityBlock.ts) (impulses toward itself; `MainRoom` places none for now), orange
+  [StickyBlock](server/sprite/stickyBlock.ts) (repels other orange blocks within 24 cells with a fading `applyImpulse` so they spread out, skipping glued group mates; merges `ManaBody`s with adjacent blocks; a stuck block can be carried — `Mana.detachForCarrying()` frees just it, or everything if it is the orange one), rainbow
+  [RainbowBlock](server/sprite/rainbowBlock.ts) (right-hand wall-following crawl that wraps corners and falls under gravity when nothing touches it, shatters into [Diamond](server/sprite/diamond.ts)s
   when a thrown one hits something). **Rigid groups**: `Sprite.getRigidGroup()` (generic hook; sticky blocks share a
   body) makes `Physics.move` move all members as one or none, and `Physics.canInteract` ignores group mates.
   `Physics.move` is also guarded against re-entrancy (a `moving` set): a sprite already being moved up the call stack is
@@ -90,22 +97,30 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   **Ghost-layer sprites**: visual/effect sprites (`ShieldBubble`, `Explosion`, `Diamond`, `RocketLauncher`) use
   `Physics.BACKGROUND_LAYER` (nothing treats it as an obstacle), `melts()` true, mass 0, and `isStable()` true so a mover
   doesn't drag them (a `Shield` re-creates/re-positions its bubble each frame; `Robot`/`Shield` override
-  `removePermanently()` to take their prop/bubble with them). Controls (`server/ui.ts`): Space picks up the block under
-  your feet, or throws it if you're carrying one (`Avatar.throwMana`: launch velocity 0.8 forward, -1.5 up); Down puts it
+  `removePermanently()` to take their prop/bubble with them). Controls (`server/ui.ts`): Space picks up the nearest block the
+  avatar touches (`Avatar.pickUpMana`: beside/under/over via `getAdjacentSprites`; a block under the feet swaps places
+  with the avatar, any other is `moveTo`'d onto the spot over the head if `isSpotOverHeadFree`, else the next-nearest is tried),
+  or throws it if you're carrying one (`Avatar.throwMana`: launch velocity 0.8 forward, -1.5 up, plus the avatar's own recent velocity — measured from its displacement over the last `Engine.HALF_STEP` frames, clamped to ±2 — so running/jumping/falling carries into the throw); Down puts it
   back (`putDownMana`); there is no "tap in"/structure/mana-action/dashboard code any more.
 - **Robot rockets**: `Robot` (`server/sprite/robot.ts`) runs a small `idle → drawing → putting-away` state machine
   (`updateRocketAttack`): every `EIGHTH_STEP` frames it looks for the nearest real player (`Avatar.isRobot()` false)
   in range (24–70 cells away, ≤30 cells of height difference) for which `aimAt()` solves a launch velocity and
   `Missile.pathReaches()` (a dry-run of the same integrator the rocket uses) finds a clear arc. It then stops, spawns a
-  [RocketLauncher](server/sprite/rocketLauncher.ts) prop, fires a `Missile` with a launch vector after ~0.5s (re-aiming at
+  [RocketLauncher](server/sprite/rocketLauncher.ts) prop, fires a `Missile` with a launch vector after ~0.9s (rocket speed 0.7 cells/frame) (re-aiming at
   the target's then-position), and puts the prop away. `Missile` takes an optional `{ vx, vy }` launch (gravity
-  `ROCKET_GRAVITY`) and dies on solid walls/blocks, shield bubbles and the room's edges; it never hurts robots.
+  `ROCKET_GRAVITY`) and dies on solid walls/blocks, the round part of a shield bubble and the room's edges; it flies through robots (never exploding on one). On touching a real player or anything solid (wall/block) it explodes via the shared [blast.ts](server/sprite/blast.ts) `detonate()` (also used by `Launcher`: kill radius with line-of-sight, shield immunity, shoves `Mana`, spawns the `Explosion`) with the smaller `ROCKET_KILL_RADIUS` 10 / `ROCKET_SHOVE_RADIUS` 20 — the blast kills robots too; avatars die from the blast, not from the touch. The room's edges and a shield bubble end it without exploding. Client-side, `Renderer.drawSprites` adds [rocketLight.ts](src/game/rocketLight.ts) to every `/projectiles/missile*` sprite — an additive flickering exhaust flame at the tail and a bright light on the tip (facing from the `L` art suffix) so rockets read against dark space. The 31-cell green
+  `ShieldBubble` (art: `public/images/effects/bubble.png`, 248px) is clamped inside the room and also makes avatars inside it (`ShieldBubble.isCovered`) immune to `Launcher` blasts.
 - **Death feedback**: `Avatar.die(knockbackXDirection?, knockbackYDirection?)` takes an optional knockback
-  direction (rockets knock back along their flight direction, explosions away from the blast) applied via one
+  direction (explosions, including rocket blasts, knock back away from the blast; robots away from themselves) applied via one
   `Physics.move` before `removePermanently()` — death is still a single hit, this only adds physicality to it.
-  Because a dying player's own `SocketHub.renderClient()` otherwise goes silent forever the instant their
-  session unplugs (no avatar left to render for them), it sends one one-shot `{ died: true }` message first so
-  their own client can react (see `Renderer.onLocalAvatarDeath()`) instead of the screen just freezing.
+  A dead player **spectates** instead of freezing: once their session unplugs, `SocketHub.renderClient()` keeps
+  streaming the room (it remembers the last `cell`) and sends a one-shot `{ died: true }` followed by one full
+  refresh (no local avatar; `following` = their robot body's cell index, or null). The client reacts in
+  `Renderer.onLocalAvatarDeath()` (flash/shake/sound) and the refresh picks a `SpectatorMode` (`'following'` the
+  robot body, else `'free'` at the last camera centre; `onSpectatorChange` drives the `#spectator` message in
+  `GameCanvas`). Arrow keys pan the free camera (and hand a following camera over to the player); if the followed
+  robot is destroyed the camera stays put. Everything else keeps moving; Escape leaves as always. Planet
+  swallowing (`Avatar.onConsumed` → `die()`) takes the same path.
 - **Client netcode smoothing & "juice" layer** (`src/game/`, all purely cosmetic — none of it changes actual
   positions/collision outcomes, which stay 100% server-authoritative): `Renderer` runs its own
   `requestAnimationFrame` loop, independent of message arrival, that exponentially smooths every sprite's
@@ -123,10 +138,70 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   for backgrounded/unfocused tabs (this bit a Playwright test with two browser contexts during development;
   see the git history on `src/game/renderer.ts` for the fix), so anything logically load-bearing can't depend
   on it actually running.
-- **Leaving the game (Escape)**: `ui.ts` handles Escape itself — it sends key-up for the movement keys (so the avatar
-  left behind doesn't keep running) and calls `onExit`, which `App` wires to clearing the session so the login
+- **Debug recording (backtick)** (`src/game/recorder.ts`, `server/recordingStore.ts`): `attachInputHandlers` turns the
+  backtick key into `onToggleRecording` (never sent to the server). `Recorder` (owned by `GameCanvas`, set on
+  `syncer.recorder`) snapshots `renderer.snapshot()` at start, then `Syncer.handleMessage`/`sendKey` log every incoming
+  message (deep-cloned: the renderer keeps parts of full-state payloads) and key press with timestamps; it auto-stops
+  at `MAX_RECORDING_MS` (10s), on a second press, or on leaving the game. The finished recording goes up the socket as
+  `{ recording }`; `SocketHub.handleRecording` (login required) writes it via `saveLatestRecording()` to the single
+  git-ignored `recordings/latest.json` (`CELLWARZ_RECORDINGS_DIR` overrides; 25MB cap), overwriting the previous one so
+  only the latest is kept. To analyze a bug report: read that file — `initial` is the starting state, `events` are
+  the `message`/`key` timeline.
+- **Login room** ([LoginScreen.tsx](src/components/LoginScreen.tsx), [loginRoom.ts](src/game/loginRoom.ts)): the login
+  screen is a client-only 960x540 "inside a huge ship" scene (hull panels, ceiling lights, a viewport onto stars and a
+  planet, hazard-striped floor) drawn on `#ship-canvas`, scaled to fit the window (canvas resolution follows the scale;
+  the DOM panels/labels sit in a 960x540 `.ship-overlay` that is CSS-scaled the same amount). `RoomAvatar` (pure, unit
+  tested) walks/jumps on a flat floor; the avatar is baked with the in-game [neonSprites](src/game/neonSprites.ts) so
+  it wears the picked colours. Two transporters stand on the floor with DOM button labels over them: **TELEPORT**
+  (`#teleport`, always) and **WAKE UP** (`#wakeup`, only while the typed callsign has a living avatar in the room, read
+  from the radar's `avatars`). Standing on a pad ~0.45s or clicking its label calls `LoginRoom.useTransporter()`:
+  a 650ms beam-up effect (a `setTimeout`, not the rAF loop, so a throttled background tab still proceeds), then
+  `onEnter(name, jump = pad === 'teleport', look)`. No callsign ⇒ nothing fires (`onBlocked`). Arrow keys always drive
+  the room avatar (also while the name field is focused). The last callsign/colours persist in localStorage
+  ([look.ts](src/game/look.ts) `loadSavedLogin`/`saveLogin`). `window.__cellwarzLogin` (`{ room, radar }`) is the
+  test-only hook.
+- **Login radar / spectator connection** ([radarPreview.ts](src/game/radarPreview.ts)): `RadarPreview` opens its own
+  WebSocket sending `{ connect: true, spectate: true }`; `SocketHub.handleSpectate()` sends the main room's full state
+  and then `renderSpectator()` streams the flat redraw frames and planet pings — no login, `Session`, avatar, score or
+  inactivity cut-off (the spectator hub has `login` undefined, so keys/scores are ignored). The client feeds them into
+  the same [Minimap](src/game/minimap.ts) the game uses and keeps `avatars` (name → sprite id) current from frame
+  extras, which is also how "WAKE UP" availability and the pilots/robots readout are known. It reconnects on close and
+  stops when the login screen unmounts; a later `connect` with a `login` turns a hub back into a normal player hub.
+- **Avatar colours (headband/belt)**: the ninja art's red pixels are the headband (rows above `BELT_MIN_Y` = 20) and the
+  belt (rows below); `recolorActorParts` colours them separately and `NeonSprites.actor(..., look)` bakes/caches a copy per
+  look (one glow layer per part). A `Look` is `{ headband, belt }` hex strings. The client sends `headband`/`belt` on the
+  `connect` message; `parseLook()` ([server/look.ts](server/look.ts), mirrored by [src/game/look.ts](src/game/look.ts))
+  validates both and rejects anything malformed or robot-red (`isRobotRed`: hue within 20° of red, saturation ≥ 0.5, value
+  ≥ 0.35 — pink/orange/dark reds pass). A `connect` message states the look outright (none/invalid ⇒ cleared back to
+  default tints; a key press reviving an idle player does not touch it). It lives on `Session` (`setLook`, survives respawns;
+  `Session.looksRevision` bumps on change). Everyone gets `looks` (name → [headband, belt]) in the full-state payload plus a
+  one-shot `{ looks }` message when the revision changes (like `planet`/`diamonds`, never a key in the flat redraw frames).
+  `Renderer.looks` maps names to colours; robots (incl. a player's assimilated body, not in `avatars`) never wear one.
+- **Teleport = random floor spot** (`Cell.addAvatarAtRandomFloor`, used for every new avatar from `SocketHub.handleLogin`;
+  `Portal` warps still use `addAvatarAtEntrance`): picks random (x, y), drops straight down over empty grid cells, and
+  accepts the landing only if the inner footprint columns rest on something, everything in the one-cell ring around the
+  avatar is a `CellBlock` (no blocks/portals/avatars) and no robot is within `ROBOT_SAFE_DISTANCE` (24 cells); after
+  `RANDOM_FLOOR_ATTEMPTS` failures it falls back to an entrance. `CELLWARZ_RANDOM_TELEPORT=off` (set by Playwright) makes it
+  use the entrances so e2e specs have deterministic spawns.
+- **Leaving the game (Escape)**: `ui.ts` handles Escape itself and sends key-up for the movement keys first. While the
+  avatar is alive (`Renderer.canFallAsleep()`) the *first* Escape sends key 27 (`ESCAPE_KEY`, [server/ui.ts](server/ui.ts)
+  → `Avatar.fallAsleep()`) and the player becomes a spectator of their sleeping avatar (`SpectatorMode` `'asleep'`: the
+  same free camera as after a death, entered when the server flags the local avatar asleep). Any Escape while dead,
+  assimilated, asleep or without an avatar calls `onExit`, which `App` wires to clearing the session so the login
   screen shows again; `GameCanvas`'s cleanup closes the socket and stops the renderer. The avatar stays in the room
-  (same as closing the tab, see the `Session.unplug()` TODO) and "Reattach!" with the same name picks it back up.
+  (same as closing the tab, see the `Session.unplug()` TODO) and the WAKE UP transporter with the same name picks it back up.
+- **Sleeping avatars** (Escape, closed tab or lost connection while alive): each `SocketHub` claims its `Session` on
+  login (`Session.attach(hub)`) and releases it when its socket closes (`Session.detach(hub)` — ignored if a newer
+  connection already took over, so a quick reattach/reload can't put the fresh session to sleep). Detaching calls
+  `Avatar.fallAsleep()` (clears run/slide; the avatar just stands, or finishes falling, and **stops animating**:
+  `animate()` is false, frozen on frame 0) and attaching calls `wakeUp()`. `UI.reactTo` ignores every key for a
+  sleeping avatar except Space, which calls `wakeUp()` (the player, still spectating it, takes control again; the client
+  leaves `'asleep'` mode when the flag drops from the next frame). A dead player has no avatar, so nothing sleeps. The flag rides the terse sprite entry's extra info as
+  key `'3'` (`jsonGenerator.ts`; sent in redraw *and* full-state sprites so a client joining mid-nap sees it at once).
+  Client-side (cosmetic): `Renderer.sleeping` leans the sprite forward around its feet with a slow breathing sway,
+  [sleepFace.ts](src/game/sleepFace.ts) paints its eyes (the light pixels in the head art) shut, and
+  [sleepZs.ts](src/game/sleepZs.ts) floats small bright, fading "Z"s up from the head; a frame without the flag wakes it.
+  The local predictor ignores key presses while the local avatar sleeps.
 - **Minimap** (`src/game/minimap.ts`, drawn by `Renderer` onto its own `#minimap-canvas`; open/closed toggle is
   React state in `GameCanvas`): the wire format has no sprite type, so walls vs. avatars/robots are classified
   from the image path (`/blocks/` vs `/me/`), and a robot is an actor sprite whose id isn't in `avatars` (robots
@@ -165,12 +240,13 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   same `me/` art so each tint gets its own baked copy), and portals/pickups/projectiles get a `shadowBlur` glow chosen
   from the image path (`glowColorForPath`). [postFx.ts](src/game/postFx.ts) adds a downscaled bright-pass bloom to the
   whole frame and a short RGB-glitch burst on warp/death. A CSS `#crt` overlay (scanlines + vignette), a monospace
-  HUD (`CREDITS` score with a digit-scramble on change, `RADAR` minimap with a sweep bar) and a terminal-styled login
+  HUD (`CREDITS` score with a digit-scramble on change, `RADAR` minimap with a sweep bar) and the ship-room login
   screen are in [cellwarz.css](src/styles/cellwarz.css); [audio.ts](src/game/audio.ts) uses bitcrushed/filter-swept
   synth sounds plus a quiet synthwave ambient bed that starts on the first sound and is torn down by
-  `AudioManager.dispose()` from `Renderer.stop()`. When the server freezes the level for inactivity (`connect: 'inactive'`
-  → `Renderer.drawStaleScreen()`), `AudioManager.setAmbientPaused(true)` silences the bed (sound effects can't restart
-  it); the next frame/full state leaves stale mode and un-pauses it.
+  `AudioManager.dispose()` from `Renderer.stop()`. There is no gray "stale" screen any more: when the server stops
+  streaming an idle player (`connect: 'inactive'`, ~1 minute without a key), `Syncer.onInactive` makes `GameCanvas`
+  take the same exit as Escape (back to the login screen; the avatar stays in the room, WAKE UP picks it up).
+  `Syncer.handleMessage()` is public so e2e can feed it that message; `window.__cellwarz` also exposes `syncer`.
 - **Gas giant planet** (`Cell.usesPlanets()`, MainRoom only; server [planet.ts](server/planet.ts), client
   [planet.ts](src/game/planet.ts)): `PlanetField` keeps one planet at a time crossing the room (random size/speed/
   height/direction/`seed`), stepped from `Cell.process()`, replaced by a new one once fully off the far side. It
@@ -195,7 +271,11 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
 - **Diamonds** (`#diamonds`, under the score, marked with a 💎 via CSS `::before`): `Diamond.collect()` credits
   `Session.addDiamonds` for the first real player (not a robot) overlapping it; `SocketHub` sends `{ diamonds: n }` as a
   separate one-shot message when the count changes (and `diamonds` in the full-state payload) so the flat redraw frames
-  stay untouched; `Renderer.setDiamonds()` updates the HUD. Explosions are detected client-side by new sprites whose
+  stay untouched. `Session.plugin()` must `setSession` on the new avatar (warp/respawn make fresh ones) or diamonds can't be
+  collected. Client-side, a diamond sprite deleted next to the local avatar spawns a [DiamondFlight](src/game/diamondFlight.ts)
+  flyer that arcs to the HUD; `Renderer.diamonds` is the server's total and `shownDiamonds` (what the HUD displays)
+  catches up as each flyer arrives (`setDiamonds()` never jumps the HUD; it also catches up after 1.5s if nothing flew).
+  Explosions are detected client-side by new sprites whose
   image path is under `/effects/explosion/` (bang, sparks, a distance-faded shake). New block/effect art lives under
   `public/images/{mana/*,effects,weapons}` (generated from the original yellow/red tile art by hue-shifting; frame names
   follow `addAction`: `name1..N`, mirrored frames get an `L` suffix).
@@ -257,8 +337,10 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   it and skips any stepping stone within an avatar's height of it, covered by
   [mainRoomBlocks.test.ts](server/__tests__/mainRoomBlocks.test.ts)); they sit far enough right of the spawn that other specs' short walks never
   touch them (touching is one-shot for yellow and red). Because blocks and robots now move around on their own, the
-  Playwright config starts the server with `CELLWARZ_PLANET_PULL=off CELLWARZ_ROBOTS=off CELLWARZ_RANDOM_BLOCKS=off`
-  (`MainRoom` reads the last two: no robots, no random blocks — only the fixtures stay). Remaining e2e gaps: robots
+  Playwright config starts the server with `CELLWARZ_PLANET_PULL=off CELLWARZ_ROBOTS=off CELLWARZ_RANDOM_BLOCKS=off
+  CELLWARZ_RANDOM_TELEPORT=off` (`MainRoom` reads the robots/blocks ones: no robots, no random blocks — only the fixtures
+  stay; the last makes teleporting in use the spawn portal instead of a random floor spot, see "Teleport" above;
+  `e2e/gameHelpers.ts` `login()` fills the callsign and clicks `#teleport`). Remaining e2e gaps: robots
   (unit-tested only: [robot.test.ts](server/__tests__/robot.test.ts) and the rocket tests in
   [specialBlocks.test.ts](server/__tests__/specialBlocks.test.ts)) and the purple/orange/rainbow/blue/green-bubble
   behaviors (unit-tested only). A dying player's own client stops receiving frames, so e2e checks a death from a

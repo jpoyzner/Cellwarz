@@ -11,8 +11,8 @@ import type { World } from '../world';
 
 const isPlanetPing = (message: Record<string, unknown>): boolean => Object.keys(message).join() === 'planet';
 
-/** A player assimilated by a robot must keep receiving frames (and be told what to follow), not freeze. */
-describe('SocketHub for a player turned into a robot', () => {
+/** A dead player (or one assimilated by a robot, told what to follow) must keep receiving frames to spectate, not freeze. */
+describe('SocketHub for a dead or assimilated player', () => {
   function setup() {
     const physics = new Physics();
     const hardlines = new Map<string, Session>();
@@ -65,14 +65,32 @@ describe('SocketHub for a player turned into a robot', () => {
     expect(later.every((message) => !('died' in message) && !('connect' in message))).toBe(true);
   });
 
-  it('goes silent after the death ping when the player simply died (no robot body)', () => {
+  it('keeps streaming to a player who simply died (no robot body): death ping, one full refresh, then frames', () => {
     const { hub, sent, avatar } = setup();
     avatar.die();
 
     hub.renderClient();
+    const first = sent.filter((message) => !isPlanetPing(message));
+    expect(first[0]).toEqual({ died: true });
+    expect(first[1].connect).toBe('0');
+    expect(first[1].following).toBeNull();
+    expect(Object.keys(first[1].avatars as object)).not.toContain('borged');
+
+    sent.length = 0;
+    hub.renderClient();
+    hub.renderClient();
+    const later = sent.filter((message) => !isPlanetPing(message));
+    expect(later).toHaveLength(2);
+    expect(later.every((message) => !('died' in message) && !('connect' in message))).toBe(true);
+  });
+
+  it('tells a player idle for too long that they are inactive', () => {
+    const { hub, sent } = setup();
+    hub['inactivityCount'] = 3000;
+
     hub.renderClient();
 
-    expect(sent.filter((message) => !isPlanetPing(message))).toEqual([{ died: true }]);
+    expect(sent.filter((message) => !isPlanetPing(message))).toEqual([{ connect: 'inactive' }]);
   });
 
   it('does not follow anything while the player has a live avatar', () => {

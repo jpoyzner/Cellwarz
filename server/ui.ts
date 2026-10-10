@@ -1,5 +1,10 @@
 import type { Avatar } from './sprite/avatar';
 
+// Pressing Escape while alive puts the avatar to sleep and leaves the player spectating (the client sends it).
+export const ESCAPE_KEY = 27;
+
+const SPACE_KEY = 32;
+
 export class UI {
   private avatar: Avatar | undefined;
 
@@ -10,6 +15,11 @@ export class UI {
   reactTo(key: number, down: boolean): void {
     if (this.unplugged()) return;
     const avatar = this.avatar!;
+    if (avatar.isSleeping()) {
+      // The player is only spectating (or gone): the avatar takes no orders, except Space, which wakes it up.
+      if (down && key === SPACE_KEY) avatar.wakeUp();
+      return;
+    }
 
     if (down) {
       if (key === 37) {
@@ -20,7 +30,9 @@ export class UI {
         avatar.runRight();
       } else if (key === 40) {
         avatar.putDownMana();
-      } else if (key === 32) {
+      } else if (key === ESCAPE_KEY) {
+        avatar.fallAsleep();
+      } else if (key === SPACE_KEY) {
         if (avatar.hasHandledMana()) avatar.throwMana();
         else avatar.pickUpMana();
       }

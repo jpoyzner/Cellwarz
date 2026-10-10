@@ -1,10 +1,10 @@
 import type { Page } from '@playwright/test';
 
-/** Fills the login form and clicks "Respawn" (shared by the newer, more scenario-heavy specs). */
+/** Fills the login form and steps onto the TELEPORT transporter (shared by the newer, more scenario-heavy specs). */
 export async function login(page: Page, loginName: string): Promise<void> {
   await page.goto('/');
   await page.locator('#loginName').fill(loginName);
-  await page.locator('#random').click();
+  await page.locator('#teleport').click();
 }
 
 export async function waitForAvatar(page: Page, loginName: string, timeout = 5000): Promise<void> {

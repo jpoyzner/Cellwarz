@@ -8,40 +8,119 @@ room layout, and every login currently lands in the same single room (see [TODOS
 closed most of the prior randomness-driven browser-test gaps below. The room's *other* blocks stay randomly
 placed, and they move (blocks are light: avatars shove them, robots shove them, purple blocks pull them), so the
 Playwright run starts the server with `CELLWARZ_RANDOM_BLOCKS=off CELLWARZ_ROBOTS=off` (alongside
-`CELLWARZ_PLANET_PULL=off`): only the fixed blocks stay. The bottom floor is a free-running track: no wall blocks stand on it
+`CELLWARZ_PLANET_PULL=off` and `CELLWARZ_RANDOM_TELEPORT=off`, which makes teleporting in use the spawn portal): only the fixed blocks stay. The bottom floor is a free-running track: no wall blocks stand on it
 and no stepping stone hangs low enough above it to stop an avatar, so walking into a fixed block shoves it (the e2e
 specs hop over or onto them instead). Robots patrol back and forth, standing still for one
 second before turning around when blocked, killing any player they touch and shooting arcing rockets at players
 in range — see [robot.ts](server/sprite/robot.ts).
 
-## Login — respawn
+## Login room (the ship)
 
-1. Load the site; the login screen (`#login`) is shown with a name field and two buttons ("Reattach!" and "Respawn"),
-   a short welcome/instructions blurb (including a warning about the ninja robots) and the key list (there is no title banner line above it).
-2. Type a name into `#loginName`, click "Respawn" (`#random`).
-3. The login screen is removed, `#canvas` becomes visible, and the avatar + room (walls, doors, mana, background)
-   render within ~1 second of the WebSocket connecting.
+1. Load the site; the login screen (`#login`) is the inside of a huge ship/rocket: a small room (`#ship-canvas`) with
+   your own avatar in it (cyan headband and belt until you pick colours), a viewport onto space, a callsign field
+   (`#loginName`), headband/belt colour pickers, a short briefing (`#desc`: welcome blurb, robot warning and the key
+   list) and a live radar (see "Login room — live radar"). The room is scaled to fit the window.
+2. Walk the avatar with the Left/Right arrows and jump with Up (the arrow keys work even while the callsign field has
+   focus; the room is client-only, nothing is sent to the server for it). A name tag shows the callsign over it.
+3. There are two transporters on the floor, each with a button label over it (also clickable): **TELEPORT**
+   (`#teleport`, always there) and **WAKE UP** (`#wakeup`, only present while the callsign typed has a living —
+   awake or asleep — avatar in the main room; typing another name removes it, a dead player never sees it).
+4. Standing on a pad for about half a second (or clicking its label) beams the avatar up (a short light-column effect),
+   then the login screen is removed, `#canvas` becomes visible, and the avatar + room (walls, doors, mana,
+   background) render within ~1 second of the WebSocket connecting. Without a callsign nothing fires: the notice
+   `#login-notice` says to enter one and the field is focused.
+5. The last callsign and colours are remembered (localStorage) and prefilled next time, including after Escape.
 
-**Covered by**: [e2e/login.spec.ts](e2e/login.spec.ts)
+**Covered by**: [e2e/login-room.spec.ts](e2e/login-room.spec.ts) (room, walking, jumping, callsign required, walking onto the
+pad), [e2e/login.spec.ts](e2e/login.spec.ts) (entering the game) and [src/game/__tests__/loginRoom.test.ts](src/game/__tests__/loginRoom.test.ts)
+(avatar movement and pad detection). The ship's look itself (hull, viewport, lights, beam) is manual-only.
 
-## Login — reattach
+## Login — teleport
 
-1. Respawn once (as above) to create an avatar tied to a login name.
-2. Reload the page, type the same login name, click "Reattach!" (`#enter`).
-3. The player reconnects to the *same* avatar (same room, same position) instead of being placed in a new
-   random room.
+1. Type a callsign and use the TELEPORT transporter (`#teleport`).
+2. The server always makes a **fresh** avatar (an existing one under that name is removed) and drops it on a random bare
+   patch of floor in the main room: it rests on wall blocks with nothing but wall blocks around it (no blocks, portals
+   or other avatars) and no robot within 24 grid cells. (If no such spot is found it falls back to a spawn portal.)
+   Set `CELLWARZ_RANDOM_TELEPORT=off` to always use the spawn portals; the Playwright run does, so specs can rely on
+   where avatars start.
 
-**Covered by**: [e2e/reattach.spec.ts](e2e/reattach.spec.ts)
+**Covered by**: [server/__tests__/randomFloor.test.ts](server/__tests__/randomFloor.test.ts) (random floor placement),
+[server/__tests__/socketHubLogin.test.ts](server/__tests__/socketHubLogin.test.ts) (jump = fresh avatar) and every e2e
+spec that logs in through `#teleport` (they use the spawn portal via the env flag).
+
+## Login — wake up (reattach)
+
+1. Teleport once to create an avatar tied to a login name, then reload the page (or press Escape twice).
+2. Type the same login name: the WAKE UP transporter (`#wakeup`) appears; use it.
+3. The player reconnects to the *same* avatar (same room, same position), awake, instead of getting a new one.
+
+**Covered by**: [e2e/reattach.spec.ts](e2e/reattach.spec.ts), [e2e/login-room.spec.ts](e2e/login-room.spec.ts) (WAKE UP appears
+only for a callsign with a living avatar and wakes it where it sleeps)
+
+## Login room — live radar
+
+1. The login room shows the same radar as the game (`#radar`, canvas `#radar-canvas`, titled LIVE RADAR · MAIN ROOM): the
+   room's walls, other players as magenta dots, robots as red dots and the amber planet, updating live, plus a readout
+   (`#radar-readout`) like "2 PILOTS · 3 ROBOTS". There is no avatar of yours on it yet.
+2. It comes from a spectator-only connection (`{ connect, spectate: true }`: the server sends the full state and the
+   room's frames, with no login, session or avatar, and never times it out); it is closed when you enter the game. The
+   same data tells the room which callsigns have a living avatar (what makes WAKE UP appear).
+
+**Covered by**: [e2e/login-room.spec.ts](e2e/login-room.spec.ts) (walls arrive before login; another player shows up),
+[server/__tests__/socketHubLogin.test.ts](server/__tests__/socketHubLogin.test.ts) and
+[src/game/__tests__/radarPreview.test.ts](src/game/__tests__/radarPreview.test.ts).
+
+## Avatar colours (headband and belt)
+
+1. In the login room pick a headband colour and a belt colour (`#headband-colors`, `#belt-colors`): a swatch row each
+   with a "default" swatch, a palette and a custom colour input. The avatar in the room changes at once. Picking
+   nothing keeps the old behaviour (cyan for you, magenta for other players); picking one part fills the other with cyan.
+2. Robot red cannot be chosen (the picker says "RED IS RESERVED FOR ROBOTS" and ignores it; the server rejects such a
+   look too and the player keeps the default colours).
+3. The colours are sent when entering the game, stored on the player's session (they survive respawns) and shown on the
+   avatar to everyone: full-state payloads carry `looks` (name → [headband, belt]) and a one-shot `{ looks }` message
+   goes out whenever anyone's colours change. Robots (including an assimilated player's robot body) stay red.
+
+**Covered by**: [e2e/login-room.spec.ts](e2e/login-room.spec.ts) (picking, red rejected, another player sees them),
+[server/__tests__/look.test.ts](server/__tests__/look.test.ts), [server/__tests__/socketHubLogin.test.ts](server/__tests__/socketHubLogin.test.ts),
+[server/__tests__/session.test.ts](server/__tests__/session.test.ts) and [src/game/__tests__/look.test.ts](src/game/__tests__/look.test.ts) /
+[neonSprites.test.ts](src/game/__tests__/neonSprites.test.ts). The baked pixel colours are manual-only.
 
 ## Leaving the game (Escape)
 
-1. While playing, press Escape.
-2. The game screen (canvas, HUD, minimap) is torn down and the login screen (`#login`) is shown again. Any held
-   run/jump key is released first, so the avatar you leave behind stands still instead of running on.
-3. The avatar stays in the room; typing the same name and clicking "Reattach!" (`#enter`) returns to it at the same
-   position (see "Login — reattach"), while "Respawn" places it at a fresh spawn portal.
+1. While playing (alive), press Escape. Any held run/jump key is released first. Your avatar falls asleep where it
+   stands (see "Sleeping avatar") and you spectate it: "YOUR AVATAR IS ASLEEP" is shown (`#spectator`), the arrow keys pan
+   a free camera, and the sleeper ignores all input except Space: pressing Space wakes the avatar up in place and
+   you are back in control (the banner goes away; see "Sleeping avatar").
+2. Press Escape again (or press it while dead/assimilated, spectating). The game screen (canvas, HUD, minimap) is torn
+   down and the login screen (`#login`) is shown again.
+3. The avatar stays in the room; typing the same name in the login room and using WAKE UP (`#wakeup`) returns to it at
+   the same position, awake (see "Login — wake up"), while TELEPORT gives a fresh avatar at a random floor spot.
 
 **Covered by**: [e2e/login.spec.ts](e2e/login.spec.ts)
+
+## Sleeping avatar (Escape / lost connection)
+
+1. A player presses Escape (first press), closes the tab or loses their connection while their avatar is alive.
+2. For everyone still in the room the avatar stands where it is (no running on) perfectly still — no stand animation —
+   with its eyes shut, leaning forward and breathing slowly, with small bright "Z"s rising from its head and fading away.
+   It takes no input until its player wakes it (Space while spectating it) or reattaches.
+3. When the player reattaches (WAKE UP) the avatar wakes up: the lean and the Zs stop. (A dead player has no
+   avatar left, so nothing sleeps.)
+
+**Covered by**: [e2e/login.spec.ts](e2e/login.spec.ts) (second browser context watches the sleeper) and
+[server/__tests__/session.test.ts](server/__tests__/session.test.ts) / [src/game/__tests__/sleepZs.test.ts](src/game/__tests__/sleepZs.test.ts).
+
+## Inactivity
+
+1. If a player sends no key for about a minute, the server stops streaming to them and tells their client they are
+   inactive.
+2. The client takes them back to the login screen exactly as if they had pressed Escape (no gray frozen screen);
+   their avatar stays in the room and WAKE UP/TELEPORT work as usual.
+
+**Covered by**: [e2e/inactivity-login.spec.ts](e2e/inactivity-login.spec.ts) (feeds the client the server's inactive
+message, which would otherwise take a minute) and the server side in
+[server/__tests__/socketHubRobotBody.test.ts](server/__tests__/socketHubRobotBody.test.ts).
 
 ## Movement — run left/right, jump
 
@@ -66,14 +145,21 @@ fire its powers with 1/2/3" mechanic and its top-right dashboard icons are gone 
 
 1. **Touch**: standing against, on top of or under a block counts as touching it. Some blocks react (below); robots
    never trigger them.
-2. **Spacebar** picks up the block you're standing on (it then rides just above your head, following you); **Spacebar
-   again throws it** ahead of you in the direction you're facing, in a short arc; **Down puts it back down** under
-   your feet instead. You can't pick up a second block while carrying one, or one that is stuck to other blocks (see
-   orange). Holding a key doesn't repeat the action (each press is one pickup/throw/put-down).
-3. A thrown block flies up and forward, then falls and bounces like any block.
+2. **Spacebar** picks up a block you're touching — beside, under or over you; you no longer need to be standing on
+   it. If you're touching several, the **nearest** one (centre to centre) is picked up. It then rides just above your
+   head, following you; a block that can't be lifted there (a ceiling or another block is in the way) is skipped for the
+   next-nearest. **Spacebar again throws it** ahead of you in the direction you're facing, in a short arc; **Down puts
+   it back down** under your feet instead. You can't pick up a second block while carrying one. A block stuck to
+   others leaves them (the orange block frees them all, see orange). Holding a key doesn't repeat the action (each
+   press is one pickup/throw/put-down). The carried block is solid while it rides over your head: you can't run, jump
+   or glide into a spot where it would end up inside a wall or another block (you stop as if you'd hit it, so you
+   can't run under a low overhang or rise into a ceiling while carrying). If something shoves you into such a spot
+   anyway, you let go of the block where it is instead of dragging it into the wall.
+3. A thrown block flies up and forward, then falls and bounces like any block. **It also inherits your own motion**:
+   throwing while running forward sends it farther, while jumping upward lobs it higher, while falling flatter/lower.
 
-**Covered by**: [server/__tests__/avatar.test.ts](server/__tests__/avatar.test.ts) (pick up / put down / throw / no
-second pick-up) and [e2e/main-room-workflows.spec.ts](e2e/main-room-workflows.spec.ts) end to end in the browser on
+**Covered by**: [server/__tests__/avatar.test.ts](server/__tests__/avatar.test.ts) (pick up / pick up from the side / nearest of
+several / out of reach / blocked overhead / can't jump or run the block into a ceiling or overhang / lets go when shoved into a wall / put down / throw / throw inherits the avatar's motion / no second pick-up) and [e2e/main-room-workflows.spec.ts](e2e/main-room-workflows.spec.ts) end to end in the browser on
 the fixed green block (stand on it, pick it up, it follows you, Down puts it under you, pick it up again, face the
 other way and Space throws it in an arc).
 
@@ -91,35 +177,51 @@ walls hold blocks, bounce height grows with fall height, settling).
 
 ## The coloured blocks
 
-Counts in MainRoom: 8 yellow, 10 red, 5 blue, 8 green, 6 purple, 6 orange, 6 rainbow, scattered at random (plus the
-fixed yellow/green/red fixtures).
+Counts in MainRoom: 8 yellow, 10 red, 5 blue, 8 green, 6 orange, 6 rainbow, scattered at random (plus the
+fixed yellow/green/red fixtures). **Purple blocks are switched off for now** (none are placed; the block itself still
+works, see below).
 
-- **Blue (ice)**: keeps sliding along whatever it rests on (rightward by default) at a steady pace. A wall just stops
-  it; it never turns around. It pushes anything light in its way.
+- **Blue (ice)**: keeps sliding along whatever it rests on (rightward at first) at a steady pace. When a wall or
+  something it can't push blocks it, it turns around and slides the other way, so it is always sliding when it can.
+  It pushes anything light in its way.
 - **Yellow**: an ordinary block until it is touched or picked up, after which gravity is reversed for it for good: it
-  "falls upwards" (and bounces off the ceiling). Its art then shows an up arrow. (An avatar still standing right beside
-  it overlaps the cells above it and holds it down until it steps away.)
+  "falls upwards" — but only faintly (15% of normal gravity), so it drifts up slowly. Its art then shows an up arrow.
+  When it hits the underside of a wall block (e.g. the room's ceiling) the reversed gravity switches off: the arrow
+  goes away and it falls back down like an ordinary block, and merely standing beside it no longer sets it off — picking
+  it up does. While an avatar **holds** it the upward gravity stays on (a held block doesn't move), so a carrier can
+  glide up against the ceiling and keep going; if it is then put down or thrown it rises again until it hits a wall block. Whatever is **touching** an active yellow block becomes much lighter: an avatar carrying it
+  (or standing against it) drifts upwards instead of falling, about one cell every three frames, so holding it lets you
+  glide upward (you can still run and jump; put it down or throw it and you fall again), and a block resting against it is
+  lifted too. (An avatar still standing right beside it overlaps the cells above it and holds it down until it steps away.)
 - **Red**: touching or picking it up lights a five second fuse (the block flashes, faster as it burns down; the fuse
-  keeps burning while it's carried or thrown). Then it blows up: every avatar (and robot) within 14 grid cells (112px)
+  keeps burning while it's carried or thrown). Then it blows up: every avatar (and robot) within 28 grid cells (224px)
   of its centre dies (with a knockback away from the blast), unless a wall is in the way, and every block within 30
   cells is shot away from the blast (more strongly the closer it is). The red block is destroyed; a fireball plays
   (with a bang and a small screen shake that fades with distance).
-- **Green (shield)**: always wrapped in a protective bubble (a translucent ring, 11 cells wide, that follows it —
-  also while carried). The bubble blocks nothing physically, but rockets that enter it are destroyed, so whoever
-  stands inside is safe from rockets (not from explosions or robot touches).
-- **Purple (gravity)**: pulls every other block within 36 cells toward itself (harder the closer they are) until they
+- **Green (shield)**: always wrapped in a big round protective bubble (a translucent green sphere, 31 cells — about
+  four avatars — across, centred on the block and following it, also while carried; kept inside the room when the
+  block is against an outer wall). The bubble blocks nothing physically, but rockets that enter it are destroyed and
+  a red block's explosion can't kill anyone inside it (it doesn't stop robot touches).
+- **Purple (gravity)** (currently not placed in the room): pulls every other block within 36 cells toward itself (harder the closer they are) until they
   touch it. Otherwise an ordinary block (falls, can be shoved, carried and thrown).
-- **Orange (sticky)**: sticks to every other block it touches (including other orange ones; not rainbow ones), and
+- **Orange (sticky)**: **repels other orange blocks** (a push that fades out over 24 cells, so they drift apart on the
+  floor and big orange clumps are unlikely; blocks already glued together don't push each other). Sticks to every other block it touches (including other orange ones if they do meet; not rainbow ones), and
   the stuck blocks move, fall, bounce and get shoved as one rigid piece: if any one of them is blocked none moves,
-  and an explosion's push is shared out among them. A stuck block can't be picked up.
-- **Rainbow (flashing)**: ignores gravity and constantly crawls in one random direction until something is in its way
-  (a wall, another block, even an avatar), then follows that object's edge — around corners and up walls. It breaks
+  and an explosion's push is shared out among them. Any stuck block can still be picked up (Space): a block stuck to an
+  orange one just leaves the group, but picking up the **orange block itself** un-sticks everything at once (they become
+  ordinary loose blocks; put the orange one down next to them and it sticks again).
+- **Rainbow (flashing)**: clings to walls and constantly crawls in one random direction until something is in its way
+  (a wall, another block, even an avatar), then follows that object's edge, keeping it on its right — around inside and
+  outside corners, up walls and along ceilings — and never wanders off into empty space while the object lasts. Ignores
+  gravity while it is touching something; with nothing touching it at all (it spawned or was put down in mid-air, or the
+  wall it followed is gone) it drops like any other block until it lands against something. It breaks
   if **thrown** and it hits anything: it turns into **5 blue diamonds** that pop out and fall (they bounce a little)
   and can be collected (see Score). Merely shoving a rainbow block doesn't break it.
 
-**Covered by**: [server/__tests__/manaPhysics.test.ts](server/__tests__/manaPhysics.test.ts) (blue, yellow),
+**Covered by**: [server/__tests__/manaPhysics.test.ts](server/__tests__/manaPhysics.test.ts) (blue, yellow incl. the faint
+upward fall and lifting avatars/blocks),
 [server/__tests__/specialBlocks.test.ts](server/__tests__/specialBlocks.test.ts) (red fuse/blast radius/line of
-sight/shove, green bubble and rockets, purple pull, orange rigid groups, rainbow crawling/shattering, diamonds),
+sight/shove, green bubble and rockets, purple pull, orange rigid groups and repulsion, rainbow crawling/shattering, diamonds),
 [server/__tests__/mainRoomBlocks.test.ts](server/__tests__/mainRoomBlocks.test.ts) (the room's mix of blocks and
 fixtures) and [e2e/main-room-workflows.spec.ts](e2e/main-room-workflows.spec.ts) end to end for the fixed blocks:
 touching the yellow block makes it rise, and touching the red block makes it explode five seconds later, killing
@@ -143,8 +245,9 @@ the same tradeoff already made for burn-from-engine-fire death below.
 
 1. A small circular portal floats in the air (off the ground) at the bottom center of MainRoom, directly
    below the stepping-stone shaft.
-2. Logging in, reattaching, or warping through either corner stargate deposits the avatar at this spawn
-   portal; since it floats above the floor below it, the avatar visibly drops a short distance before landing
+2. Warping through either corner stargate deposits the avatar at this spawn portal (as does teleporting in, when
+   `CELLWARZ_RANDOM_TELEPORT=off`, which the e2e run sets; normally teleporting picks a random floor spot, see "Login —
+   teleport"); since it floats above the floor below it, the avatar visibly drops a short distance before landing
    rather than appearing already standing.
 
 **Covered by**: [e2e/main-room-workflows.spec.ts](e2e/main-room-workflows.spec.ts) (asserts a fresh avatar
@@ -153,31 +256,36 @@ settles at the known fixed spawn portal position after dropping) and
 
 ## Death and respawn
 
-1. An avatar dies when caught in a red block's explosion, hit by a robot's rocket, or touched by a robot
+1. An avatar dies when caught in a red block's explosion, caught in the blast of a robot's rocket, or touched by a robot
    (overlapping it or directly beside/above/below it — a robot patrolling into you, or you walking into a paused
-   robot, both kill; robots never kill each other, and rockets never hurt robots); death
+   robot, both kill; robots never kill each other by touch, but a rocket's blast kills robots too); death
    still happens in exactly one hit (no health pool was added) — the only change is a short knockback (away from
-   the blast, in the rocket's flight direction, or away from the robot) plays out over the death animation instead
+   the blast or away from the robot) plays out over the death animation instead
    of an instant vanish.
-2. On death the avatar's session is unplugged; the next login/reattach places it at the fresh spawn portal (see
-   "Spawn portal" above).
+2. On death the avatar's session is unplugged; the next teleport places a fresh avatar (a random floor spot, or the
+   spawn portal in the e2e run, see "Spawn portal" above). WAKE UP is not offered, since there is nothing to wake.
 3. The player who died sees their own screen flash/shake briefly (a one-shot server ping tells their client to
-   play the effect, since their connection otherwise goes silent the instant their avatar is removed).
+   play the effect), then **spectates**: nothing freezes — the world keeps moving as normal, and a message
+   ("YOU DIED", with the controls) is shown at the top of the screen until they press Escape (the same applies if a
+   planet swallows you). The arrow keys move a free camera around the room (it stays inside the room's bounds).
 4. **A death by robot touch assimilates you**: your body immediately gets up as a new robot (red headband, no name
    tag, like every other robot) where you fell, and patrols like any robot — it doesn't freeze. Your own screen
    doesn't freeze either: it keeps showing the world, with the camera following your robot (you can no longer
-   control it). Press Escape and "Reattach!"/"Respawn" to get a fresh avatar at the spawn portal; the robot
+   control it) and a "YOU WERE ASSIMILATED" message, until you press an arrow key, which activates the free camera
+   from where it was (and the message changes to the free-camera one). Press Escape and TELEPORT to get a fresh avatar; the robot
    stays in the room as an ordinary robot. Other deaths (explosion, rocket) just kill you, with no robot.
 
 **Covered by**: [e2e/main-room-workflows.spec.ts](e2e/main-room-workflows.spec.ts) end-to-end — one browser
 context touches the fixed red block and waits beside it; a second context far away sees it die when the block
-explodes five seconds later, then the victim reattaches and respawns at the known fixed spawn portal position.
+explodes five seconds later, then the victim teleports back in at the known fixed spawn portal position (WAKE UP is absent for them).
 The knockback and death-flash are covered at the unit level
 ([server/__tests__/avatar.test.ts](server/__tests__/avatar.test.ts)), as is death-by-robot-touch
 ([server/__tests__/robot.test.ts](server/__tests__/robot.test.ts); the body is a live, moving, robot; no e2e of
 the touch itself because robot positions are random), the follow-your-robot-body stream by
 [server/__tests__/socketHubRobotBody.test.ts](server/__tests__/socketHubRobotBody.test.ts), and the client camera
-following it by [e2e/robot-body.spec.ts](e2e/robot-body.spec.ts); the client-side flash/shake/sound itself
+following it (and an arrow key releasing it) by [e2e/robot-body.spec.ts](e2e/robot-body.spec.ts); the spectating
+message, the world continuing and the free camera after a real death are asserted in the red-block spec of
+[e2e/main-room-workflows.spec.ts](e2e/main-room-workflows.spec.ts); the client-side flash/shake/sound itself
 is manual-only (no automated assertions on canvas pixels or WebAudio output). Death by robot rocket is unit-tested
 only (robots are switched off in the e2e run).
 
@@ -185,18 +293,24 @@ only (robots are switched off in the e2e run).
 
 1. A robot that sees a real player (never another robot) within rocket range — between 24 and 70 grid cells away
    horizontally, no more than 30 cells higher or lower, with a clear arc (nothing solid in the way) — stops,
-   turns toward them and pulls out a rocket launcher (a small launcher sprite that follows the robot) for about half a
-   second, then fires **one rocket** (the same rocket sprite the red block used to fire) in an **arc** (it rises, then
-   curves down; it is aimed at where the player is at that moment, so a moving player can dodge), keeps the launcher
-   out for another half second, puts it away and goes back to patrolling. It rests for about four seconds before
+   turns toward them and pulls out a rocket launcher (a small launcher sprite that follows the robot) for about nine
+   tenths of a second, then fires **one rocket** (the same rocket sprite the red block used to fire, flying a bit slower
+   than it used to) in an **arc** (it rises, then curves down; it is aimed at where the player is at that moment, so a
+   moving player can dodge), keeps the launcher out for another three quarters of a second, puts it away and goes back to patrolling. It rests for about four seconds before
    shooting again (one second if the player left range before it fired).
-2. A rocket kills the first real player it touches (with a knockback in its flight direction). It is destroyed by
-   walls, blocks, a green block's bubble (protecting anyone inside) and the room's edges, and flies through other
-   rockets and robots.
+2. A rocket that touches a real player **or anything solid** (a wall or a block) **explodes** (the same fireball and
+   line-of-sight blast as a red block, but smaller: avatars within 10 grid cells die with a knockback away from the
+   blast, blocks within 20 are shoved); the touch itself doesn't kill, the blast does, so it can also catch players
+   standing next to what it hit. **Robots die in the blast too** (including the one that fired it, if it is that
+   close), but a rocket flies through robots without exploding on them. A green block's bubble destroys the rocket
+   before anything inside is hurt (the bubble also shields from the blast). The room's edges end it silently, and it
+   flies through other rockets.
 3. Robots still kill by touch as before; destroying a robot also removes its launcher.
+4. Rockets are easy to spot even in unlit space: each draws a bright flickering orange exhaust flame behind it and a
+   hot white-yellow light on its tip (client-side and cosmetic only; manual check, no automated pixel assertions).
 
 **Covered by**: [server/__tests__/specialBlocks.test.ts](server/__tests__/specialBlocks.test.ts) ("arcing rockets" and
-"robot rocket launcher": stops, pulls out the launcher, fires an arc that kills a player in range, puts it away and
+"robot rocket launcher": stops, pulls out the launcher, fires an arc that explodes on a player in range, puts it away and
 resumes patrolling; no shot when out of range, too close, behind a wall, or at another robot) and
 [server/__tests__/robot.test.ts](server/__tests__/robot.test.ts) (patrol and touch). Not in the browser tests: the e2e
 run switches robots off (they would kill test avatars at random).
@@ -209,15 +323,31 @@ run switches robots off (they would kill test avatars at random).
 **Covered by**: [e2e/main-room-workflows.spec.ts](e2e/main-room-workflows.spec.ts) — two browser contexts log in
 to the single shared room and each asserts it can see the other's name and sprite.
 
+## Debug recording (backtick)
+
+1. While in-game, press the backtick key (`` ` ``) to start a debug recording. A blinking red `#recording` label
+   ("REC 9.8s") appears top-left and counts down. The recording captures the world's sprite positions at the
+   start, every message the server then sends (redraw frames, planet, score...) and every key press, all
+   timestamped.
+2. Press backtick again to stop. Otherwise it stops by itself after 10 seconds, or when you leave with Escape.
+3. The finished recording is sent to the server, which writes it to `recordings/latest.json` (git-ignored,
+   `CELLWARZ_RECORDINGS_DIR` overrides the folder). Only the latest is kept: a new recording overwrites the old
+   file. The backtick key is never sent to the server as a game key. Use it right after an issue happens, then
+   point whoever fixes it at `recordings/latest.json`.
+
+**Covered by**: [e2e/recording.spec.ts](e2e/recording.spec.ts) (toggle, HUD, captured keys/positions, the 10s
+auto-stop), [src/game/__tests__/recorder.test.ts](src/game/__tests__/recorder.test.ts) and
+[server/__tests__/recordingStore.test.ts](server/__tests__/recordingStore.test.ts) (single-file overwrite, size cap,
+login required).
+
 ## Game feel: audio, particles, screen shake, netcode smoothing
 
 1. Running, landing, picking up/putting down/throwing a block, warping through a portal, a block exploding, a
    nearby avatar dying, collecting a diamond, and your own death now each play a short synthesized sound effect (WebAudio oscillator
    blips — no audio asset files were added; bitcrushed square/saw tones, filter sweeps, noise bursts) and, where
    relevant, a small dust/impact/warp particle puff at the sprite's position. A quiet synthwave bed (detuned
-   drone plus a sparse arpeggio) starts on the first sound and stops when you leave the game screen. It also stops
-   when the level freezes from inactivity (the screen goes gray) — sound effects don't bring it back — and returns
-   once the level wakes up again (frames arrive).
+   drone plus a sparse arpeggio) starts on the first sound and stops when you leave the game screen (including when
+   an idle player is sent back to the login screen, see "Inactivity").
    Warping and dying also trigger a brief RGB-glitch burst on the whole screen.
 2. Movement for every avatar, and the camera itself, is smoothed between server updates instead of snapping to
    each new position; your own avatar's left/right movement also predicts locally the instant a key is pressed
@@ -228,8 +358,7 @@ to the single shared room and each asserts it can see the other's name and sprit
 
 **Covered by**: mostly manual verification — this is inherently visual/audio polish with no discrete state to
 assert on in Playwright (no pixel-diffing or WebAudio-output assertions are in place). The exception is the music
-stopping/resuming around an inactivity freeze: [e2e/inactivity-music.spec.ts](e2e/inactivity-music.spec.ts) and
-[src/game/__tests__/audio.test.ts](src/game/__tests__/audio.test.ts) (with a fake AudioContext). The underlying data it's
+pausing/resuming (in the audio manager): [src/game/__tests__/audio.test.ts](src/game/__tests__/audio.test.ts) (with a fake AudioContext). The underlying data it's
 built on (sprite positions, the `died` ping) is exercised indirectly by the existing movement/death/multiplayer
 tests above, which would fail if the underlying server behavior changed.
 
@@ -385,8 +514,9 @@ Avatar/block pull and swallowing are unit-tested only; how the planet looks is m
    the user's `Session`; it persists across death/respawn and reattach (the full-state payload carries `score`).
    Scores are in-memory only, like all game state.
 4. The old debug frame-stats text in the top-left corner has been removed.
-5. **Diamonds**: the first real player (not a robot) whose body touches a diamond collects it: it disappears and
-   the diamonds count goes up by one (with a pickup blip). The server owns the count (`Session`), sends it as `diamonds`
+5. **Diamonds**: the first real player (not a robot) whose body touches a diamond collects it — this works for any
+   avatar of that player, including after a warp, reattach or respawn. It disappears at your avatar, flies across the
+   screen to the diamonds counter, and the counter goes up by one as it arrives (with a pickup blip). The server owns the count (`Session`), sends it as `diamonds`
    in the full-state payload and as a separate `{ diamonds }` one-shot message whenever it changes; it persists
    across death/respawn and reattach like the credits.
 
@@ -397,8 +527,11 @@ the local avatar's blocks fly to the target and are counted) and
 Diamonds: [server/__tests__/specialBlocks.test.ts](server/__tests__/specialBlocks.test.ts) (fall, bounce, collected by
 players but not robots),
 [server/__tests__/socketHubDiamonds.test.ts](server/__tests__/socketHubDiamonds.test.ts) (the `{ diamonds }` message
-and full-state total), [server/__tests__/session.test.ts](server/__tests__/session.test.ts) and the HUD counter in
-[e2e/main-room-workflows.spec.ts](e2e/main-room-workflows.spec.ts). The flight animation itself is manual-only.
+and full-state total), [server/__tests__/session.test.ts](server/__tests__/session.test.ts),
+[src/game/__tests__/diamondFlight.test.ts](src/game/__tests__/diamondFlight.test.ts) (the flight/arrival logic) and the
+HUD counter, including the fly-then-count behavior (replaying the server's messages), in
+[e2e/main-room-workflows.spec.ts](e2e/main-room-workflows.spec.ts). Actually picking a diamond up in the room is
+unit-tested only (the e2e room has no random blocks to break).
 
 ## Removed workflows
 

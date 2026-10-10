@@ -39,4 +39,16 @@ test('after being turned into a robot, the camera keeps following the robot body
   expect(me).toBeDefined();
   expect(Math.abs(offsetX - (me[1] + 24 - viewWidth / 2))).toBeLessThan(60);
   expect(bodyId).toBeDefined();
+
+  // Following is the default while spectating a robot body; an arrow key hands the camera over to the player.
+  await expect(page.locator('#spectator')).toContainText('YOU WERE ASSIMILATED');
+  expect(await page.evaluate(() => window.__cellwarz!.renderer.spectatorMode)).toBe('following');
+
+  await page.keyboard.down('ArrowRight');
+  await page.waitForTimeout(300);
+  await page.keyboard.up('ArrowRight');
+  expect(await page.evaluate(() => window.__cellwarz!.renderer.spectatorMode)).toBe('free');
+  await expect(page.locator('#spectator')).toContainText('YOU DIED');
+  const moved = await page.evaluate(() => (window.__cellwarz!.renderer as any).getPlayerOffset().offsetX);
+  expect(moved).toBeGreaterThan(offsetX + 100);
 });

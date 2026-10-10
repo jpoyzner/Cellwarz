@@ -40,7 +40,7 @@ test('reattaching reconnects to the same avatar at the same position', async ({ 
 
   await page.goto('/');
   await page.locator('#loginName').fill(loginName);
-  await page.locator('#random').click();
+  await page.locator('#teleport').click();
   await expect(page.locator('#canvas')).toBeVisible();
   await waitForAvatar(page, loginName);
 
@@ -48,7 +48,7 @@ test('reattaching reconnects to the same avatar at the same position', async ({ 
 
   await page.reload();
   await page.locator('#loginName').fill(loginName);
-  await page.locator('#enter').click();
+  await page.locator('#wakeup').click();
   await expect(page.locator('#canvas')).toBeVisible();
   await waitForAvatar(page, loginName);
 

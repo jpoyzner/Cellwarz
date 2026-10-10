@@ -5,9 +5,12 @@ import { Physics } from '../physics';
 import { DEFAULT_ACTION, Sprite } from './sprite';
 import { addAction } from './frames';
 
-/** The protective bubble around a green block. It blocks nothing physically; rockets that enter it are destroyed. */
+/**
+ * The big protective bubble around a green block. It blocks nothing physically; rockets that enter it are destroyed
+ * and anyone inside it is safe from blasts (see Launcher). The art is a circle filling the sprite's square.
+ */
 export class ShieldBubble extends Sprite {
-  static readonly SIZE = 11;
+  static readonly SIZE = 31;
 
   private static readonly actionFrames = new Map<string, Frame[]>();
 
@@ -29,6 +32,17 @@ export class ShieldBubble extends Sprite {
 
   getHeight(): number {
     return ShieldBubble.SIZE;
+  }
+
+  /** Whether the point (grid cells) is inside the round bubble, not merely inside its bounding square. */
+  covers(x: number, y: number): boolean {
+    const radius = ShieldBubble.SIZE / 2;
+    return Math.hypot(x - (this.getX() + radius), y - (this.getY() + radius)) <= radius;
+  }
+
+  /** Whether any live bubble in the room covers the point. */
+  static isCovered(cellData: CellData, x: number, y: number): boolean {
+    return cellData.getSprites().some((sprite) => sprite instanceof ShieldBubble && !sprite.removed() && sprite.covers(x, y));
   }
 
   getLayer(): number {

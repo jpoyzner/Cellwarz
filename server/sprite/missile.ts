@@ -3,6 +3,8 @@ import type { Cell } from '../cell/cell';
 import { EdgeOfCellDataException } from '../errors';
 import type { Frame } from '../frame';
 import { Physics } from '../physics';
+import { detonate } from './blast';
+import { Explosion } from './explosion';
 import { Sprite } from './sprite';
 import { Avatar } from './avatar';
 import { Mana } from './mana';
@@ -14,6 +16,10 @@ const FLY_LEFT_ACTION = 'flyLeft';
 
 // Cells per frame²: how fast a launched rocket's flight bends downward (a straight missile has none).
 export const ROCKET_GRAVITY = 0.03;
+// A rocket that touches a player or anything solid blows up like a smaller red block: avatars inside the kill radius die, blocks inside
+// the shove radius fly (grid cells from the rocket).
+export const ROCKET_KILL_RADIUS = 10;
+export const ROCKET_SHOVE_RADIUS = 20;
 // A rocket that hasn't hit anything after this long (5 seconds) is spent.
 const MAX_FLIGHT_FRAMES = 240;
 
@@ -46,6 +52,7 @@ export class Missile extends Sprite {
   static init(cellData: CellData): void {
     addAction(cellData, FLY_RIGHT_ACTION, 'projectiles/missile', 1, false, Missile.actionFrames);
     addAction(cellData, FLY_LEFT_ACTION, 'projectiles/missile', 1, true, Missile.actionFrames);
+    Explosion.init(cellData);
   }
 
   constructor(x: number, y: number, direction: number, cell: Cell, launch?: MissileLaunch) {
@@ -101,24 +108,26 @@ export class Missile extends Sprite {
     const touched = this.physics.getSpritesAtSamePosition(this);
 
     for (const sprite of touched) {
-      if (sprite instanceof ShieldBubble) {
+      if (sprite instanceof ShieldBubble && sprite.covers(this.getX() + Missile.WIDTH / 2, this.getY() + Missile.HEIGHT / 2)) {
         this.removePermanently();
         return true;
       }
     }
 
-    let hit = false;
-    for (const sprite of touched) {
-      if (sprite instanceof Avatar && !sprite.isRobot() && !sprite.removed()) {
-        sprite.die(this.direction, Physics.NONE);
-        hit = true;
-      } else if (Missile.isSolid(sprite)) {
-        hit = true;
-      }
-    }
+    // Touching a player or anything solid doesn't hurt by itself: the rocket explodes, and the blast kills (see
+    // `detonate`). Robots are flown through (a robot never shoots itself), but a blast still kills them.
+    const hit = [...touched].some(
+      (sprite) => (sprite instanceof Avatar && !sprite.isRobot() && !sprite.removed()) || Missile.isSolid(sprite),
+    );
+    if (!hit) return false;
 
-    if (hit) this.removePermanently();
-    return hit;
+    detonate(this.cell, this.cellData, this.getX() + Missile.WIDTH / 2, this.getY() + Missile.HEIGHT / 2, {
+      killRadius: ROCKET_KILL_RADIUS,
+      shoveRadius: ROCKET_SHOVE_RADIUS,
+      source: this,
+    });
+    this.removePermanently();
+    return true;
   }
 
   override isEffect(): boolean {

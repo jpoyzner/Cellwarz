@@ -3,7 +3,7 @@ import { Avatar, FULL_JUMP_ACTION_LENGTH } from '../sprite/avatar';
 import { CellBlock } from '../sprite/cellBlock';
 import { Ice } from '../sprite/ice';
 import { Physics } from '../physics';
-import { createTestCell } from './testHelpers';
+import { createTestCell, layFloor } from './testHelpers';
 
 function createTestScene(width: number, height: number) {
   const { cell, physics } = createTestCell(width, height);
@@ -89,6 +89,90 @@ describe('Avatar', () => {
 
     expect(ice.getX()).toBeGreaterThan(xBefore);
     expect(minY).toBeLessThan(ice.getY() + 1); // rose first, now on its way back down.
+  });
+
+  it("adds the avatar's own motion to a throw", () => {
+    const throwFrom = (move: (avatar: Avatar) => void) => {
+      const { cell } = createTestScene(80, 80);
+      layFloor(cell, 34, 0, 60);
+      const ice = new Ice(10, 31, false, cell);
+      const avatar = new Avatar('mover', 10, 23, false, cell);
+      avatar.pickUpMana();
+      move(avatar);
+      avatar.throwMana();
+      return ice['body'];
+    };
+
+    const standing = throwFrom(() => {});
+    const running = throwFrom((avatar) => {
+      avatar.runRight();
+      for (let i = 0; i < 4; i++) avatar['doAction']();
+    });
+    const jumping = throwFrom((avatar) => {
+      avatar.attemptJump();
+      for (let i = 0; i < 4; i++) avatar['doAction']();
+    });
+
+    expect(running.vx).toBeGreaterThan(standing.vx);
+    expect(running.vy).toBeCloseTo(standing.vy);
+    expect(jumping.vy).toBeLessThan(standing.vy);
+  });
+
+  it('picks up a block touching its side without standing on it', () => {
+    const { cell } = createTestScene(60, 60);
+    layFloor(cell, 30, 0, 60);
+    const avatar = new Avatar('beside', 10, 22, false, cell);
+    const ice = new Ice(avatar.getClippedX() + avatar.getClippedWidth(), 27, false, cell);
+
+    avatar.pickUpMana();
+
+    expect(ice.isBeingHandled()).toBe(true);
+    expect(avatar.hasHandledMana()).toBe(true);
+    expect(ice.getY()).toBe(avatar.getY() - ice.getHeight());
+  });
+
+  it('picks up the nearest block when touching several', () => {
+    const { cell } = createTestScene(60, 60);
+    layFloor(cell, 30, 0, 60);
+    const avatar = new Avatar('choosy', 20, 22, false, cell);
+    const farther = new Ice(avatar.getClippedX() - 1 - 3 + 1, 22, false, cell);
+    const nearer = new Ice(avatar.getClippedX() + avatar.getClippedWidth(), 25, false, cell);
+    const distanceTo = (ice: Ice) =>
+      Math.hypot(
+        ice.getX() + ice.getWidth() / 2 - (avatar.getX() + avatar.getWidth() / 2),
+        ice.getY() + ice.getHeight() / 2 - (avatar.getY() + avatar.getHeight() / 2),
+      );
+    expect(distanceTo(nearer)).toBeLessThan(distanceTo(farther));
+
+    avatar.pickUpMana();
+
+    expect(nearer.isBeingHandled()).toBe(true);
+    expect(farther.isBeingHandled()).toBe(false);
+  });
+
+  it('does not pick up a block it is not touching', () => {
+    const { cell } = createTestScene(60, 60);
+    layFloor(cell, 30, 0, 60);
+    const avatar = new Avatar('far', 10, 22, false, cell);
+    const ice = new Ice(avatar.getClippedX() + avatar.getClippedWidth() + 4, 27, false, cell);
+
+    avatar.pickUpMana();
+
+    expect(ice.isBeingHandled()).toBe(false);
+    expect(avatar.hasHandledMana()).toBe(false);
+  });
+
+  it('leaves a block it cannot lift because the spot over its head is blocked', () => {
+    const { cell } = createTestScene(60, 60);
+    layFloor(cell, 30, 0, 60);
+    layFloor(cell, 20, 0, 60);
+    const avatar = new Avatar('cramped', 10, 22, false, cell);
+    const ice = new Ice(avatar.getClippedX() + avatar.getClippedWidth(), 27, false, cell);
+
+    avatar.pickUpMana();
+
+    expect(ice.isBeingHandled()).toBe(false);
+    expect(avatar.hasHandledMana()).toBe(false);
   });
 
   it('does not pick up a second block while already carrying one', () => {
@@ -206,5 +290,61 @@ describe('Avatar', () => {
     avatar['doAction']();
 
     expect(avatar['yPower']).toBeGreaterThan(0);
+  });
+
+  describe('carrying a block', () => {
+    /** An avatar carrying an ice block, standing on a floor with `ceilingY` (if any) laid across the scene. */
+    function carrierScene(ceilingY?: number) {
+      const { cell, physics } = createTestScene(80, 60);
+      layFloor(cell, 40, 0, 80);
+      if (ceilingY !== undefined) layFloor(cell, ceilingY, 0, 80);
+      const ice = new Ice(10, 37, false, cell);
+      const avatar = new Avatar('porter', 10, 32, false, cell);
+      avatar.pickUpMana();
+      expect(avatar.hasHandledMana()).toBe(true);
+      return { cell, physics, avatar, ice };
+    }
+
+    it('cannot jump so high that the carried block ends up inside the ceiling', () => {
+      const { avatar, ice } = carrierScene(26); // wall rows 26-27: only just room for the avatar plus a block above it
+
+      let highest = Infinity;
+      for (let frame = 0; frame < 60; frame++) {
+        avatar.attemptJump();
+        avatar['doAction']();
+        ice['doAction']();
+        highest = Math.min(highest, ice.getY());
+      }
+
+      expect(highest).toBeGreaterThanOrEqual(28); // never in rows 26-27
+      expect(avatar.hasHandledMana()).toBe(true);
+    });
+
+    it('cannot run under an overhang the carried block would hit', () => {
+      const { cell, avatar, ice } = carrierScene();
+      layFloor(cell, 29, 24, 40); // an overhang at the carried block's height (rows 29-31), clear of the avatar (rows 32+)
+
+      avatar.runRight();
+      for (let frame = 0; frame < 200; frame++) {
+        avatar['doAction']();
+        ice['doAction']();
+      }
+
+      expect(ice.getX() + ice.getWidth()).toBeLessThanOrEqual(24); // stopped at the overhang, block intact
+      expect(avatar.getX()).toBeGreaterThan(15); // after having run up to it
+      expect(avatar.hasHandledMana()).toBe(true);
+    });
+
+    it('lets go of the block instead of dragging it into a wall when something else shoves it there', () => {
+      const { cell, physics, avatar, ice } = carrierScene();
+      layFloor(cell, 26, 0, 80); // a ceiling right over the carried block, which the avatar was meant to fit under
+      const ceilingBlock = new CellBlock(10, 30, false, cell); // and a block that lands in its spot afterwards
+      physics.moveTo(ceilingBlock, 10, 30);
+
+      avatar['doAction']();
+
+      expect(avatar.hasHandledMana()).toBe(false);
+      expect(ice.isBeingHandled()).toBe(false);
+    });
   });
 });

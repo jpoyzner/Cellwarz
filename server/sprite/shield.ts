@@ -8,7 +8,7 @@ import { addAction } from './frames';
 
 const BUBBLE_MARGIN = (ShieldBubble.SIZE - Mana.SIZE) / 2;
 
-/** The green block: always wrapped in a protective bubble that stops rockets. Otherwise an ordinary block. */
+/** The green block: always wrapped in a big protective bubble that stops rockets and blasts. Otherwise an ordinary block. */
 export class Shield extends Mana {
   private static readonly actionFrames = new Map<string, Frame[]>();
 
@@ -32,16 +32,25 @@ export class Shield extends Mana {
     return this.bubble;
   }
 
+  /** Centred on the block, but kept inside the room (a block against an outer wall has its bubble pushed inward). */
+  private bubbleSpot(): [number, number] {
+    const maxX = this.cellData.getWidth() - ShieldBubble.SIZE;
+    const maxY = this.cellData.getHeight() - ShieldBubble.SIZE;
+    return [
+      Math.max(0, Math.min(maxX, this.getX() - BUBBLE_MARGIN)),
+      Math.max(0, Math.min(maxY, this.getY() - BUBBLE_MARGIN)),
+    ];
+  }
+
   private createBubble(): ShieldBubble {
-    return new ShieldBubble(this.getX() - BUBBLE_MARGIN, this.getY() - BUBBLE_MARGIN, this.cell);
+    return new ShieldBubble(...this.bubbleSpot(), this.cell);
   }
 
   protected override onFrame(): void {
     // The bubble can be lost if it was carried off the edge of the room; the block just grows a new one.
     if (!this.bubble || this.bubble.removed()) this.bubble = this.createBubble();
 
-    const x = this.getX() - BUBBLE_MARGIN;
-    const y = this.getY() - BUBBLE_MARGIN;
+    const [x, y] = this.bubbleSpot();
     if (this.bubble.getX() !== x || this.bubble.getY() !== y) this.physics.moveTo(this.bubble, x, y);
   }
 

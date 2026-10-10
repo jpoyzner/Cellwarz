@@ -2,34 +2,30 @@
 
 ## Core Gameplay
 
-- when you die you are in spectator mode (things should not freeze) until you press esc (already the case when a planet sucks you in). You should get a message for this. But everything else should move as normal. When in spectator mode, you can move around the screen by using arrow buttons. If you were converted to a robot, it should follow the robot around until you press an arrow key to activate free movement.
-- when client becomes inactive, instead of gray stop screen, take them back to login
+- yellow blocks shoulod activate up gravity when you are directly over them, except you are free to walk still...and any blocks touching them are also lifted up with it. Pressing down while over a yellow mana in this way moves it down instead as long as you hold it down (unless you are holding another mana).
 
-- space picks up nearest block, you just need to be touching them now, not be over them to pick them up.
+- I want a flower spit out mana blocks and shoot them out upward but at random angles so there is more of a chance for the blocks to be spread out to different places when they land. Give me proposals for where you think this should be placed first or any other room modifications you want to make for this to work well.
 
-- make sure all blocks are working correctly (play around with them)
+- make sure all blocks are working correctly (play around with them).
 
-- make login room feel like you are in a ship/rocket. Have your avatar and you can move them aorund in a small transporter room. In stead of the reattach respawn buttons have two tranporters, one with "Reatach" one with "Respawn" over it. Have the live radar shown in the room also. They can also be customized here (headband and belt color).
+- ask it to give any other proposals for discovery of how to play for people.
 
+- The planet is what basically does garbage cleanup so that the level does not get too full. Ask it if there are any gaps with this? Does the planet normally cover all areas given enough time, and can it pull everything that can increase in number in (so there is no "runaway" efffect on the amount of any item in the main room?
 
 - add more videos! (maybe landscape ones too?)
-
 
 ## INTEGRATION TO REAL SITE
 
 - use my DJ Recognize site to host cellwarz realtime multiplayers that can remember things if you sign up! Think about limiting chat to avoid hate, maybe just one emoji at a time as a speak bubble above, follows the avatar head perfectly.
-- add an "exit" button on login screen that takes you back to my website.
+- add an "exit" transporter on login screen that takes you back to my website.
 - controls need to work on a phone and login screen updated to explain them
 - If persistence is ever needed (session/avatar state surviving a server restart), use a NoSQL store — no DB is in use today.
 - check for vulnerabilities, in case some dj asshole hacks into it.
 Show number of users, and show other users in a specific color.
-- DONE (first pass): robots stand still for a second before turning around; touching one kills you and turns your body into a (red) robot that keeps patrolling, with your camera following it. Follow-ups: let a converted player keep some control, or rejoin the swarm differently?
-
-- Need a record/debug mode that captures position of everything to report weird situations so it can rerun and fix.
+- speak with basic set of emojis (1 at a time, appearing in a speak bubble above the avatar, no country flags allowed). Maybe robots say SKULL emoji when they see you? Or other things they say to show how they think?...it will dissapear after 5 seconds
+- will real users need passwords?
 
 ## Core Features
-
-- have A flower spit out the blocks: I might want this for mana blocks bewing spewed out by the plant, make them roll as they fly out and whenever they fall they should bounce.
 
 - EXPLORE AUDIO.TS!!!!!!!!! IT USES A BASS NOTE SO WELL :) MAYBE IT IS TIME TO MAKE AI MUSIC WITH THIS!!!
 - Maybe make a room where people can collaborate on live music somehow!!! Maybe they play instruments synced together in the same room live!?! A realtime interactive DAW?

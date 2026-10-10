@@ -28,14 +28,37 @@ export class ManaBody {
     }
   }
 
+  private netGravityPull(): number {
+    return this.members.reduce((sum, member) => sum + member.getGravityPull(), 0);
+  }
+
   /** Which way the group falls: the net of its members' gravity (0 when they cancel out or none is affected). */
   gravityDirection(): number {
-    return Math.sign(this.members.reduce((sum, member) => sum + member.getGravityDirection(), 0));
+    return Math.sign(this.netGravityPull());
+  }
+
+  /** How hard the group falls, as a fraction of normal gravity: a faint-gravity (yellow, lifted) member lightens it. */
+  gravityStrength(): number {
+    return this.members.length === 0 ? 0 : Math.abs(this.netGravityPull()) / this.members.length;
   }
 
   /** The group's constant self-propelled sliding speed (blue blocks), 0 for none. */
   slideDrive(): number {
     return this.members.reduce((sum, member) => sum + member.getSlideDrive(), 0);
+  }
+
+  /** Splits every member off into a body of its own (the glue is gone). */
+  dissolve(): void {
+    const members = [...this.members];
+    this.members.length = 0;
+    for (const member of members) member.joinBody(new ManaBody(member));
+  }
+
+  /** Takes one block out of the group, leaving the rest stuck together. */
+  release(member: Mana): void {
+    const index = this.members.indexOf(member);
+    if (index !== -1) this.members.splice(index, 1);
+    member.joinBody(new ManaBody(member));
   }
 
   /** Joins `other`'s blocks into this body, keeping the combined momentum. */

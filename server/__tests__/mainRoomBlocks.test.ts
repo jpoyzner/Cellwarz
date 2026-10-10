@@ -43,9 +43,13 @@ describe('MainRoom blocks', () => {
   it('scatters every kind of block, plus the robots', () => {
     const room = createRoom();
 
-    for (const type of [Thruster, Launcher, Ice, Shield, GravityBlock, StickyBlock, RainbowBlock, Robot]) {
+    for (const type of [Thruster, Launcher, Ice, Shield, StickyBlock, RainbowBlock, Robot]) {
       expect(countOf(room, type)).toBeGreaterThan(0);
     }
+  });
+
+  it('leaves out the purple blocks for now', () => {
+    expect(countOf(createRoom(), GravityBlock)).toBe(0);
   });
 
   it('puts a fixed yellow, green and red block on the floor', () => {

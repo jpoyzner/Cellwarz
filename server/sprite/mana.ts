@@ -18,6 +18,10 @@ const MIN_SLIDE_SPEED = 0.003;
 // What an avatar's shove gives a block, per direction (a block pushed up gets launched a little).
 const PUSH_SPEED = 0.5;
 const PUSH_LAUNCH_SPEED = 1;
+// A block touching an active yellow one is "lifted": for this many frames after each touch it feels a faint upward
+// pull (as a fraction of normal gravity) instead of its own gravity.
+const LIFT_FRAMES = 3;
+const LIFT_PULL = 0.3;
 
 export abstract class Mana extends Sprite {
   static readonly SIZE = 3;
@@ -26,6 +30,7 @@ export abstract class Mana extends Sprite {
   private handlingMelt = false;
   private handledFlag = false;
   private thrownFlag = false;
+  private liftedFrames = 0;
 
   constructor(x: number, y: number, cellInit: boolean, cell: Cell) {
     super(x, y, cellInit, cell);
@@ -45,6 +50,7 @@ export abstract class Mana extends Sprite {
   }
 
   protected override doAction(): void {
+    if (this.liftedFrames > 0) this.liftedFrames--;
     this.body.prune();
     this.onFrame();
 
@@ -66,10 +72,30 @@ export abstract class Mana extends Sprite {
     return Physics.DOWN;
   }
 
+  /** How strong this block's gravity is, as a fraction of normal (the yellow block's is faint once active). */
+  getGravityStrength(): number {
+    return 1;
+  }
+
+  /** Signed gravity this block feels (+ down, - up), as a fraction of normal; lifted blocks feel a faint upward pull. */
+  getGravityPull(): number {
+    if (this.liftedFrames > 0) return -LIFT_PULL;
+    return this.getGravityDirection() * this.getGravityStrength();
+  }
+
+  /** An active yellow block is touching this one: it gets much lighter for a few frames (see `LIFT_PULL`). */
+  lift(): void {
+    if (this.handledFlag || !this.acceptsImpulses()) return;
+    this.liftedFrames = LIFT_FRAMES;
+  }
+
   /** A constant sliding speed (cells per frame, signed) the block keeps up while resting on something; 0 for none. */
   getSlideDrive(): number {
     return 0;
   }
+
+  /** Called when a block that is driven along the ground runs into something it can't push; may change the drive. */
+  protected onSlideBlocked(): void {}
 
   /** Whether shoves, explosions and pulls change this block's motion. */
   protected acceptsImpulses(): boolean {
@@ -81,8 +107,11 @@ export abstract class Mana extends Sprite {
     return true;
   }
 
-  /** Called when the block lands on or runs into something; `wasThrown` is true for the first hit after a throw. */
-  protected onImpact(_wasThrown: boolean): void {}
+  /**
+   * Called when the block lands on or runs into something; `wasThrown` is true for the first hit after a throw, and
+   * `direction` is the vertical direction it hit in (`Physics.UP` for a ceiling, `Physics.NONE` for a sideways hit).
+   */
+  protected onImpact(_wasThrown: boolean, _direction: number): void {}
 
   /** Called the moment an avatar touches the block (stands against it, or picks it up). */
   protected onTouched(): void {}
@@ -94,6 +123,7 @@ export abstract class Mana extends Sprite {
   private stepMotion(): void {
     const body = this.body;
     const gravity = body.gravityDirection();
+    const gravityStrength = body.gravityStrength();
     const drive = body.slideDrive();
     const grounded = gravity !== 0 && body.members.some((member) => this.physics.touchSprite(member, Physics.NONE, gravity, false));
 
@@ -104,7 +134,7 @@ export abstract class Mana extends Sprite {
       } else if (grounded && body.vy * gravity === 0) {
         body.subY = 0;
       } else {
-        body.vy = Math.max(-MAX_SPEED, Math.min(MAX_SPEED, body.vy + gravity * GRAVITY));
+        body.vy = Math.max(-MAX_SPEED, Math.min(MAX_SPEED, body.vy + gravity * gravityStrength * GRAVITY));
       }
     } else {
       body.vy *= AIR_DRAG;
@@ -140,7 +170,7 @@ export abstract class Mana extends Sprite {
     const landing = direction === gravity;
     body.subY = 0;
     body.vy = landing && speed * LANDING_RESTITUTION >= MIN_REBOUND_SPEED ? -direction * speed * LANDING_RESTITUTION : 0;
-    this.registerImpact(body);
+    this.registerImpact(body, direction);
   }
 
   private moveAlongX(body: ManaBody, drive: number, grounded: boolean): void {
@@ -151,9 +181,11 @@ export abstract class Mana extends Sprite {
     for (let i = 0; i < Math.abs(columns); i++) {
       if (!this.physics.move(this, Math.sign(columns), Physics.NONE, 1)) {
         body.subX = 0;
-        if (drive !== 0 && grounded) body.vx = drive;
-        else body.vx = Math.abs(body.vx) >= 0.3 ? -body.vx * WALL_RESTITUTION : 0;
-        this.registerImpact(body);
+        if (drive !== 0 && grounded) {
+          for (const member of [...body.members]) member.onSlideBlocked();
+          body.vx = body.slideDrive();
+        } else body.vx = Math.abs(body.vx) >= 0.3 ? -body.vx * WALL_RESTITUTION : 0;
+        this.registerImpact(body, Physics.NONE);
         return;
       }
 
@@ -161,16 +193,16 @@ export abstract class Mana extends Sprite {
     }
   }
 
-  private registerImpact(body: ManaBody): void {
+  private registerImpact(body: ManaBody, direction: number): void {
     for (const member of [...body.members]) {
-      member.notifyImpact();
+      member.notifyImpact(direction);
     }
   }
 
-  private notifyImpact(): void {
+  private notifyImpact(direction: number): void {
     const wasThrown = this.thrownFlag;
     this.thrownFlag = false;
-    this.onImpact(wasThrown);
+    this.onImpact(wasThrown, direction);
   }
 
   /** Adds speed to the block (or the whole group it is stuck to, which shares it out). */
@@ -218,9 +250,21 @@ export abstract class Mana extends Sprite {
     return this.body.members.length > 1 ? this.body.members : super.getRigidGroup();
   }
 
-  /** Stuck-together blocks can't be picked up (that would pull them apart). */
   canBePickedUp(): boolean {
-    return this.body.members.length <= 1 && !this.removed();
+    return !this.removed();
+  }
+
+  /** Whether picking this block up un-sticks the whole group it is in (the orange glue), not just itself. */
+  protected dissolvesGroupWhenCarried(): boolean {
+    return false;
+  }
+
+  /** Called as an avatar picks the block up: a carried block leaves its group (or, if it is the glue, frees all of it). */
+  detachForCarrying(): void {
+    if (this.body.members.length <= 1) return;
+
+    if (this.dissolvesGroupWhenCarried()) this.body.dissolve();
+    else this.body.release(this);
   }
 
   /** Sticks this block to `other` for good, merging them into one rigid body. */

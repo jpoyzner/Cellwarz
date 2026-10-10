@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Cell } from '../cell/cell';
+import { Engine } from '../engine';
 import { Physics } from '../physics';
 import { Session } from '../session';
 import { Avatar } from '../sprite/avatar';
@@ -8,7 +9,7 @@ import { Diamond } from '../sprite/diamond';
 import { Explosion } from '../sprite/explosion';
 import { GravityBlock } from '../sprite/gravityBlock';
 import { Launcher, FUSE_FRAMES, KILL_RADIUS } from '../sprite/launcher';
-import { Missile } from '../sprite/missile';
+import { Missile, ROCKET_KILL_RADIUS } from '../sprite/missile';
 import { RainbowBlock, DIAMONDS_PER_BLOCK } from '../sprite/rainbowBlock';
 import { Robot } from '../sprite/robot';
 import { RocketLauncher } from '../sprite/rocketLauncher';
@@ -138,8 +139,48 @@ describe('green shield block', () => {
     for (let frame = 0; frame < 120; frame++) shield['doAction']();
 
     expect(shield.getY()).toBe(ON_FLOOR);
-    expect(bubble.getX()).toBe(shield.getX() - 4);
-    expect(bubble.getY()).toBe(shield.getY() - 4);
+    const margin = (ShieldBubble.SIZE - Shield.SIZE) / 2;
+    expect(bubble.getX()).toBe(shield.getX() - margin);
+    expect(bubble.getY()).toBe(shield.getY() - margin);
+  });
+
+  it('makes a much bigger bubble than the block, kept inside the room when the block is against a wall', () => {
+    const { cell } = createScene();
+    expect(ShieldBubble.SIZE).toBeGreaterThanOrEqual(Avatar.HEIGHT * 3);
+
+    const cornered = new Shield(2, 40, false, cell);
+    const bubble = cornered.getBubble()!;
+    expect(bubble.getX()).toBe(0);
+    expect(bubble.covers(cornered.getX() + 1, cornered.getY() + 1)).toBe(true);
+  });
+
+  it('only covers the round bubble, not the corners of its bounding square', () => {
+    const { cell } = createScene();
+    const bubble = new Shield(60, ON_FLOOR, false, cell).getBubble()!;
+    const middle = bubble.getX() + ShieldBubble.SIZE / 2;
+
+    expect(bubble.covers(middle, bubble.getY() + 1)).toBe(true);
+    expect(bubble.covers(bubble.getX(), bubble.getY())).toBe(false);
+  });
+
+  it('protects an avatar inside it from a nearby explosion, but not one just outside it', () => {
+    const { cell } = createScene(200);
+    new Shield(100, ON_FLOOR, false, cell);
+    const inside = new Avatar('inside', 96, FLOOR_Y - Avatar.HEIGHT, false, cell);
+    const outside = new Avatar('outside', 100 - ShieldBubble.SIZE - KILL_RADIUS, FLOOR_Y - Avatar.HEIGHT, false, cell);
+    const launcher = new Launcher(100 - 6, ON_FLOOR, false, cell);
+
+    launcher.touch();
+    for (let frame = 0; frame < FUSE_FRAMES; frame++) launcher['doAction']();
+
+    expect(launcher.removed()).toBe(true);
+    expect(inside.removed()).toBe(false);
+    expect(outside.removed()).toBe(false); // too far from the blast to matter…
+    const unprotected = new Avatar('unprotected', 146, FLOOR_Y - Avatar.HEIGHT, false, cell);
+    const second = new Launcher(150, ON_FLOOR, false, cell);
+    second.touch();
+    for (let frame = 0; frame < FUSE_FRAMES; frame++) second['doAction']();
+    expect(unprotected.removed()).toBe(true); // …while the same blast with no bubble around kills.
   });
 
   it('takes its bubble with it when it is destroyed', () => {
@@ -259,26 +300,81 @@ describe('orange sticky block', () => {
     expect(orange.getY()).toBe(ON_FLOOR);
   });
 
-  it('cannot be picked up once stuck to something', () => {
-    const { cell, orange } = stuckPair();
-    const avatar = new Avatar('grabber', 61, ON_FLOOR - Avatar.HEIGHT, false, cell);
+  it('lets a block stuck to an orange one be picked up, leaving the orange behind', () => {
+    const { cell, physics, orange, plain } = stuckPair();
+    const third = new PlainBlock(57, ON_FLOOR, false, cell);
+    orange['doAction']();
+    expect(orange.getRigidGroup()).toHaveLength(3);
+    const avatar = new Avatar('grabber', 63, ON_FLOOR - Avatar.HEIGHT, false, cell);
 
-    expect(orange.canBePickedUp()).toBe(false);
+    expect(plain.canBePickedUp()).toBe(true);
     avatar.pickUpMana();
-    expect(avatar.hasHandledMana()).toBe(false);
+
+    expect(avatar.hasHandledMana()).toBe(true);
+    expect(plain.getRigidGroup()).toHaveLength(0); // no group any more
+    expect(orange.getRigidGroup()).toHaveLength(2);
+    expect(orange.getRigidGroup()).toContain(third);
+    expect(physics.move(orange, Physics.LEFT, Physics.NONE, 1)).toBe(true);
+    expect(third.getX()).toBe(56);
   });
 
-  it('sticks to other orange blocks too, and a lone one can still be picked up', () => {
+  it('frees everything the moment the orange block itself is picked up', () => {
+    const { cell, orange, plain } = stuckPair();
+    const third = new PlainBlock(57, ON_FLOOR, false, cell);
+    orange['doAction']();
+    // Straddles the orange and plain blocks, with the orange one nearer.
+    const avatar = new Avatar('grabber', 59, ON_FLOOR - Avatar.HEIGHT, false, cell);
+
+    avatar.pickUpMana();
+
+    expect(avatar.hasHandledMana()).toBe(true);
+    expect(orange.isBeingHandled()).toBe(true);
+    for (const block of [orange, plain, third]) expect(block.getRigidGroup()).toHaveLength(0);
+    // The leftovers are ordinary loose blocks again: shoving one doesn't drag the other.
+    const physics = cell.getWorld().getPhysics();
+    const plainX = plain.getX();
+    physics.move(third, Physics.LEFT, Physics.NONE, 2);
+    expect(plain.getX()).toBe(plainX);
+  });
+
+  it('repels other orange blocks so they spread out instead of clumping, but only from a limited range', () => {
+    const { cell } = createScene(200);
+    const left = new StickyBlock(80, ON_FLOOR, false, cell);
+    const right = new StickyBlock(92, ON_FLOOR, false, cell);
+    const faraway = new StickyBlock(190, ON_FLOOR, false, cell);
+    const farawayX = faraway.getX();
+
+    for (let frame = 0; frame < 120; frame++) stepAll(cell);
+
+    expect(right.getX() - left.getX()).toBeGreaterThan(12 + 8);
+    expect(faraway.getX()).toBe(farawayX); // out of range of the others
+    expect(left.getRigidGroup()).toHaveLength(0); // never touched, so never glued
+  });
+
+  it('does not repel an orange block that is carried, or one glued into its own group', () => {
+    const { cell } = createScene(200);
+    const first = new StickyBlock(60, ON_FLOOR, false, cell);
+    const second = new StickyBlock(63, ON_FLOOR, false, cell);
+    first['doAction']();
+    expect(first.getRigidGroup()).toHaveLength(2);
+
+    for (let frame = 0; frame < 60; frame++) stepAll(cell);
+
+    expect(second.getX() - first.getX()).toBe(3);
+  });
+
+  it('sticks to other orange blocks too, and picking either up frees the other', () => {
     const { cell } = createScene();
     const first = new StickyBlock(60, ON_FLOOR, false, cell);
     const second = new StickyBlock(63, ON_FLOOR, false, cell);
     first['doAction']();
-    expect(first.canBePickedUp()).toBe(false);
-    expect(second.canBePickedUp()).toBe(false);
+    expect(first.getRigidGroup()).toHaveLength(2);
 
-    const lone = new StickyBlock(120, ON_FLOOR, false, cell);
-    lone['doAction']();
-    expect(lone.canBePickedUp()).toBe(true);
+    const avatar = new Avatar('grabber', 61, ON_FLOOR - Avatar.HEIGHT, false, cell);
+    avatar.pickUpMana();
+
+    expect(avatar.hasHandledMana()).toBe(true);
+    expect(second.getRigidGroup()).toHaveLength(0);
   });
 });
 
@@ -291,15 +387,65 @@ describe('rainbow block', () => {
     return scene;
   }
 
-  it('ignores gravity and keeps crawling in one direction until it meets something', () => {
+  it('drops like any block when it ends up in open space with no wall touching it', () => {
     const { cell } = walledBox();
     const rainbow = new RainbowBlock(30, 80, false, cell);
     rainbow['heading'] = 0; // right
 
+    for (let frame = 0; frame < 200; frame++) rainbow['doAction']();
+
+    expect(rainbow.getY()).toBeGreaterThan(80);
+    expect(rainbow.getY()).toBeLessThanOrEqual(FLOOR_Y - RainbowBlock.SIZE);
+  });
+
+  it('crawls along the floor it lands on without ever leaving it', () => {
+    const { cell } = createScene(100);
+    const rainbow = new RainbowBlock(30, ON_FLOOR, false, cell);
+    rainbow['heading'] = 0;
+
     for (let frame = 0; frame < 20; frame++) rainbow['doAction']();
 
-    expect(rainbow.getY()).toBe(80);
-    expect(rainbow.getX()).toBe(50);
+    expect(rainbow.getY()).toBe(FLOOR_Y - RainbowBlock.SIZE);
+    expect(rainbow.getX()).toBeGreaterThan(30);
+  });
+
+  it('wraps around the end of a platform (under it) instead of drifting off into the air', () => {
+    const { cell } = createScene(100);
+    layFloor(cell, 60, 30, 50);
+    const rainbow = new RainbowBlock(36, 60 - RainbowBlock.SIZE, false, cell);
+    rainbow['heading'] = 0; // right, along the platform's top
+
+    const path: Array<[number, number]> = [];
+    for (let frame = 0; frame < 200; frame++) {
+      rainbow['doAction']();
+      path.push([rainbow.getX(), rainbow.getY()]);
+    }
+
+    const platformBottom = 60 + CellBlock.SIZE;
+    expect(path.some(([x, y]) => x >= 50 && y >= 60)).toBe(true); // down the right end…
+    expect(path.some(([x, y]) => x < 50 && y === platformBottom)).toBe(true); // …and along the underside
+    for (const [x, y] of path) {
+      expect(x).toBeLessThanOrEqual(50);
+      expect(y).toBeLessThan(FLOOR_Y - RainbowBlock.SIZE);
+    }
+  });
+
+  it('drops once the wall it was following is gone', () => {
+    const { cell } = createScene(100);
+    layFloor(cell, 60, 30, 50);
+    const rainbow = new RainbowBlock(36, 60 - RainbowBlock.SIZE, false, cell);
+    rainbow['heading'] = 0;
+    rainbow['doAction']();
+    expect(rainbow['hugging']).toBe(true);
+
+    for (const sprite of cell.getCellData().getSprites()) {
+      if (sprite instanceof CellBlock && sprite.getY() === 60) sprite.removePermanently();
+    }
+    for (let frame = 0; frame < 100; frame++) {
+      stepAll(cell);
+    }
+
+    expect(rainbow.getY()).toBeGreaterThan(70);
   });
 
   it('then follows the edge of what is in front of it, up the wall and around the ceiling', () => {
@@ -407,6 +553,20 @@ describe('diamonds', () => {
     expect(session.getDiamonds()).toBe(1);
   });
 
+  it('are collected by an avatar swapped in through plugin() (a warp, reattach or respawn)', () => {
+    const { cell } = createScene(100);
+    const session = new Session(new Avatar('old', 20, FLOOR_Y - Avatar.HEIGHT, false, cell));
+    const fresh = new Avatar('old', 60, FLOOR_Y - Avatar.HEIGHT, false, cell);
+    session.plugin(fresh);
+    const diamond = new Diamond(62, FLOOR_Y - Diamond.SIZE, 0, 0, cell);
+
+    diamond['doAction']();
+
+    expect(fresh.getSession()).toBe(session);
+    expect(diamond.removed()).toBe(true);
+    expect(session.getDiamonds()).toBe(1);
+  });
+
   it('are not collected by robots', () => {
     const { cell } = createScene(100);
     new Robot(60, FLOOR_Y - Avatar.HEIGHT, false, cell);
@@ -465,14 +625,82 @@ describe('arcing rockets', () => {
     expect(victim.removed()).toBe(false);
   });
 
-  it('never hurt robots', () => {
+  it('explode when they touch a player, and the blast (not the touch) is what kills', () => {
+    const { cell } = createScene();
+    const victim = new Avatar('victim', 60, FLOOR_Y - Avatar.HEIGHT, false, cell);
+    const rocket = new Missile(40, FLOOR_Y - 5, Physics.RIGHT, cell);
+
+    let frame = 0;
+    while (!rocket.removed() && frame++ < 60) rocket['doAction']();
+
+    expect(rocket.removed()).toBe(true);
+    expect(spritesOf(cell, Explosion).filter((e) => !e.removed())).toHaveLength(1);
+    expect(victim.removed()).toBe(true);
+  });
+
+  it('blast other players near the one it hit, and shove nearby blocks, but not ones out of range', () => {
+    const { cell } = createScene();
+    const hit = new Avatar('hit', 60, FLOOR_Y - Avatar.HEIGHT, false, cell);
+    const nearby = new Avatar('nearby', 60 + Avatar.WIDTH, FLOOR_Y - Avatar.HEIGHT, false, cell);
+    const faraway = new Avatar('faraway', 60 + ROCKET_KILL_RADIUS + 25, FLOOR_Y - Avatar.HEIGHT, false, cell);
+    const block = new PlainBlock(60 + 2 * Avatar.WIDTH + 2, ON_FLOOR, false, cell);
+    const rocket = new Missile(40, FLOOR_Y - 5, Physics.RIGHT, cell);
+
+    for (let frame = 0; frame < 60 && !rocket.removed(); frame++) rocket['doAction']();
+
+    expect(hit.removed()).toBe(true);
+    expect(nearby.removed()).toBe(true);
+    expect(faraway.removed()).toBe(false);
+    expect(block['body'].vx !== 0 || block['body'].vy !== 0).toBe(true);
+  });
+
+  it('explode against walls and blocks too, shoving and killing what is next to them', () => {
+    const { cell } = createScene();
+    layWall(cell, 50, FLOOR_Y - 30, FLOOR_Y);
+    const nearWall = new Avatar('nearWall', 40, FLOOR_Y - Avatar.HEIGHT, false, cell);
+    const rocket = new Missile(30, FLOOR_Y - 5, Physics.RIGHT, cell);
+
+    for (let frame = 0; frame < 100 && !rocket.removed(); frame++) rocket['doAction']();
+
+    expect(rocket.removed()).toBe(true);
+    expect(spritesOf(cell, Explosion).filter((e) => !e.removed())).toHaveLength(1);
+    expect(nearWall.removed()).toBe(true);
+  });
+
+  it('explode against a block in their way', () => {
+    const { cell } = createScene();
+    new PlainBlock(60, FLOOR_Y - 8, false, cell);
+    const rocket = new Missile(40, FLOOR_Y - 7, Physics.RIGHT, cell);
+
+    for (let frame = 0; frame < 60 && !rocket.removed(); frame++) rocket['doAction']();
+
+    expect(rocket.removed()).toBe(true);
+    expect(spritesOf(cell, Explosion).filter((e) => !e.removed())).toHaveLength(1);
+  });
+
+  it('fly through robots without exploding, but a blast kills robots it reaches', () => {
     const { cell } = createScene();
     const robot = new Robot(70, FLOOR_Y - Avatar.HEIGHT, false, cell);
     const rocket = new Missile(40, FLOOR_Y - 5, Physics.RIGHT, cell);
 
-    for (let frame = 0; frame < 60; frame++) rocket['doAction']();
-
+    for (let frame = 0; frame < 20; frame++) rocket['doAction']();
+    expect(rocket.removed()).toBe(false);
     expect(robot.removed()).toBe(false);
+
+    new Avatar('hit', 100, FLOOR_Y - Avatar.HEIGHT, false, cell);
+    for (let frame = 0; frame < 60 && !rocket.removed(); frame++) rocket['doAction']();
+    expect(rocket.removed()).toBe(true);
+  });
+
+  it('kill a robot standing in the blast of a rocket that hit a player beside it', () => {
+    const { cell } = createScene();
+    new Avatar('hit', 60, FLOOR_Y - Avatar.HEIGHT, false, cell);
+    const robot = new Robot(60 + Avatar.WIDTH + 1, FLOOR_Y - Avatar.HEIGHT, false, cell);
+    const rocket = new Missile(40, FLOOR_Y - 5, Physics.RIGHT, cell);
+
+    for (let frame = 0; frame < 60 && !rocket.removed(); frame++) rocket['doAction']();
+
+    expect(robot.removed()).toBe(true);
   });
 
   it('can be dry-run to check whether an arc reaches a target', () => {
@@ -520,6 +748,23 @@ describe('robot rocket launcher', () => {
 
     stepAll(cell, 120);
     expect(spritesOf(cell, RocketLauncher).filter((l) => !l.removed())).toHaveLength(0);
+  });
+
+  it('holds still aiming for most of a second before the rocket leaves, and the rocket is not too fast', () => {
+    const { cell } = duel(45);
+
+    let launcherFrame: number | undefined;
+    let rocketFrame: number | undefined;
+    let rocket: Missile | undefined;
+    for (let frame = 0; frame < 200 && !rocketFrame; frame++) {
+      stepAll(cell);
+      if (launcherFrame === undefined && spritesOf(cell, RocketLauncher).length > 0) launcherFrame = frame;
+      rocket = spritesOf(cell, Missile)[0];
+      if (rocket) rocketFrame = frame;
+    }
+
+    expect(rocketFrame! - launcherFrame!).toBeGreaterThanOrEqual(Math.round(Engine.EVERY_SECOND * 0.8));
+    expect(Math.abs(rocket!['vx'])).toBeLessThanOrEqual(0.7);
   });
 
   it('resumes patrolling once the launcher is put away', () => {
