@@ -66,8 +66,8 @@ export interface PixelSpan {
 }
 
 /**
- * Cosmetic roots and vines (pixels) growing from one point on the ceiling wall: roots spread through the wall face
- * between `topY` and `faceY` (the wall's lower face) out to `minX`/`maxX`, and vines hang from `faceY` into the room.
+ * Cosmetic green wall hue and vines (pixels) for the ceiling wall: the wall face between `topY` and `faceY` (the wall's
+ * lower face) is tinted dark green from `minX` to `maxX` (`rootX`, the flower stem, seeds the vines), and vines hang from `faceY` into the room.
  */
 export interface Vines {
   rootX: number;
@@ -75,7 +75,7 @@ export interface Vines {
   faceY: number;
   minX: number;
   maxX: number;
-  /** Stretches with no wall at all (the ceiling's wrap openings), which roots and vines skip. */
+  /** Stretches with no wall at all (the ceiling's wrap openings), which the hue and vines skip. */
   gaps: PixelSpan[];
   /** Stretches of the ceiling where nothing hangs (the flower itself, lamp fixtures). */
   noHanging: PixelSpan[];

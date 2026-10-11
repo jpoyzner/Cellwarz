@@ -14,6 +14,7 @@ import type { ActorTint, BakedSprite } from './neonSprites';
 import { ParticleSystem } from './particles';
 import { drawRocketLight, isRocketPath, rocketFacesLeft } from './rocketLight';
 import { drawStarFire, isStarPath } from './starFire';
+import { isStargatePath, stargateAngle } from './stargateSpin';
 import { PlanetView } from './planet';
 import { PostFx } from './postFx';
 import { LocalPredictor } from './prediction';
@@ -108,7 +109,7 @@ export class Renderer {
   backgroundKind: BackgroundKind | undefined;
   lamps: Lamp[] = [];
   tvs: Tv[] = [];
-  /** The roots and vines over the ceiling wall, if the room has any (cosmetic; drawn right after the wall blocks). */
+  /** The green hue over the ceiling wall and the vines hanging from it, if the room has any (cosmetic; drawn right after the wall blocks). */
   vines: VineField | undefined;
   /** The shared video behind every background TV (public so e2e can check it plays). */
   readonly tvScreens = new TvScreens();
@@ -138,6 +139,7 @@ export class Renderer {
   private glowColors: (string | undefined)[] = [];
   private explosionImages = new Set<number>();
   private starImages = new Set<number>();
+  private stargateImages = new Set<number>();
   private diamondImages = new Set<number>();
   private scoreScrambleTimer: number | undefined;
   private readonly minimap: Minimap | undefined;
@@ -332,6 +334,7 @@ export class Renderer {
       this.imagePaths.flatMap((path, index) => (path.includes('/effects/explosion/') ? [index] : [])),
     );
     this.starImages = new Set(this.imagePaths.flatMap((path, index) => (isStarPath(path) ? [index] : [])));
+    this.stargateImages = new Set(this.imagePaths.flatMap((path, index) => (isStargatePath(path) ? [index] : [])));
     this.diamondImages = new Set(
       this.imagePaths.flatMap((path, index) => (path.includes('/effects/diamond') ? [index] : [])),
     );
@@ -903,7 +906,7 @@ export class Renderer {
       if (spriteId !== undefined) looksBySprite.set(spriteId, { headband, belt });
     }
 
-    // Wall blocks first, then the vines creeping over them, then everything else (avatars stay on top of the vines).
+    // Wall blocks first, then the green wall hue and hanging vines, then everything else (avatars stay on top of the vines).
     const isWall = (spriteId: string): boolean => this.imageKinds[this.sprites[spriteId][0]] === 'wall';
     const spriteIds = Object.keys(this.sprites);
     const draw = (spriteId: string): void => this.drawSprite(spriteId, offsetX, offsetY, playerSpriteIds, looksBySprite);
@@ -961,6 +964,16 @@ export class Renderer {
       baked = this.neon.actor(index, image, tint, looksBySprite.get(spriteId), damageStage(this.health.get(spriteId) ?? 100));
     }
 
+    const spinning = this.stargateImages.has(index);
+    if (spinning) {
+      const centerX = x + image.width / 2;
+      const centerY = y + image.height / 2;
+      ctx.save();
+      ctx.translate(centerX, centerY);
+      ctx.rotate(stargateAngle(performance.now()));
+      ctx.translate(-centerX, -centerY);
+    }
+
     if (baked) {
       ctx.drawImage(baked.source, x - baked.pad, y - baked.pad);
     } else {
@@ -972,6 +985,8 @@ export class Renderer {
       ctx.drawImage(image, x, y);
       if (glow) ctx.shadowBlur = 0;
     }
+
+    if (spinning) ctx.restore();
 
     const path = this.imagePaths[index];
     if (path && isRocketPath(path)) {

@@ -219,6 +219,9 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   React state in `GameCanvas`): the wire format has no sprite type, so walls vs. avatars/robots are classified
   from the image path (`/blocks/` vs `/me/`), and a robot is an actor sprite whose id isn't in `avatars` (robots
   never send a name). The wall layer is cached and only rebuilt when a wall sprite appears/disappears.
+- **Spinning stargates** (cosmetic): `Renderer.drawSprite` rotates the corner `Portal` art (`/doors/stargate/`,
+  [stargateSpin.ts](src/game/stargateSpin.ts)) around its centre once per `STARGATE_SPIN_PERIOD_MS` (4s) from the
+  render loop's clock, so it turns smoothly and constantly regardless of the server's 8-frame swirl animation.
 - **Level backdrops** (`Cell.getBackground()` → `'space' | 'station' | 'temple'`, sent as `background` in the full-state
   payload and applied in `Renderer.setBackground()`): `MainRoom` uses `'station'` — [spaceBackground.ts](src/game/spaceBackground.ts),
   a starfield plus drifting neon tetrominoes ported from the daat/DJ Recognize site, drawn on the game canvas before
@@ -257,13 +260,13 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   block is created at the mouth for that angle (`HEAD_PIVOT`/`MOUTH_DISTANCE`, inside the flower's own box, so `isClear()` ignores the
   flower rather than using `cellInit` clustering). A mouth that's occupied waits for a clear frame.
   There is deliberately no cap on blocks in the room (to be addressed later). `MainRoom` passes `randomBlocks` as the flower's `spitsBlocks`, so `CELLWARZ_RANDOM_BLOCKS=off`
-  keeps it decorative for e2e. Client: a glow color in `glowColorForPath`, plus the flower's **roots and vines**
+  keeps it decorative for e2e. Client: a glow color in `glowColorForPath`, plus the flower's **ceiling hue and vines**
   ([vines.ts](src/game/vines.ts)): `Cell.getVines()` (MainRoom only, `vines` in the full-state payload) gives the stem's x, the ceiling
   wall's top/lower-face y, the x span (MainRoom: only the ceiling over the central opening, `CENTER_OPENING_PIXELS`, about one screen),
-  any `gaps` inside it (no wall, so nothing is drawn across them) and `noHanging` spans (flower, lamp fixtures); `VineField` grows
-  seeded-deterministic roots over the wall face — a dense knot of concentric arcs and fanning roots right above the stem, then strands
-  out to the span's ends — and hanging vines below it,
-  and `Renderer.drawSprites` draws the wall blocks first, then the vines, then everything else so actors stay on top. Cosmetic only.
+  any `gaps` inside it (no wall, so nothing is drawn across them) and `noHanging` spans (flower, lamp fixtures); `VineField` washes the
+  wall blocks over that span (minus gaps) with a translucent dark green gradient (fading at the span's ends; no roots are drawn over the
+  blocks any more, so they blend in) and grows seeded-deterministic hanging vines below it,
+  and `Renderer.drawSprites` draws the wall blocks first, then the hue/vines, then everything else so actors stay on top. Cosmetic only.
 - **Cyberpunk look (all client-side, cosmetic)**: [neonSprites.ts](src/game/neonSprites.ts) re-skins art at load time
   with no new assets — wall tiles become dark steel with a neon rim, the red headband on every `/me/` frame is recolored
   and given a glow halo (cyan = local avatar, magenta = other players, red = robots; both avatars and robots use the
@@ -305,7 +308,9 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   `Session.addDiamonds` for the first real player (not a robot) overlapping it; `SocketHub` sends `{ diamonds: n }` as a
   separate one-shot message when the count changes (and `diamonds` in the full-state payload) so the flat redraw frames
   stay untouched. `Session.plugin()` must `setSession` on the new avatar (warp/respawn make fresh ones) or diamonds can't be
-  collected. Client-side, a diamond sprite deleted next to the local avatar spawns a [DiamondFlight](src/game/diamondFlight.ts)
+  collected. Redraw frames only carry sprites flagged `needsRedraw`, which a new sprite isn't until it moves, so the
+  `Diamond` constructor flags itself (found via the Black Box: two diamonds that spawned wedged in were collected without
+  the client ever being told they existed, so they were invisible and nothing flew to the HUD). Client-side, a diamond sprite deleted next to the local avatar spawns a [DiamondFlight](src/game/diamondFlight.ts)
   flyer that arcs to the HUD; `Renderer.diamonds` is the server's total and `shownDiamonds` (what the HUD displays)
   catches up as each flyer arrives (`setDiamonds()` never jumps the HUD; it also catches up after 1.5s if nothing flew).
   Explosions are detected client-side by new sprites whose

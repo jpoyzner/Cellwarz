@@ -576,6 +576,16 @@ describe('diamonds', () => {
     expect(diamond.removed()).toBe(false);
   });
 
+  it('are announced to clients as soon as they appear, even if they are wedged and never move', () => {
+    const { cell } = createScene(100);
+    const wedged = new Diamond(40, FLOOR_Y - Diamond.SIZE, 0, 0, cell);
+
+    stepAll(cell);
+
+    expect(wedged.getY()).toBe(FLOOR_Y - Diamond.SIZE);
+    expect(wedged.needsRedraw()).toBe(true);
+  });
+
   it('bounce a little on landing', () => {
     const { cell } = createScene(100);
     const diamond = new Diamond(40, 20, 0, 0, cell);

@@ -255,7 +255,9 @@ bystander survives). The visual look of each colour and the explosion is manual-
    state refresh.
 
 **Covered by**: [server/__tests__/portal.test.ts](server/__tests__/portal.test.ts) at the engine level (the
-relocate-and-refresh mechanic itself). Reaching a corner stargate requires climbing MainRoom's center
+relocate-and-refresh mechanic itself). The ring's constant client-side spin (one turn per 4s, see
+[src/game/stargateSpin.ts](src/game/stargateSpin.ts)) is unit-tested for its angle math only; how it looks is
+manual-only. Reaching a corner stargate requires climbing MainRoom's center
 stepping-stone shaft, which is deliberately organic/skill-based platforming (jumping while drifting between
 horizontally-offset columns) — not reliably scriptable, so the full walk-up-and-touch-it flow is manual-only,
 the same tradeoff already made for burn-from-engine-fire death below.
@@ -524,7 +526,7 @@ overlaps, chains reach the platform row above, floor 1 TVs lowered, MainRoom-onl
 [src/game/__tests__/tvs.test.ts](src/game/__tests__/tvs.test.ts) (cover-crop, on-screen culling, chain-link and chain-visibility math, random start time). The look
 of the screens is manual-only.
 
-## Block-spitting flower (and its roots)
+## Block-spitting flower (and its ceiling vines)
 
 1. [MainRoom](server/cell/mainRoom.ts) has one [flower](server/sprite/flower.ts) hanging by its stem from the ceiling,
    just right of the middle ceiling lamp (`FLOWER_PIXELS` in `mainRoom.ts`). It is scenery that nothing collides with,
@@ -542,25 +544,23 @@ of the screens is manual-only.
    in the room (the other kinds are still picked) and makes them again once one is gone.
 4. With `CELLWARZ_RANDOM_BLOCKS=off` (set by the Playwright run) the flower is still there but never spits, so the
    deterministic specs don't get random blocks dropped on them.
-5. The flower's roots wrap the ceiling wall above it, and vines hang below it, but only over the stretch of ceiling above
-   the central opening through the platform rows (about one screen wide, `CENTER_OPENING_PIXELS`) — the rest of the
-   ceiling stays bare. Right above the flower is a thick knot of roots: concentric arcs that leave the wall's lower face on
-   one side of the stem, climb over it and come back down the other side, plus roots fanning up and out from the stem's
-   foot, all drawn over the wall blocks. Thinner strands then run out from the knot along the wall (at several heights,
-   with short side roots) to both ends of that stretch. Leafy vines hang from the wall's lower face along the stretch
-   (varied lengths, swaying gently, some tipped with a pink bud), except in front of the flower and the middle lamp's
-   fixture. Avatars are drawn over them. They are cosmetic only (they never block or touch anything), generated
-   identically on every client from the server's `vines` description (`Cell.getVines()`, sent in the full-state
-   payload; MainRoom only).
+5. The ceiling wall blocks above the flower get a dark green hue, and vines hang below them, but only over the stretch of
+   ceiling above the central opening through the platform rows (about one screen wide, `CENTER_OPENING_PIXELS`) — the
+   rest of the ceiling stays bare. There are no roots or vines drawn over the blocks themselves: the hue (a soft wash
+   over the blocks, skipping any opening with no wall and fading out at both ends of the stretch) just lets them blend in.
+   Leafy vines hang from the wall's lower face along the stretch (varied lengths, swaying gently, some tipped with a pink
+   bud), except in front of the flower and the middle lamp's fixture. Avatars are drawn over them. They are cosmetic only
+   (they never block or touch anything), generated identically on every client from the server's `vines` description
+   (`Cell.getVines()`, sent in the full-state payload; MainRoom only).
 
-**Covered by**: [e2e/flower.spec.ts](e2e/flower.spec.ts) (the flower sprite is at its fixed spot; roots and vines received, confined to the central stretch of ceiling),
-[src/game/__tests__/vines.test.ts](src/game/__tests__/vines.test.ts) (deterministic growth, the knot of arcs over the stem, roots inside the wall
-and reaching both ends of the stretch, none across gaps, hanging vines clear of gaps/flower/lamps, on-screen culling),
+**Covered by**: [e2e/flower.spec.ts](e2e/flower.spec.ts) (the flower sprite is at its fixed spot; wall hue and vines received, confined to the central stretch of ceiling),
+[src/game/__tests__/vines.test.ts](src/game/__tests__/vines.test.ts) (deterministic growth, wall hue over the whole stretch minus gaps, no roots,
+hanging vines clear of gaps/flower/lamps, on-screen culling),
 [server/__tests__/mainRoomVines.test.ts](server/__tests__/mainRoomVines.test.ts) (the vine description) and
 [server/__tests__/flower.test.ts](server/__tests__/flower.test.ts) (30-second cadence, spit position, random angle and
 speed range, head turns toward the spit direction before the spit and holds that pose, block starts at the mouth, every block kind, the rainbow-block cap, not counted as a throw, waits for a clear mouth, decorative mode) plus
 [server/__tests__/mainRoomBlocks.test.ts](server/__tests__/mainRoomBlocks.test.ts) (placement beside the middle lamp;
-spits normally, quiet when random blocks are off). The look of the art and vines is manual-only.
+spits normally, quiet when random blocks are off). The look of the art, hue and vines is manual-only.
 
 ## Gas giant planet
 

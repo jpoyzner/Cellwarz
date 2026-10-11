@@ -32,6 +32,9 @@ export class Diamond extends Sprite {
     super(x, y, false, cell);
     this.vx = vx;
     this.vy = vy;
+    // Clients only hear about a sprite once it needs a redraw, which for a diamond that spawns wedged in (or lands
+    // without ever moving) would be never: it could be collected without ever having been drawn.
+    this.needsRedraw(true);
   }
 
   getActionFrames(): Map<string, Frame[]> {
