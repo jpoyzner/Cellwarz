@@ -12,7 +12,7 @@ Playwright run starts the server with `CELLWARZ_RANDOM_BLOCKS=off CELLWARZ_ROBOT
 and no stepping stone hangs low enough above it to stop an avatar, so walking into a fixed block shoves it (the e2e
 specs hop over or onto them instead). Robots patrol back and forth, standing still for one
 second before turning around when blocked, killing any player they touch and shooting arcing rockets at players
-in range — see [robot.ts](server/sprite/robot.ts).
+in range (they stop to take aim for a moment first, with no weapon animation) — see [robot.ts](server/sprite/robot.ts).
 
 ## Login room (the ship)
 
@@ -149,7 +149,7 @@ fire its powers with 1/2/3" mechanic and its top-right dashboard icons are gone 
    it. If you're touching several, the **nearest** one (centre to centre) is picked up. It then rides just above your
    head, following you; a block that can't be lifted there (a ceiling or another block is in the way) is skipped for the
    next-nearest. **Spacebar again throws it** ahead of you in the direction you're facing, in a short arc; **Down puts
-   it back down** under your feet instead. You can't pick up a second block while carrying one. A block stuck to
+   it back down** under your feet instead (with nothing in your hands, holding Down instead lowers a yellow block you stand on, see yellow). You can't pick up a second block while carrying one. A block stuck to
    others leaves them (the orange block frees them all, see orange). Holding a key doesn't repeat the action (each
    press is one pickup/throw/put-down). The carried block is solid while it rides over your head: you can't run, jump
    or glide into a spot where it would end up inside a wall or another block (you stop as if you'd hit it, so you
@@ -183,7 +183,9 @@ works, see below).
 
 - **Blue (ice)**: keeps sliding along whatever it rests on (rightward at first) at a steady pace. When a wall or
   something it can't push blocks it, it turns around and slides the other way, so it is always sliding when it can.
-  It pushes anything light in its way.
+  It pushes anything light in its way. Its art is a frosted, translucent-looking ice cube (pale cyan with white
+  bevels, cracks and frost). It steps a whole cell on the same engine frames avatars take their run steps on, so an
+  avatar riding it, running against it or being pushed by it moves steadily and never wobbles back and forth.
 - **Yellow**: an ordinary block until it is touched or picked up, after which gravity is reversed for it for good: it
   "falls upwards" — but only faintly (15% of normal gravity), so it drifts up slowly. Its art then shows an up arrow.
   When it hits the underside of a wall block (e.g. the room's ceiling) the reversed gravity switches off: the arrow
@@ -193,6 +195,11 @@ works, see below).
   (or standing against it) drifts upwards instead of falling, about one cell every three frames, so holding it lets you
   glide upward (you can still run and jump; put it down or throw it and you fall again), and a block resting against it is
   lifted too. (An avatar still standing right beside it overlaps the cells above it and holds it down until it steps away.)
+  **Standing directly on top of a yellow block switches it on too** (even after it has bumped a ceiling and been
+  spent), and it then carries you up like an elevator (about one cell every three frames) while you stay free to walk,
+  jump or step off. **Holding Down while standing on it** (and not carrying another block) lowers it, with you on it,
+  for as long as Down is held (nothing is lifted meanwhile); let go and it starts rising again. If you are carrying
+  a block, Down just puts that block down as usual.
 - **Red**: touching or picking it up lights a five second fuse (the block flashes, faster as it burns down; the fuse
   keeps burning while it's carried or thrown). Then it blows up: every avatar (and robot) within 28 grid cells (224px)
   of its centre dies (with a knockback away from the blast), unless a wall is in the way, and every block within 30
@@ -219,7 +226,7 @@ works, see below).
   and can be collected (see Score). Merely shoving a rainbow block doesn't break it.
 
 **Covered by**: [server/__tests__/manaPhysics.test.ts](server/__tests__/manaPhysics.test.ts) (blue, yellow incl. the faint
-upward fall and lifting avatars/blocks),
+upward fall, lifting avatars/blocks, standing on it to ride up, holding Down to lower it),
 [server/__tests__/specialBlocks.test.ts](server/__tests__/specialBlocks.test.ts) (red fuse/blast radius/line of
 sight/shove, green bubble and rockets, purple pull, orange rigid groups and repulsion, rainbow crawling/shattering, diamonds),
 [server/__tests__/mainRoomBlocks.test.ts](server/__tests__/mainRoomBlocks.test.ts) (the room's mix of blocks and
@@ -256,10 +263,10 @@ settles at the known fixed spawn portal position after dropping) and
 
 ## Death and respawn
 
-1. An avatar dies when caught in a red block's explosion, caught in the blast of a robot's rocket, or touched by a robot
-   (overlapping it or directly beside/above/below it — a robot patrolling into you, or you walking into a paused
-   robot, both kill; robots never kill each other by touch, but a rocket's blast kills robots too); death
-   still happens in exactly one hit (no health pool was added) — the only change is a short knockback (away from
+1. An avatar dies in one hit when caught in a red block's explosion or touched by a robot (overlapping it or directly
+   beside/above/below it — a robot patrolling into you, or you walking into a paused robot, both kill; robots never kill
+   each other by touch). A robot's rocket or a ninja star only takes a fifth of your health (see "Health, ninja stars and
+   rocket damage" below): the fifth hit is the one that kills. Either way, a short knockback (away from
    the blast or away from the robot) plays out over the death animation instead
    of an instant vanish.
 2. On death the avatar's session is unplugged; the next teleport places a fresh avatar (a random floor spot, or the
@@ -289,31 +296,57 @@ message, the world continuing and the free camera after a real death are asserte
 is manual-only (no automated assertions on canvas pixels or WebAudio output). Death by robot rocket is unit-tested
 only (robots are switched off in the e2e run).
 
-## Robot rocket launcher
+## Robot rockets
 
 1. A robot that sees a real player (never another robot) within rocket range — between 24 and 70 grid cells away
    horizontally, no more than 30 cells higher or lower, with a clear arc (nothing solid in the way) — stops,
-   turns toward them and pulls out a rocket launcher (a small launcher sprite that follows the robot) for about nine
-   tenths of a second, then fires **one rocket** (the same rocket sprite the red block used to fire, flying a bit slower
+   turns toward them and stands still taking aim for about nine tenths of a second (there is no
+   launcher/bazooka sprite or animation), then fires **one rocket** (the same rocket sprite the red block used to fire, flying a bit slower
    than it used to) in an **arc** (it rises, then curves down; it is aimed at where the player is at that moment, so a
-   moving player can dodge), keeps the launcher out for another three quarters of a second, puts it away and goes back to patrolling. It rests for about four seconds before
+   moving player can dodge), and goes straight back to patrolling. It rests for about four seconds before
    shooting again (one second if the player left range before it fired).
 2. A rocket that touches a real player **or anything solid** (a wall or a block) **explodes** (the same fireball and
-   line-of-sight blast as a red block, but smaller: avatars within 10 grid cells die with a knockback away from the
-   blast, blocks within 20 are shoved); the touch itself doesn't kill, the blast does, so it can also catch players
-   standing next to what it hit. **Robots die in the blast too** (including the one that fired it, if it is that
-   close), but a rocket flies through robots without exploding on them. A green block's bubble destroys the rocket
+   line-of-sight blast as a red block, but smaller: avatars within 10 grid cells lose **20% of their health** with a
+   knockback away from the blast, blocks within 20 are shoved); the touch itself doesn't hurt, the blast does, so it can
+   also catch players standing next to what it hit. **Robots take the blast too** (including the one that fired it, if it
+   is that close), but a rocket flies through robots without exploding on them. A green block's bubble destroys the rocket
    before anything inside is hurt (the bubble also shields from the blast). The room's edges end it silently, and it
    flies through other rockets.
-3. Robots still kill by touch as before; destroying a robot also removes its launcher.
+3. Robots still kill by touch as before.
 4. Rockets are easy to spot even in unlit space: each draws a bright flickering orange exhaust flame behind it and a
    hot white-yellow light on its tip (client-side and cosmetic only; manual check, no automated pixel assertions).
 
 **Covered by**: [server/__tests__/specialBlocks.test.ts](server/__tests__/specialBlocks.test.ts) ("arcing rockets" and
-"robot rocket launcher": stops, pulls out the launcher, fires an arc that explodes on a player in range, puts it away and
+"robot rockets": stops to aim, fires an arc that explodes on a player in range and
 resumes patrolling; no shot when out of range, too close, behind a wall, or at another robot) and
 [server/__tests__/robot.test.ts](server/__tests__/robot.test.ts) (patrol and touch). Not in the browser tests: the e2e
 run switches robots off (they would kill test avatars at random).
+
+## Health, ninja stars and rocket damage
+
+1. Every avatar (players and robots) has **100% health**. A robot's rocket or a ninja star's blast takes **20%** off each
+   time (one hit per blast, knocking the avatar back a little); the **fifth hit kills** (the usual death, see "Death
+   and respawn"). A red block's explosion and a robot's touch still kill outright. Health never regenerates; a fresh
+   avatar after death starts at 100% again.
+2. The avatar's art shows it: unhurt at 100%, then four increasingly wounded looks at 80%, 60%, 40% and 20% (burning
+   orange wounds scorched into the body, more at each stage; eyes and headband/belt untouched). Everyone sees everyone's
+   state (the server sends the remaining percent for any avatar below 100%).
+3. **Enter throws a ninja star** (not while asleep): a small spinning star leaves the front of the avatar in the
+   direction it faces and flies **fast on a slight downward curve** (a gentle drop, far less than a rocket's), ending
+   after about a second and a half or at the room's edge (it never wraps). The star **burns**: a flickering fireball with
+   flames licks around it and it leaves a trail of drifting sparks behind that fade out (purely visual, client-side). It explodes — a **smaller** fireball than a rocket's (half the size), kill radius 6 /
+   shove radius 12 grid cells, with line of sight — on the first player or robot it touches (never its thrower) or
+   anything solid (wall or block), costing 20% health to avatars within the blast and shoving nearby blocks. A green
+   block's bubble swallows it. A throw has a short (~0.4s) cooldown, and at most 3 of an avatar's stars can be in flight.
+   Holding Enter doesn't auto-repeat.
+
+**Covered by**: [server/__tests__/ninjaStar.test.ts](server/__tests__/ninjaStar.test.ts) (Enter, direction, downward curve, sleeping,
+cooldown/cap, 20% damage instead of a kill, robots, walls and block shove, range/edge, shield bubble, the health wire key),
+[server/__tests__/avatar.test.ts](server/__tests__/avatar.test.ts) (five hits kill) and the rocket tests in
+[server/__tests__/specialBlocks.test.ts](server/__tests__/specialBlocks.test.ts); the wound looks by
+[src/game/__tests__/neonSprites.test.ts](src/game/__tests__/neonSprites.test.ts); the star's fire/sparks by [src/game/__tests__/starFire.test.ts](src/game/__tests__/starFire.test.ts); end-to-end by
+[e2e/main-room-workflows.spec.ts](e2e/main-room-workflows.spec.ts) (one player throws a star at another, who ends at 80%
+health, alive, while the thrower stays at 100%). The wound/star/explosion pixels themselves are manual-only.
 
 ## Multiplayer visibility
 
@@ -323,7 +356,10 @@ run switches robots off (they would kill test avatars at random).
 **Covered by**: [e2e/main-room-workflows.spec.ts](e2e/main-room-workflows.spec.ts) — two browser contexts log in
 to the single shared room and each asserts it can see the other's name and sprite.
 
-## Debug recording (backtick)
+## Debug recording: the "Back Box" (backtick)
+
+The **Back Box** (backtick + black box) is the in-game flight recorder: when something goes wrong, press `` ` ``, then
+"check the Black Box" (`recordings/latest.json`) afterwards.
 
 1. While in-game, press the backtick key (`` ` ``) to start a debug recording. A blinking red `#recording` label
    ("REC 9.8s") appears top-left and counts down. The recording captures the world's sprite positions at the
@@ -481,6 +517,9 @@ of the screens is manual-only.
    the ground. Over the planet itself (anywhere within its disc) the pull is much stronger — stronger than normal
    gravity, so it can drag a sprite up into it and quickly sends it to the core. The background tetromino pieces
    (client-side) fall toward it too (also harder over the planet), without being broken by it.
+   Flying **rockets and ninja stars** are bent by it too: the same pull (scaled down to a gentle acceleration) steers their
+   flight toward the planet, so a star no longer flies dead straight and a rocket's arc curves toward it. They aren't
+   swallowed — they're short-lived and simply end as usual.
 3. Anything whose centre reaches the planet's core (the middle 15% of its radius) is swallowed: it slides into the
    exact centre while shrinking away over one second (as if being pulled off into the distance), and only when it
    has vanished is it destroyed — a block is removed from the game, an avatar or robot dies (the usual death
@@ -495,7 +534,7 @@ Playwright config does this so its deterministic movement specs aren't shoved ar
 Playwright starts the server itself).
 
 **Covered by**: [server/__tests__/planet.test.ts](server/__tests__/planet.test.ts) (one planet at a time, respawn,
-range/falloff, stronger pull over the planet, walls blocking, lifting only inside the planet, shrink-then-destroy of avatars/mana, wire extra info, MainRoom-only),
+range/falloff, stronger pull over the planet, bending rocket/ninja-star flight, walls blocking, lifting only inside the planet, shrink-then-destroy of avatars/mana, wire extra info, MainRoom-only),
 [src/game/__tests__/planet.test.ts](src/game/__tests__/planet.test.ts),
 [src/game/__tests__/spaceBackground.test.ts](src/game/__tests__/spaceBackground.test.ts) (pieces pulled, not broken, shrunk away at the core),
 [src/game/__tests__/minimap.test.ts](src/game/__tests__/minimap.test.ts) and

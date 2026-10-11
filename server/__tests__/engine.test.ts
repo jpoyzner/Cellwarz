@@ -29,5 +29,24 @@ describe('Engine', () => {
     expect(processSpy.mock.calls.length).toBeGreaterThanOrEqual(4);
     expect(processSpy.mock.calls.length).toBeLessThanOrEqual(5);
   });
-});
 
+  it('hands out every step\'s redraws exactly once to a connection that sends less often than the engine steps', () => {
+    const sprites = [0, 1, 2].map((n) => ({ process: () => {}, needsRedraw: () => n !== 1, n }));
+    const cell = {
+      getCellData: () => ({ getSprites: () => sprites }),
+      process: () => {},
+      setEngine: () => {},
+    } as unknown as Cell;
+    const engine = new Engine(cell);
+
+    engine['step']();
+    const afterFirst = engine.getStepCount();
+    sprites[1].needsRedraw = () => true; // only changes in the second step
+    sprites[0].needsRedraw = () => false;
+    engine['step']();
+
+    expect(engine.getRedrawSpritesSince(afterFirst - 1)).toHaveLength(3); // both steps' sprites, each once
+    expect(engine.getRedrawSpritesSince(afterFirst)).toHaveLength(2); // only the second step's
+    expect(engine.getRedrawSpritesSince(engine.getStepCount())).toEqual([]);
+  });
+});

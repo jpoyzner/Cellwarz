@@ -3,7 +3,7 @@ import type { CellData } from '../cellData';
 import { EdgeOfCellDataException } from '../errors';
 import { Physics } from '../physics';
 import { Avatar } from './avatar';
-import { Explosion } from './explosion';
+import { Explosion, SmallExplosion } from './explosion';
 import { Mana } from './mana';
 import { ShieldBubble } from './shieldBubble';
 import type { Sprite } from './sprite';
@@ -19,6 +19,10 @@ export interface BlastOptions {
   shoveRadius: number;
   /** The sprite that is exploding; it is skipped and the caller removes it. */
   source: Sprite;
+  /** Health percent an unshielded avatar in range loses (see `Avatar.takeDamage`); left out, the blast kills outright. */
+  damage?: number;
+  /** Shows the half-size fireball (a ninja star's) instead of the full one. */
+  small?: boolean;
 }
 
 /** The shared explosion: kills unshielded avatars with a line of sight, shoves nearby blocks and shows the fireball. */
@@ -37,7 +41,8 @@ export function detonate(cell: Cell, cellData: CellData, centerX: number, center
         sprite.getY() + sprite.getHeight() / 2,
       );
       if (distance <= options.killRadius && !shielded && canReach(cellData, centerX, centerY, sprite)) {
-        sprite.die(Math.sign(dx), Physics.UP);
+        if (options.damage === undefined) sprite.die(Math.sign(dx), Physics.UP);
+        else sprite.takeDamage(options.damage, Math.sign(dx), Physics.UP);
       }
     } else if (sprite instanceof Mana && distance <= options.shoveRadius) {
       const speed = SHOVE_MIN_SPEED + SHOVE_EXTRA_SPEED * (1 - distance / options.shoveRadius);
@@ -47,7 +52,7 @@ export function detonate(cell: Cell, cellData: CellData, centerX: number, center
     }
   }
 
-  showExplosion(cell, cellData, centerX, centerY);
+  showExplosion(cell, cellData, centerX, centerY, options.small ?? false);
 }
 
 /** The blast reaches an avatar if it has a clear line to any of its head, middle or feet (a ledge can't shield all three). */
@@ -78,9 +83,11 @@ function hasClearLine(cellData: CellData, fromX: number, fromY: number, toX: num
   return true;
 }
 
-function showExplosion(cell: Cell, cellData: CellData, centerX: number, centerY: number): void {
-  const half = Explosion.SIZE / 2;
-  const x = Math.max(0, Math.min(cellData.getWidth() - Explosion.SIZE, Math.round(centerX - half)));
-  const y = Math.max(0, Math.min(cellData.getHeight() - Explosion.SIZE, Math.round(centerY - half)));
-  new Explosion(x, y, cell);
+function showExplosion(cell: Cell, cellData: CellData, centerX: number, centerY: number, small: boolean): void {
+  const size = small ? Explosion.SMALL_SIZE : Explosion.SIZE;
+  const half = size / 2;
+  const x = Math.max(0, Math.min(cellData.getWidth() - size, Math.round(centerX - half)));
+  const y = Math.max(0, Math.min(cellData.getHeight() - size, Math.round(centerY - half)));
+  if (small) new SmallExplosion(x, y, cell);
+  else new Explosion(x, y, cell);
 }

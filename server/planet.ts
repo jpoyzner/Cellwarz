@@ -41,6 +41,9 @@ const MAX_PULL_PER_FRAME = 0.55;
 // Inside the planet's disc the pull is a flat, much stronger value: past 1 it beats gravity, so it can lift a sprite.
 const INSIDE_PULL_PER_FRAME = 1.2;
 const LIFT_THRESHOLD_PER_FRAME = 1;
+// Flying projectiles (rockets, ninja stars) keep their own velocity, so the same pull bends their flight as an acceleration instead:
+// cells per frame² = the pull above (cells per frame) times this, i.e. at the same ratio mana blocks' own gravity (0.1) has to 1.
+const PROJECTILE_PULL_SCALE = 0.1;
 // A sprite whose centre gets this close to the planet's centre (a fraction of its radius) is swallowed. Mirrored by
 // src/game/planet.ts for the background tetrominoes.
 const CORE_RADIUS_FRACTION = 0.15;
@@ -103,14 +106,9 @@ export class PlanetField {
       return;
     }
 
-    const fromSurface = Math.max(0, distance - this.planet.radius);
-    const range = this.getGravityRange();
-
-    if (fromSurface >= range) return;
-
-    const strength = fromSurface === 0 ? INSIDE_PULL_PER_FRAME : MAX_PULL_PER_FRAME * (1 - fromSurface / range) ** 2;
-    const pullX = (dx / distance) * strength;
-    const pullY = (dy / distance) * strength;
+    const pull = this.pullToward(dx, dy, distance);
+    if (!pull) return;
+    const { x: pullX, y: pullY } = pull;
 
     const accumulator = this.accumulatorFor(sprite);
     accumulator.x = this.pullAlong(sprite, physics, true, accumulator.x + pullX);
@@ -123,6 +121,34 @@ export class PlanetField {
 
     accumulator.y = this.pullAlong(sprite, physics, false, accumulator.y + pullY);
     if (pullY < 0) sprite.resetGravitateCount();
+  }
+
+  /**
+   * How hard the planet bends a flying projectile's velocity this frame (cells per frame², zero out of range). Unlike
+   * `applyPull` it never moves anything itself: the projectile adds this to its own velocity.
+   */
+  projectileAcceleration(centerXPx: number, centerYPx: number): { x: number; y: number } {
+    const none = { x: 0, y: 0 };
+    if (!this.pullEnabled) return none;
+
+    const dx = this.planet.x - centerXPx;
+    const dy = this.planet.y - centerYPx;
+    const distance = Math.hypot(dx, dy);
+    if (distance === 0) return none;
+
+    const pull = this.pullToward(dx, dy, distance);
+    return pull ? { x: pull.x * PROJECTILE_PULL_SCALE, y: pull.y * PROJECTILE_PULL_SCALE } : none;
+  }
+
+  /** The pull (grid units per frame) on something `distance` px away along (dx, dy), or undefined beyond the range. */
+  private pullToward(dx: number, dy: number, distance: number): { x: number; y: number } | undefined {
+    const fromSurface = Math.max(0, distance - this.planet.radius);
+    const range = this.getGravityRange();
+
+    if (fromSurface >= range) return undefined;
+
+    const strength = fromSurface === 0 ? INSIDE_PULL_PER_FRAME : MAX_PULL_PER_FRAME * (1 - fromSurface / range) ** 2;
+    return { x: (dx / distance) * strength, y: (dy / distance) * strength };
   }
 
   /** Moves every sprite being swallowed one step closer to the core, destroying those that have fully shrunk away. */

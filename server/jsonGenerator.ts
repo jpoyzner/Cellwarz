@@ -1,10 +1,11 @@
-import { Avatar } from './sprite/avatar';
+import { Avatar, MAX_HEALTH } from './sprite/avatar';
 import type { Sprite } from './sprite/sprite';
 
 const DELETED_CODE = -1;
 const AVATAR_NAME_KEY = '0';
 const CONSUME_SCALE_KEY = '2';
 const SLEEPING_KEY = '3';
+const HEALTH_KEY = '4';
 
 export type JsonSprite = [number] | [number, number, number] | [number, number, number, Record<string, unknown>];
 
@@ -32,6 +33,11 @@ export function getSprites(sprites: Sprite[], addExtraInfo: boolean): Record<str
       // Sleeping is sent in full-state payloads too (not just redraws) so a client joining mid-nap sees the Zs at once.
       if (sprite instanceof Avatar && sprite.isSleeping()) {
         extraInfo = { ...(extraInfo ?? {}), [SLEEPING_KEY]: 1 };
+      }
+
+      // A hurt avatar reports its remaining health percent (full health is left out), also in full-state payloads.
+      if (sprite instanceof Avatar && sprite.getHealth() < MAX_HEALTH) {
+        extraInfo = { ...(extraInfo ?? {}), [HEALTH_KEY]: sprite.getHealth() };
       }
 
       // A sprite being swallowed by a planet reports how far it has shrunk so clients can draw it smaller.

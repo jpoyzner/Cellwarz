@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { MainRoom } from '../cell/mainRoom';
 import { SimpleSmallCell } from '../cell/simpleSmallCell';
 import { Engine } from '../engine';
@@ -8,6 +8,8 @@ import { getSprites } from '../jsonGenerator';
 import { Avatar } from '../sprite/avatar';
 import { Ice } from '../sprite/ice';
 import { CellBlock } from '../sprite/cellBlock';
+import { Missile } from '../sprite/missile';
+import { NinjaStar } from '../sprite/ninjaStar';
 import type { World } from '../world';
 import { createTestCell } from './testHelpers';
 
@@ -248,6 +250,62 @@ describe('PlanetField', () => {
     for (let i = 0; i < 20; i++) field.applyPull(avatar, physics);
 
     expect(avatar.getX()).toBe(100);
+  });
+});
+
+describe('projectiles and the planet', () => {
+  function projectileScene(planetX: number, planetY: number, pullEnabled = true) {
+    const { cell } = createScene(300, 200);
+    Missile.init(cell.getCellData());
+    NinjaStar.init(cell.getCellData());
+    const { field } = parkedField(planetX, planetY, pullEnabled);
+    vi.spyOn(cell, 'getProjectilePlanetAcceleration').mockImplementation((x, y) => field.projectileAcceleration(x, y));
+    return cell;
+  }
+
+  it('bends a rocket toward a planet below its path, and leaves it alone beyond the range', () => {
+    // Rocket flying right at y=40 (320px); planet (radius 140px) sits just under its path.
+    const near = projectileScene(500, 320 + 150 + 100);
+    const bent = new Missile(40, 40, Physics.RIGHT, near);
+    const far = projectileScene(500, 320 + 150 + 6 * AVATAR_HEIGHT_PX + 50);
+    const straight = new Missile(40, 40, Physics.RIGHT, far);
+
+    for (let i = 0; i < 40; i++) {
+      bent['doAction']();
+      straight['doAction']();
+    }
+
+    expect(bent.getY()).toBeGreaterThan(40);
+    expect(straight.getY()).toBe(40);
+  });
+
+  it('bends a ninja star toward the planet instead of flying dead straight', () => {
+    const near = projectileScene(500, 320 + 150 + 100);
+    const thrower = new Avatar('thrower', 10, 130, false, near);
+    const star = new NinjaStar(40, 40, Physics.RIGHT, thrower, near);
+
+    for (let i = 0; i < 40; i++) star['doAction']();
+
+    expect(star.getY()).toBeGreaterThan(40);
+  });
+
+  it('pulls a ninja star upward and sideways too, not just down', () => {
+    const cell = projectileScene(500, 100); // planet above the star's path (y=40 is 320px)
+    const thrower = new Avatar('thrower', 10, 130, false, cell);
+    const star = new NinjaStar(40, 40, Physics.RIGHT, thrower, cell);
+
+    for (let i = 0; i < 40; i++) star['doAction']();
+
+    expect(star.getY()).toBeLessThan(40);
+  });
+
+  it('does not bend projectiles when the pull is disabled', () => {
+    const cell = projectileScene(500, 320 + 150 + 100, false);
+    const missile = new Missile(40, 40, Physics.RIGHT, cell);
+
+    for (let i = 0; i < 40; i++) missile['doAction']();
+
+    expect(missile.getY()).toBe(40);
   });
 });
 

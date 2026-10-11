@@ -122,6 +122,32 @@ describe('block physics', () => {
       expect(ice.getX()).toBeGreaterThanOrEqual(20 + 15);
     });
 
+    it('does not make an avatar wobble: running against it, or riding it, never flips the avatar back and forth', () => {
+      for (const run of [undefined, 'left', 'right'] as const) {
+        const { cell } = createScene();
+        // Real engine cadence: avatars run-step on even frames, so the ice must step on those same frames.
+        let frame = 0;
+        Object.assign(cell.getEngine(), { actionMatchesFrequency: (frequency: number) => frame % frequency === 0 });
+        const ice = new Ice(60, FLOOR_Y - Ice.SIZE, false, cell);
+        const avatar = new Avatar('rider', 61, FLOOR_Y - Ice.SIZE - Avatar.HEIGHT, false, cell);
+        if (run === 'left') avatar.runLeft();
+        if (run === 'right') avatar.runRight();
+
+        const xs: number[] = [];
+        for (let i = 0; i < 24; i++) {
+          ice['doAction']();
+          avatar['process']();
+          frame++;
+          xs.push(avatar.getX());
+        }
+
+        // Never steps backwards against the direction it is heading overall (no +1/-1 alternation).
+        const deltas = xs.slice(1).map((x, i) => x - xs[i]);
+        const direction = Math.sign(xs[xs.length - 1] - xs[0]) || 1;
+        expect(deltas.filter((delta) => delta * direction < 0), `running ${run}`).toEqual([]);
+      }
+    });
+
     it('turns around when a wall blocks it, so it never stops sliding', () => {
       const { cell } = createScene();
       layWall(cell, 50, FLOOR_Y - 10, FLOOR_Y);
@@ -289,6 +315,84 @@ describe('block physics', () => {
 
       avatar.pickUpMana();
       expect(thruster.isReversed()).toBe(true);
+    });
+
+    it('switches on (even when spent) as soon as an avatar stands on top of it, and the avatar can still walk', () => {
+      const { cell } = createScene();
+      layFloor(cell, 20, 0, 120);
+      const thruster = new Thruster(30, 70, false, cell);
+      thruster.touch();
+      for (let frame = 0; frame < 400; frame++) thruster['doAction']();
+      expect(thruster.isReversed()).toBe(false);
+
+      const avatar = new Avatar('stander', 31, FLOOR_Y - Thruster.SIZE - Avatar.HEIGHT, false, cell);
+      avatar['doAction']();
+      expect(thruster.isReversed()).toBe(true);
+
+      avatar.runRight();
+      const startX = avatar.getX();
+      for (let frame = 0; frame < 20; frame++) avatar['doAction']();
+      expect(avatar.getX()).toBeGreaterThan(startX);
+    });
+
+    it('carries an avatar standing on it upwards like an elevator', () => {
+      const { cell } = createScene();
+      const thruster = new Thruster(30, FLOOR_Y - Thruster.SIZE, false, cell);
+      const avatar = new Avatar('rider', 31, FLOOR_Y - Thruster.SIZE - Avatar.HEIGHT, false, cell);
+      const startY = avatar.getY();
+
+      for (let frame = 0; frame < 60; frame++) {
+        avatar['doAction']();
+        thruster['doAction']();
+      }
+
+      expect(avatar.getY()).toBeLessThan(startY - 10);
+      expect(avatar.getY() + Avatar.HEIGHT).toBe(thruster.getY()); // still standing on it
+    });
+
+    it('lowers a yellow block under the avatar for as long as Down is held, then goes back to rising', () => {
+      const { cell } = createScene();
+      const thruster = new Thruster(30, 50, false, cell);
+      const avatar = new Avatar('lowerer', 31, 50 - Avatar.HEIGHT, false, cell);
+      thruster.touch();
+      const run = (frames: number) => {
+        for (let frame = 0; frame < frames; frame++) {
+          avatar['doAction']();
+          thruster['doAction']();
+        }
+      };
+
+      run(5);
+      const startY = thruster.getY();
+      avatar.pressDown();
+      run(30);
+      const loweredTo = thruster.getY();
+      expect(loweredTo).toBeGreaterThan(startY + 8);
+      expect(avatar.getY()).toBe(loweredTo - Avatar.HEIGHT); // rides it down
+
+      avatar.releaseDown();
+      run(5);
+      const settledAt = thruster.getY();
+      run(30);
+      expect(thruster.getY()).toBeLessThan(settledAt); // rising again
+    });
+
+    it('does not lower the yellow block it stands on while the avatar is carrying another block', () => {
+      const { cell } = createScene();
+      const thruster = new Thruster(30, 50, false, cell);
+      const avatar = new Avatar('busy', 31, 50 - Avatar.HEIGHT, false, cell);
+      const carried = new PlainBlock(60, FLOOR_Y - PlainBlock.SIZE, false, cell);
+      thruster.touch();
+      avatar['handledMana'] = carried;
+      carried.beingHandled();
+      avatar['pressingDown'] = true;
+
+      const y = thruster.getY();
+      for (let frame = 0; frame < 20; frame++) {
+        avatar['doAction']();
+        thruster['doAction']();
+      }
+      expect(thruster.getY()).toBeLessThanOrEqual(y);
     });
 
     it('keeps its upward gravity while carried, even by an avatar pressed against a ceiling', () => {

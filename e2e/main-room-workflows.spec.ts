@@ -321,6 +321,54 @@ test.describe('MainRoom deterministic workflows', () => {
     }
   });
 
+  test('a thrown ninja star (Enter) hits another player for a fifth of their health instead of killing them', async ({ page, browser }) => {
+    test.setTimeout(60000);
+    const thrower = `star-a-${Date.now()}`;
+    const target = `star-b-${Date.now()}`;
+
+    await login(page, thrower);
+    await expect(page.locator('#canvas')).toBeVisible();
+    await waitForAvatar(page, thrower);
+    await page.locator('#canvas').click();
+    const spawn = await waitUntilGrounded(page, thrower);
+    await walkTo(page, thrower, 'ArrowRight', spawn.x + 160, { tolerance: 8, timeoutMs: 15000 });
+
+    const contextB = await browser.newContext();
+    const pageB = await contextB.newPage();
+
+    try {
+      await login(pageB, target);
+      await expect(pageB.locator('#canvas')).toBeVisible();
+      await waitForAvatar(pageB, target);
+      await waitUntilGrounded(pageB, target);
+      await waitForAvatar(page, target);
+
+      // Face the target (left) with a short tap, then throw.
+      await page.keyboard.down('ArrowLeft');
+      await page.waitForTimeout(60);
+      await page.keyboard.up('ArrowLeft');
+      await page.keyboard.press('Enter');
+
+      await page.waitForFunction(() => {
+        const renderer = window.__cellwarz?.renderer;
+        return Object.values(renderer?.sprites ?? {}).some(([image]) => renderer?.imagePaths[image]?.includes('/projectiles/star'));
+      });
+
+      const healthOf = (name: string) =>
+        pageB.evaluate((who) => {
+          const renderer = window.__cellwarz!.renderer;
+          return renderer.health.get(renderer.avatars[who]) ?? 100;
+        }, name);
+      await expect.poll(() => healthOf(target), { timeout: 10000 }).toBe(80);
+
+      // Still alive and standing in the room, and the thrower is unhurt.
+      expect(await getAvatarPosition(pageB, target)).not.toBeNull();
+      expect(await healthOf(thrower)).toBe(100);
+    } finally {
+      await contextB.close();
+    }
+  });
+
   test('two logins in the shared room see each other rendered and named', async ({ page, browser }) => {
     const nameA = `mp-a-${Date.now()}`;
     const nameB = `mp-b-${Date.now()}`;

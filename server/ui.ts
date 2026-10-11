@@ -4,6 +4,7 @@ import type { Avatar } from './sprite/avatar';
 export const ESCAPE_KEY = 27;
 
 const SPACE_KEY = 32;
+const ENTER_KEY = 13;
 
 export class UI {
   private avatar: Avatar | undefined;
@@ -29,17 +30,21 @@ export class UI {
       } else if (key === 39) {
         avatar.runRight();
       } else if (key === 40) {
-        avatar.putDownMana();
+        avatar.pressDown();
       } else if (key === ESCAPE_KEY) {
         avatar.fallAsleep();
       } else if (key === SPACE_KEY) {
         if (avatar.hasHandledMana()) avatar.throwMana();
         else avatar.pickUpMana();
+      } else if (key === ENTER_KEY) {
+        avatar.throwStar();
       }
     } else if (key === 37 || key === 39) {
       avatar.stopRunning();
     } else if (key === 38) {
       avatar.releaseJump();
+    } else if (key === 40) {
+      avatar.releaseDown();
     }
   }
 

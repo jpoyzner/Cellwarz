@@ -10,6 +10,7 @@ interface Particle {
 }
 
 const MAX_PARTICLES = 200;
+const SPARK_COLORS = ['255, 230, 120', '255, 170, 50', '255, 100, 30'];
 
 /** Small canvas-drawn particle burst system — purely cosmetic, no gameplay effect. */
 export class ParticleSystem {
@@ -31,6 +32,26 @@ export class ParticleSystem {
       size: 3,
       color: '255, 120, 40',
     });
+  }
+
+  /** Embers shed by a flying, burning projectile: little drift of their own, so they hang where it passed and fade. */
+  spawnSparks(x: number, y: number, count = 2): void {
+    for (let i = 0; i < count && this.particles.length < MAX_PARTICLES; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 8 + Math.random() * 22;
+      const lifeMs = 350 + Math.random() * 350;
+
+      this.particles.push({
+        x: x + (Math.random() - 0.5) * 6,
+        y: y + (Math.random() - 0.5) * 6,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 10,
+        lifeMs,
+        maxLifeMs: lifeMs,
+        size: 1.5 + Math.random() * 1.5,
+        color: SPARK_COLORS[Math.floor(Math.random() * SPARK_COLORS.length)],
+      });
+    }
   }
 
   spawnWarp(x: number, y: number, count = 16): void {

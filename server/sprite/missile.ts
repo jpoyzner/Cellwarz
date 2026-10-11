@@ -1,4 +1,4 @@
-import type { CellData } from '../cellData';
+import { CellData } from '../cellData';
 import type { Cell } from '../cell/cell';
 import { EdgeOfCellDataException } from '../errors';
 import type { Frame } from '../frame';
@@ -6,7 +6,7 @@ import { Physics } from '../physics';
 import { detonate } from './blast';
 import { Explosion } from './explosion';
 import { Sprite } from './sprite';
-import { Avatar } from './avatar';
+import { Avatar, HIT_DAMAGE_PERCENT } from './avatar';
 import { Mana } from './mana';
 import { ShieldBubble } from './shieldBubble';
 import { addAction } from './frames';
@@ -16,8 +16,8 @@ const FLY_LEFT_ACTION = 'flyLeft';
 
 // Cells per frame²: how fast a launched rocket's flight bends downward (a straight missile has none).
 export const ROCKET_GRAVITY = 0.03;
-// A rocket that touches a player or anything solid blows up like a smaller red block: avatars inside the kill radius die, blocks inside
-// the shove radius fly (grid cells from the rocket).
+// A rocket that touches a player or anything solid blows up like a smaller red block: avatars inside the kill radius lose a fifth of
+// their health, blocks inside the shove radius fly (grid cells from the rocket).
 export const ROCKET_KILL_RADIUS = 10;
 export const ROCKET_SHOVE_RADIUS = 20;
 // A rocket that hasn't hit anything after this long (5 seconds) is spent.
@@ -83,7 +83,13 @@ export class Missile extends Sprite {
   }
 
   protected override doAction(): void {
-    this.vy += this.gravity;
+    const step = CellData.ANIMATION_STEP;
+    const pull = this.cell.getProjectilePlanetAcceleration(
+      (this.exactX + Missile.WIDTH / 2) * step,
+      (this.exactY + Missile.HEIGHT / 2) * step,
+    );
+    this.vx += pull.x;
+    this.vy += this.gravity + pull.y;
     this.exactX += this.vx;
     this.exactY += this.vy;
 
@@ -124,6 +130,7 @@ export class Missile extends Sprite {
     detonate(this.cell, this.cellData, this.getX() + Missile.WIDTH / 2, this.getY() + Missile.HEIGHT / 2, {
       killRadius: ROCKET_KILL_RADIUS,
       shoveRadius: ROCKET_SHOVE_RADIUS,
+      damage: HIT_DAMAGE_PERCENT,
       source: this,
     });
     this.removePermanently();

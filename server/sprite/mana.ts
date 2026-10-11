@@ -120,6 +120,22 @@ export abstract class Mana extends Sprite {
     this.onTouched();
   }
 
+  /** Called every frame a (non-robot) avatar stands directly on top of the block; `pressingDown` is true while it holds Down without carrying anything. */
+  standOn(pressingDown: boolean): void {
+    this.onStoodOn(pressingDown);
+  }
+
+  protected onStoodOn(_pressingDown: boolean): void {}
+
+  /** The avatar standing on this block just glided up a cell: an active yellow block rises with it. */
+  followRiderUp(): void {}
+
+  /** Overrides the block's (or its whole rigid group's) vertical speed, in cells per frame (+ down). */
+  protected setVerticalSpeed(vy: number): void {
+    this.body.vy = vy;
+    this.body.subY = 0;
+  }
+
   private stepMotion(): void {
     const body = this.body;
     const gravity = body.gravityDirection();
@@ -174,9 +190,17 @@ export abstract class Mana extends Sprite {
   }
 
   private moveAlongX(body: ManaBody, drive: number, grounded: boolean): void {
-    body.subX += body.vx;
-    const columns = Math.trunc(body.subX);
-    body.subX -= columns;
+    let columns: number;
+    if (drive !== 0 && grounded && Math.abs(drive) <= 1) {
+      // A driven block (ice) steps a whole cell on engine frames shared with avatars' run steps, instead of at a free-running
+      // fractional phase: out of phase, an avatar running against it (or riding it) would see its x alternate +1/-1 every frame.
+      columns = this.engine.actionMatchesFrequency(Math.round(1 / Math.abs(drive))) ? Math.sign(drive) : 0;
+      body.subX = 0;
+    } else {
+      body.subX += body.vx;
+      columns = Math.trunc(body.subX);
+      body.subX -= columns;
+    }
 
     for (let i = 0; i < Math.abs(columns); i++) {
       if (!this.physics.move(this, Math.sign(columns), Physics.NONE, 1)) {

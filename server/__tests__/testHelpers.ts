@@ -35,6 +35,7 @@ export function createTestCell(
     getCellData: () => cellData,
     getWorld: () => fakeWorld,
     getEngine: () => fakeEngine,
+    getProjectilePlanetAcceleration: () => ({ x: 0, y: 0 }),
   } as unknown as Cell;
 
   return { cell, cellData, physics, world: fakeWorld };

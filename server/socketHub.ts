@@ -1,5 +1,6 @@
 import type { RawData, WebSocket } from 'ws';
-import { Engine } from './engine';
+import type { Engine } from './engine';
+import type { Sprite } from './sprite/sprite';
 import { getSprites } from './jsonGenerator';
 import type { World } from './world';
 import { parseLook } from './look';
@@ -32,6 +33,8 @@ const PLANET_RESYNC_MS = 2000;
 // Sanity cap on one report; a client reports a few blocks at a time.
 const MAX_BLOCKS_PER_REPORT = 100;
 const TIMEOUT = 3000;
+// How often a connection checks whether the engine has stepped (frames go out within this of each step).
+const RENDER_POLL_MS = 4;
 
 export class SocketHub {
   private login: string | undefined;
@@ -39,6 +42,8 @@ export class SocketHub {
   private cell: Cell | undefined;
   private timer: ReturnType<typeof setInterval> | undefined;
   private inactivityCount = 0;
+  /** The engine step whose changes this connection has sent up to (so each step's redraws go out exactly once). */
+  private sentStep: { engine: Engine; step: number } | undefined;
   private diedNotified = false;
   private sentPlanetId: number | undefined;
   private sentPlanetAt = 0;
@@ -148,15 +153,30 @@ export class SocketHub {
       clearInterval(this.timer);
     }
 
+    // Polls often but only sends when the simulation has stepped: frames then go out right after each step instead of on a
+    // second 48 FPS timer drifting against the engine's (which made avatars on moving blocks advance at uneven intervals).
+    let renderedStep: number | undefined;
     this.timer = setInterval(() => {
       try {
+        const engine = (this.cell ?? this.world.getZion().getRandomEngine().getCell()).getEngine();
+        if (engine.getStepCount() === renderedStep) return;
+        renderedStep = engine.getStepCount();
         this.renderClient();
       } catch (e) {
         console.error(e);
         if (this.timer) clearInterval(this.timer);
         this.socket.close();
       }
-    }, 1000 / Engine.ENGINE_FRAMES_PER_SECOND);
+    }, RENDER_POLL_MS);
+  }
+
+  /** The sprites that changed in the engine's steps since this connection's last frame. */
+  private takeRedraws(cell: Cell): Sprite[] {
+    const engine = cell.getEngine();
+    const step = engine.getStepCount();
+    const since = this.sentStep?.engine === engine ? this.sentStep.step : step - 1;
+    this.sentStep = { engine, step };
+    return engine.getRedrawSpritesSince(since);
   }
 
   renderClient(): void {
@@ -197,7 +217,7 @@ export class SocketHub {
     // Redraw-only frames are the sprite map itself (flat, unwrapped) — matches the original terse wire protocol.
     const json: Record<string, unknown> = needsRefresh
       ? this.getCellState(cell)
-      : (getSprites(cell.getEngine().getRedrawSprites(), true) as Record<string, unknown>);
+      : (getSprites(this.takeRedraws(cell), true) as Record<string, unknown>);
 
     this.send(json);
 
@@ -214,7 +234,7 @@ export class SocketHub {
     if (!cell) return;
 
     this.sendPlanetIfDue(cell);
-    this.send(getSprites(cell.getEngine().getRedrawSprites(), true));
+    this.send(getSprites(this.takeRedraws(cell), true));
   }
 
   // Everyone's colours ride a one-shot message (not the flat redraw frames) and only when somebody's changed.

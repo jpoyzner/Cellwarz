@@ -10,8 +10,8 @@ const TAP_MAX_DURATION_MS = 300;
 const MOVEMENT_KEYS = [37, 38, 39];
 // Mirrors server/ui.ts: tells the server the player pressed Escape while alive.
 const ESCAPE_KEY = 27;
-// Space (pick up / throw) and Down (put down): each press is one action.
-const ONE_SHOT_KEYS = [32, 40];
+// Space (pick up / throw), Down (put down) and Enter (throw a ninja star): each press is one action.
+const ONE_SHOT_KEYS = [32, 40, 13];
 
 /**
  * Mirrors js/ui.js input handling (chat/typing removed); swipe/tap replaces the old jquery-mobile gestures.
@@ -47,7 +47,7 @@ export function attachInputHandlers(
     if (ARROW_KEYS.includes(event.keyCode)) {
       event.preventDefault();
     }
-    // Holding Space (pick up, then throw) or Down (put down) must not auto-repeat into a second action.
+    // Holding Space (pick up, then throw), Down (put down) or Enter (ninja star) must not auto-repeat into a second action.
     if (event.repeat && ONE_SHOT_KEYS.includes(event.keyCode)) return;
     sendKey(event.keyCode, true);
   };

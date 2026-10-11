@@ -18,6 +18,7 @@ declare global {
         avatars: Record<string, string>;
         looks: Record<string, [string, string]>;
         sleeping: Set<string>;
+        health: Map<string, number>;
         backgroundKind: 'space' | 'station' | 'temple' | undefined;
         score: number;
         diamonds: number;

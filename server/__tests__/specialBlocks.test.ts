@@ -12,7 +12,6 @@ import { Launcher, FUSE_FRAMES, KILL_RADIUS } from '../sprite/launcher';
 import { Missile, ROCKET_KILL_RADIUS } from '../sprite/missile';
 import { RainbowBlock, DIAMONDS_PER_BLOCK } from '../sprite/rainbowBlock';
 import { Robot } from '../sprite/robot';
-import { RocketLauncher } from '../sprite/rocketLauncher';
 import { Shield } from '../sprite/shield';
 import { ShieldBubble } from '../sprite/shieldBubble';
 import type { Sprite } from '../sprite/sprite';
@@ -34,7 +33,6 @@ function createScene(width = 160) {
   StickyBlock.init(cellData);
   RainbowBlock.init(cellData);
   Missile.init(cellData);
-  RocketLauncher.init(cellData);
   layFloor(cell, FLOOR_Y, 0, width);
   return { cell, physics };
 }
@@ -216,14 +214,15 @@ describe('green shield block', () => {
     expect(protectedAvatar.removed()).toBe(false);
   });
 
-  it('lets the same rocket kill the avatar without a shield', () => {
+  it('lets the same rocket hurt the avatar without a shield', () => {
     const { cell } = createScene();
     const victim = new Avatar('victim', 76, FLOOR_Y - Avatar.HEIGHT, false, cell);
     const rocket = new Missile(40, FLOOR_Y - 5, Physics.RIGHT, cell);
 
     for (let frame = 0; frame < 60; frame++) rocket['doAction']();
 
-    expect(victim.removed()).toBe(true);
+    expect(victim.removed()).toBe(false);
+    expect(victim.getHealth()).toBe(80);
   });
 });
 
@@ -625,7 +624,7 @@ describe('arcing rockets', () => {
     expect(victim.removed()).toBe(false);
   });
 
-  it('explode when they touch a player, and the blast (not the touch) is what kills', () => {
+  it('explode when they touch a player, and the blast (not the touch) takes a fifth of the health', () => {
     const { cell } = createScene();
     const victim = new Avatar('victim', 60, FLOOR_Y - Avatar.HEIGHT, false, cell);
     const rocket = new Missile(40, FLOOR_Y - 5, Physics.RIGHT, cell);
@@ -635,7 +634,8 @@ describe('arcing rockets', () => {
 
     expect(rocket.removed()).toBe(true);
     expect(spritesOf(cell, Explosion).filter((e) => !e.removed())).toHaveLength(1);
-    expect(victim.removed()).toBe(true);
+    expect(victim.removed()).toBe(false);
+    expect(victim.getHealth()).toBe(80);
   });
 
   it('blast other players near the one it hit, and shove nearby blocks, but not ones out of range', () => {
@@ -648,13 +648,13 @@ describe('arcing rockets', () => {
 
     for (let frame = 0; frame < 60 && !rocket.removed(); frame++) rocket['doAction']();
 
-    expect(hit.removed()).toBe(true);
-    expect(nearby.removed()).toBe(true);
-    expect(faraway.removed()).toBe(false);
+    expect(hit.getHealth()).toBe(80);
+    expect(nearby.getHealth()).toBe(80);
+    expect(faraway.getHealth()).toBe(100);
     expect(block['body'].vx !== 0 || block['body'].vy !== 0).toBe(true);
   });
 
-  it('explode against walls and blocks too, shoving and killing what is next to them', () => {
+  it('explode against walls and blocks too, shoving and hurting what is next to them', () => {
     const { cell } = createScene();
     layWall(cell, 50, FLOOR_Y - 30, FLOOR_Y);
     const nearWall = new Avatar('nearWall', 40, FLOOR_Y - Avatar.HEIGHT, false, cell);
@@ -664,7 +664,7 @@ describe('arcing rockets', () => {
 
     expect(rocket.removed()).toBe(true);
     expect(spritesOf(cell, Explosion).filter((e) => !e.removed())).toHaveLength(1);
-    expect(nearWall.removed()).toBe(true);
+    expect(nearWall.getHealth()).toBe(80);
   });
 
   it('explode against a block in their way', () => {
@@ -678,7 +678,7 @@ describe('arcing rockets', () => {
     expect(spritesOf(cell, Explosion).filter((e) => !e.removed())).toHaveLength(1);
   });
 
-  it('fly through robots without exploding, but a blast kills robots it reaches', () => {
+  it('fly through robots without exploding, but a blast hurts robots it reaches', () => {
     const { cell } = createScene();
     const robot = new Robot(70, FLOOR_Y - Avatar.HEIGHT, false, cell);
     const rocket = new Missile(40, FLOOR_Y - 5, Physics.RIGHT, cell);
@@ -692,7 +692,7 @@ describe('arcing rockets', () => {
     expect(rocket.removed()).toBe(true);
   });
 
-  it('kill a robot standing in the blast of a rocket that hit a player beside it', () => {
+  it('hurt a robot standing in the blast of a rocket that hit a player beside it', () => {
     const { cell } = createScene();
     new Avatar('hit', 60, FLOOR_Y - Avatar.HEIGHT, false, cell);
     const robot = new Robot(60 + Avatar.WIDTH + 1, FLOOR_Y - Avatar.HEIGHT, false, cell);
@@ -700,7 +700,7 @@ describe('arcing rockets', () => {
 
     for (let frame = 0; frame < 60 && !rocket.removed(); frame++) rocket['doAction']();
 
-    expect(robot.removed()).toBe(true);
+    expect(robot.getHealth()).toBe(80);
   });
 
   it('can be dry-run to check whether an arc reaches a target', () => {
@@ -719,7 +719,7 @@ describe('arcing rockets', () => {
   });
 });
 
-describe('robot rocket launcher', () => {
+describe('robot rockets', () => {
   function duel(distance: number) {
     const { cell } = createScene(200);
     const robot = new Robot(30, FLOOR_Y - Avatar.HEIGHT, false, cell);
@@ -727,50 +727,45 @@ describe('robot rocket launcher', () => {
     return { cell, robot, player };
   }
 
-  it('stops, pulls out a launcher, fires an arcing rocket at a player in range and puts the launcher away', () => {
+  it('stops to take aim, then fires an arcing rocket at a player in range', () => {
     const { cell, robot, player } = duel(45);
 
-    let sawLauncher = false;
     let sawRocket = false;
     let stoppedWhileAiming = false;
     for (let frame = 0; frame < 400 && !player.removed(); frame++) {
       const xBefore = robot.getX();
       stepAll(cell);
-      sawLauncher = sawLauncher || spritesOf(cell, RocketLauncher).some((l) => !l.removed());
       sawRocket = sawRocket || spritesOf(cell, Missile).length > 0;
-      if (sawLauncher && !sawRocket && robot.getX() === xBefore) stoppedWhileAiming = true;
+      if (robot['rocketPhase'] === 'aiming' && robot.getX() === xBefore) stoppedWhileAiming = true;
     }
 
-    expect(sawLauncher).toBe(true);
     expect(stoppedWhileAiming).toBe(true);
     expect(sawRocket).toBe(true);
     expect(player.removed()).toBe(true);
-
-    stepAll(cell, 120);
-    expect(spritesOf(cell, RocketLauncher).filter((l) => !l.removed())).toHaveLength(0);
   });
 
   it('holds still aiming for most of a second before the rocket leaves, and the rocket is not too fast', () => {
-    const { cell } = duel(45);
+    const { cell, robot } = duel(45);
 
-    let launcherFrame: number | undefined;
+    let aimFrame: number | undefined;
     let rocketFrame: number | undefined;
     let rocket: Missile | undefined;
     for (let frame = 0; frame < 200 && !rocketFrame; frame++) {
       stepAll(cell);
-      if (launcherFrame === undefined && spritesOf(cell, RocketLauncher).length > 0) launcherFrame = frame;
+      if (aimFrame === undefined && robot['rocketPhase'] === 'aiming') aimFrame = frame;
       rocket = spritesOf(cell, Missile)[0];
       if (rocket) rocketFrame = frame;
     }
 
-    expect(rocketFrame! - launcherFrame!).toBeGreaterThanOrEqual(Math.round(Engine.EVERY_SECOND * 0.8));
+    expect(rocketFrame! - aimFrame!).toBeGreaterThanOrEqual(Math.round(Engine.EVERY_SECOND * 0.8));
     expect(Math.abs(rocket!['vx'])).toBeLessThanOrEqual(0.7);
   });
 
-  it('resumes patrolling once the launcher is put away', () => {
+  it('resumes patrolling as soon as the rocket is away', () => {
     const { cell, robot } = duel(45);
 
-    for (let frame = 0; frame < 400; frame++) stepAll(cell);
+    for (let frame = 0; frame < 400 && spritesOf(cell, Missile).length === 0; frame++) stepAll(cell);
+    stepAll(cell, 2);
 
     expect(robot['rocketPhase']).toBe('idle');
     expect(robot['xPower']).not.toBe(Physics.NONE);
@@ -782,7 +777,6 @@ describe('robot rocket launcher', () => {
     for (let frame = 0; frame < 200; frame++) stepAll(cell);
 
     expect(spritesOf(cell, Missile)).toHaveLength(0);
-    expect(spritesOf(cell, RocketLauncher)).toHaveLength(0);
   });
 
   it('does not fire at a player too close for an arc', () => {
@@ -813,16 +807,5 @@ describe('robot rocket launcher', () => {
     for (let frame = 0; frame < 150; frame++) stepAll(cell);
 
     expect(spritesOf(cell, Missile)).toHaveLength(0);
-  });
-
-  it('puts its launcher away if it is destroyed', () => {
-    const { cell, robot } = duel(45);
-
-    for (let frame = 0; frame < 120 && !robot['launcher']; frame++) stepAll(cell);
-    const launcher = robot['launcher']!;
-    expect(launcher).toBeDefined();
-
-    robot.removePermanently();
-    expect(launcher.removed()).toBe(true);
   });
 });

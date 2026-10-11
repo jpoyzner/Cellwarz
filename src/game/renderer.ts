@@ -12,10 +12,12 @@ import { glowColorForPath, NeonSprites } from './neonSprites';
 import type { ActorTint, BakedSprite } from './neonSprites';
 import { ParticleSystem } from './particles';
 import { drawRocketLight, isRocketPath, rocketFacesLeft } from './rocketLight';
+import { drawStarFire, isStarPath } from './starFire';
 import { PlanetView } from './planet';
 import { PostFx } from './postFx';
 import { LocalPredictor } from './prediction';
 import { SleepFaces } from './sleepFace';
+import { damageStage, HEALTH_KEY } from './damage';
 import { SleepZs, SLEEPING_KEY, sleepLean } from './sleepZs';
 import { SpaceBackground } from './spaceBackground';
 import type { TouchRect } from './spaceBackground';
@@ -46,6 +48,9 @@ export interface RendererContext {
 interface SmoothedPosition {
   x: number;
   y: number;
+  // First smoothing stage; x/y above are the second stage, which is what gets drawn.
+  midX: number;
+  midY: number;
 }
 
 type VerticalState = 'up' | 'down' | 'idle';
@@ -62,19 +67,23 @@ const ARROW_RIGHT = 39;
 const ARROW_DOWN = 40;
 const SPECTATOR_CAMERA_SPEED_PX_PER_S = 450;
 
-// Exponential-decay smoothing time-constant applied to every sprite's rendered position: it turns raw,
-// jittery per-message snapshots into continuous motion between server frames without needing a timestamped
-// interpolation buffer. See src/game/prediction.ts for the local avatar's extra horizontal-prediction layer.
-const SMOOTHING_TAU_MS = 60;
+// Exponential-decay smoothing time-constant applied to every sprite's rendered position, in two cascaded stages: it turns
+// raw per-message snapshots (a steady glide arrives as 8px steps every ~42ms) into continuous motion between server frames
+// without needing a timestamped interpolation buffer. One stage left a visible speed ripple at the step rate; two of
+// them flatten it (about 80ms of lag in total). See src/game/prediction.ts for the local avatar's extra horizontal-prediction layer.
+const SMOOTHING_TAU_MS = 40;
 // A gap bigger than this (a wall, a push, a warp, a respawn) snaps the render position instead of sliding
-// across the screen.
-const RECONCILE_SNAP_THRESHOLD_PX = 32;
+// across the screen. It has to stay well above the steady lag of a fast sprite (~31px at 384px/s).
+const RECONCILE_SNAP_THRESHOLD_PX = 64;
 const WARP_DETECTION_THRESHOLD_PX = 64;
 const AVATAR_WIDTH_PX = 48;
 const AVATAR_HEIGHT_PX = 64;
 // Roughly how far the head of a sleeper slumped forward sits from the centre of its feet.
 const SLEEP_HEAD_SHIFT_PX = 8;
 const NAME_TAG_COLOR = '#00f6ff';
+// Half of a ninja star's 3-cell (24px) sprite.
+const STAR_CENTER_PX = 12;
+
 // Matches server/sprite/explosion.ts (28 grid cells of 8px); shake fades out over about two screen widths.
 const EXPLOSION_SIZE_PX = 224;
 const EXPLOSION_SHAKE_RANGE_PX = 1600;
@@ -124,6 +133,7 @@ export class Renderer {
   private imageKinds: ImageKind[] = [];
   private glowColors: (string | undefined)[] = [];
   private explosionImages = new Set<number>();
+  private starImages = new Set<number>();
   private diamondImages = new Set<number>();
   private scoreScrambleTimer: number | undefined;
   private readonly minimap: Minimap | undefined;
@@ -133,6 +143,8 @@ export class Renderer {
   private readonly shrinks = new Map<string, number>();
   /** Avatars whose player pressed Escape or lost their connection while alive: drawn asleep, with Zs above the head. */
   readonly sleeping = new Set<string>();
+  /** Avatars below full health, with their remaining health percent: drawn with wounds (see `damage.ts`). */
+  readonly health = new Map<string, number>();
   private readonly sleepZs = new SleepZs();
   private readonly sleepFaces = new SleepFaces();
   private readonly smoothed = new Map<string, SmoothedPosition>();
@@ -311,6 +323,7 @@ export class Renderer {
     this.explosionImages = new Set(
       this.imagePaths.flatMap((path, index) => (path.includes('/effects/explosion/') ? [index] : [])),
     );
+    this.starImages = new Set(this.imagePaths.flatMap((path, index) => (isStarPath(path) ? [index] : [])));
     this.diamondImages = new Set(
       this.imagePaths.flatMap((path, index) => (path.includes('/effects/diamond') ? [index] : [])),
     );
@@ -330,9 +343,11 @@ export class Renderer {
     this.sprites = data.sprites;
     this.shrinks.clear();
     this.sleeping.clear();
+    this.health.clear();
     for (const [spriteId, sprite] of Object.entries(data.sprites)) {
       const extraInfo = (sprite as IncomingSprite)[3] as Record<string, unknown> | undefined;
       if (extraInfo?.[SLEEPING_KEY]) this.sleeping.add(spriteId);
+      if (typeof extraInfo?.[HEALTH_KEY] === 'number') this.health.set(spriteId, extraInfo[HEALTH_KEY]);
     }
     // The server sends numeric sprite ids here but string ids (object keys) in redraw frames; normalize so the
     // strict === comparisons against sprite-map keys (local avatar, shard collection, minimap) always agree.
@@ -508,6 +523,7 @@ export class Renderer {
         delete this.sprites[spriteId];
         this.shrinks.delete(spriteId);
         this.sleeping.delete(spriteId);
+        this.health.delete(spriteId);
         this.smoothed.delete(spriteId);
         this.lastY.delete(spriteId);
         this.verticalState.delete(spriteId);
@@ -527,6 +543,11 @@ export class Renderer {
       if (extraInfo?.[SLEEPING_KEY]) this.sleeping.add(spriteId);
       else this.sleeping.delete(spriteId);
 
+      // Likewise, an avatar frame without the health key is back at full health.
+      const health = extraInfo?.[HEALTH_KEY];
+      if (typeof health === 'number') this.health.set(spriteId, health);
+      else this.health.delete(spriteId);
+
       if (extraInfo) {
         const shrink = extraInfo['2'] as number | undefined;
         if (shrink !== undefined) this.shrinks.set(spriteId, shrink);
@@ -538,8 +559,11 @@ export class Renderer {
 
       }
 
+      // A burning star sheds embers every update, so they hang along the whole arc it flew.
+      if (this.starImages.has(imageIndex)) this.particles.spawnSparks(x + STAR_CENTER_PX, y + STAR_CENTER_PX);
+
       if (previousX === undefined && this.explosionImages.has(imageIndex)) {
-        this.onExplosion(x, y);
+        this.onExplosion(x, y, this.imagePaths[imageIndex]?.includes('/explosion/small') ? EXPLOSION_SIZE_PX / 2 : EXPLOSION_SIZE_PX);
       }
     }
 
@@ -547,14 +571,16 @@ export class Renderer {
   }
 
   /** A block blew up: a bang, a burst of sparks and a little shake, all stronger the closer it is to the camera. */
-  private onExplosion(x: number, y: number): void {
-    const centerX = x + EXPLOSION_SIZE_PX / 2;
-    const centerY = y + EXPLOSION_SIZE_PX / 2;
+  /** A ninja star's smaller fireball (its art is smaller) gets a proportionally smaller burst and shake. */
+  private onExplosion(x: number, y: number, sizePx: number): void {
+    const centerX = x + sizePx / 2;
+    const centerY = y + sizePx / 2;
+    const scale = sizePx / EXPLOSION_SIZE_PX;
     this.audio.play('missileImpact');
-    this.particles.spawnImpact(centerX, centerY, 24);
+    this.particles.spawnImpact(centerX, centerY, Math.round(24 * scale));
 
     const distance = this.me ? Math.hypot(centerX - this.me[1], centerY - this.me[2]) : Infinity;
-    if (distance < EXPLOSION_SHAKE_RANGE_PX) this.triggerShake(300, 8 * (1 - distance / EXPLOSION_SHAKE_RANGE_PX));
+    if (distance < EXPLOSION_SHAKE_RANGE_PX) this.triggerShake(300, 8 * scale * (1 - distance / EXPLOSION_SHAKE_RANGE_PX));
   }
 
   /** A diamond vanished right next to the local avatar: that's it being collected, so send it flying to the HUD. */
@@ -655,7 +681,7 @@ export class Renderer {
 
       const current = this.smoothed.get(spriteId);
       if (!current) {
-        this.smoothed.set(spriteId, { x: targetX, y: targetY });
+        this.smoothed.set(spriteId, { x: targetX, y: targetY, midX: targetX, midY: targetY });
         continue;
       }
 
@@ -663,11 +689,13 @@ export class Renderer {
       const dy = targetY - current.y;
 
       if (Math.abs(dx) > RECONCILE_SNAP_THRESHOLD_PX || Math.abs(dy) > RECONCILE_SNAP_THRESHOLD_PX) {
-        current.x = targetX;
-        current.y = targetY;
+        current.x = current.midX = targetX;
+        current.y = current.midY = targetY;
       } else {
-        current.x += dx * factor;
-        current.y += dy * factor;
+        current.midX += (targetX - current.midX) * factor;
+        current.midY += (targetY - current.midY) * factor;
+        current.x += (current.midX - current.x) * factor;
+        current.y += (current.midY - current.y) * factor;
       }
     }
 
@@ -898,7 +926,7 @@ export class Renderer {
       } else if (kind === 'actor') {
         const tint: ActorTint =
           spriteId === this.localSpriteId ? 'local' : playerSpriteIds.has(spriteId) ? 'player' : 'robot';
-        baked = this.neon.actor(index, image, tint, looksBySprite.get(spriteId));
+        baked = this.neon.actor(index, image, tint, looksBySprite.get(spriteId), damageStage(this.health.get(spriteId) ?? 100));
       }
 
       if (baked) {
@@ -917,6 +945,8 @@ export class Renderer {
       if (path && isRocketPath(path)) {
         drawRocketLight(ctx, x, y, image.width, image.height, rocketFacesLeft(path), performance.now());
       }
+
+      if (this.starImages.has(index)) drawStarFire(ctx, x, y, image.width, image.height, performance.now(), Number(spriteId) || 0);
 
       if (asleep) {
         this.sleepFaces.drawClosedEyes(ctx, image, x, y);

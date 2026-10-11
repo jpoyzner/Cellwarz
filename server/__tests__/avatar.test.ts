@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Avatar, FULL_JUMP_ACTION_LENGTH } from '../sprite/avatar';
+import { Avatar, FULL_JUMP_ACTION_LENGTH, HIT_DAMAGE_PERCENT } from '../sprite/avatar';
 import { CellBlock } from '../sprite/cellBlock';
 import { Ice } from '../sprite/ice';
 import { Physics } from '../physics';
@@ -204,6 +204,27 @@ describe('Avatar', () => {
 
     expect(avatar.removed()).toBe(true);
     expect(avatar.getX()).toBeGreaterThan(xBefore);
+  });
+
+  it('loses a fifth of its health per hit and dies on the fifth, with a little knockback on the way', () => {
+    const { cell } = createTestScene(50, 50);
+    const avatar = new Avatar('target', 20, 20, false, cell);
+    expect(avatar.getHealth()).toBe(100);
+
+    avatar.takeDamage(HIT_DAMAGE_PERCENT, Physics.RIGHT, Physics.NONE);
+    expect(avatar.getHealth()).toBe(80);
+    expect(avatar.getX()).toBeGreaterThan(20);
+    expect(avatar.needsRedraw()).toBe(true);
+
+    for (const left of [60, 40, 20]) {
+      avatar.takeDamage(HIT_DAMAGE_PERCENT);
+      expect(avatar.getHealth()).toBe(left);
+      expect(avatar.removed()).toBe(false);
+    }
+
+    avatar.takeDamage(HIT_DAMAGE_PERCENT);
+    expect(avatar.getHealth()).toBe(0);
+    expect(avatar.removed()).toBe(true);
   });
 
   it('cuts the jump short when the jump key is released after a real pause (variable jump height)', () => {

@@ -209,7 +209,8 @@ export function LoginScreen({ onEnter }: LoginScreenProps) {
             <p>Beware the ninja robots: they reprogram you on contact and fire rockets from afar.</p>
             <p>
               Up: jump &middot; Left/Right: run &middot; Down: put down the block &middot; Space: pick up the block
-              under you, again to throw &middot; Escape: leave the grid (your avatar sleeps; WAKE UP returns to it)
+              under you, again to throw &middot; Enter: throw a ninja star (5 hits of rockets or
+              stars to kill) &middot; Escape: leave the grid (your avatar sleeps; WAKE UP returns to it)
             </p>
           </div>
 

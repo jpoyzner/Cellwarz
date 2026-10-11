@@ -1,6 +1,7 @@
 // Cyberpunk re-skins applied to sprite art at load time (no new art assets): dark steel wall tiles with neon
 // trim, a glowing colored headband on every actor, and per-path neon glow colors for portals/pickups/projectiles.
 
+import { MAX_DAMAGE_STAGE } from './damage';
 import { hexToRgb } from './look';
 import type { Look } from './look';
 
@@ -66,6 +67,44 @@ export function recolorActorParts(
   }
 }
 
+// Share of the art's body pixels turned into wounds at each stage.
+const WOUND_SHARE = [0, 0.05, 0.1, 0.17, 0.26] as const;
+const WOUND_COLORS = [
+  [255, 110, 20],
+  [255, 190, 60],
+] as const;
+const EYE_MIN_CHANNEL = 200;
+
+/** A stable pseudo-random number in [0, 1) per pixel, so a wound never flickers between frames. */
+function pixelNoise(x: number, y: number): number {
+  let h = (Math.imul(x + 1, 374761393) + Math.imul(y + 1, 668265263)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+/** Scorches burning-orange wounds into the art in place, more of them the more hurt (stage 0 changes nothing). Eyes and the red headband/belt are left alone. */
+export function applyDamage(pixels: PixelBuffer, stage: number): void {
+  const share = WOUND_SHARE[Math.max(0, Math.min(MAX_DAMAGE_STAGE, stage))];
+  if (share === 0) return;
+
+  const { data, width } = pixels;
+  for (let i = 0; i < data.length; i += 4) {
+    const [r, g, b, a] = [data[i], data[i + 1], data[i + 2], data[i + 3]];
+    if (a === 0 || isHeadband(r, g, b, a) || (r > EYE_MIN_CHANNEL && g > EYE_MIN_CHANNEL && b > EYE_MIN_CHANNEL)) continue;
+
+    const pixel = i / 4;
+    const x = pixel % width;
+    const y = Math.floor(pixel / width);
+    const roll = pixelNoise(x, y);
+    if (roll < share) {
+      const color = WOUND_COLORS[(x + y) % 2];
+      data[i] = color[0];
+      data[i + 1] = color[1];
+      data[i + 2] = color[2];
+    }
+  }
+}
+
 /** Turns a block tile into dark steel: luminance-preserving navy, a dim neon rim, and four corner rivets. */
 export function steelify(pixels: PixelBuffer): void {
   const { data, width, height } = pixels;
@@ -113,6 +152,7 @@ export function glowColorForPath(path: string): string | undefined {
   if (path.includes('/effects/bubble')) return '#3cff7a';
   if (path.includes('/effects/diamond')) return '#3aa8ff';
   if (path.includes('/effects/explosion/')) return '#ff7a29';
+  if (path.includes('/projectiles/star')) return '#ff8a1f';
   if (path.includes('/projectiles/')) return '#ff7a29';
   return undefined;
 }
@@ -135,10 +175,10 @@ export class NeonSprites {
     return this.bake('wall', index, image, () => this.bakeWall(image));
   }
 
-  /** A player's own colours (when they picked some) replace the tint; robots never get one. */
-  actor(index: number, image: HTMLImageElement, tint: ActorTint, look?: Look): BakedSprite | undefined {
-    const table = look ? `look:${look.headband}:${look.belt}` : tint;
-    return this.bake(table, index, image, () => this.bakeActor(image, tint, look));
+  /** A player's own colours (when they picked some) replace the tint; robots never get one. `damage` is 0 (unhurt) to 4. */
+  actor(index: number, image: HTMLImageElement, tint: ActorTint, look?: Look, damage = 0): BakedSprite | undefined {
+    const table = (look ? `look:${look.headband}:${look.belt}` : tint) + (damage > 0 ? `:hurt${damage}` : '');
+    return this.bake(table, index, image, () => this.bakeActor(image, tint, look, damage));
   }
 
   // Called for every wall tile every frame, so lookups must not allocate.
@@ -183,7 +223,7 @@ export class NeonSprites {
     return { source: read.ctx.canvas, pad: 0 };
   }
 
-  private bakeActor(image: HTMLImageElement, tint: ActorTint, look?: Look): BakedSprite | undefined {
+  private bakeActor(image: HTMLImageElement, tint: ActorTint, look?: Look, damage = 0): BakedSprite | undefined {
     const { rgb, glow } = ACTOR_COLORS[tint];
     const headband = look ? hexToRgb(look.headband) : rgb;
     const belt = look ? hexToRgb(look.belt) : rgb;
@@ -193,6 +233,7 @@ export class NeonSprites {
     const body = this.readPixels(image);
     if (!body) return undefined;
 
+    applyDamage(body.pixels, damage);
     recolorActorParts(body.pixels, headband, belt);
     body.ctx.putImageData(body.pixels, 0, 0);
 

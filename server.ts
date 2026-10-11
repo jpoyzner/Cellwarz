@@ -9,9 +9,10 @@ import { SocketHub } from './server/socketHub';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
-app.use(express.static(path.join(__dirname, 'dist')));
+// Art and videos come straight from public/ so a stale copy inside the built dist/ (the client build copies public/ into it) can't shadow edits.
 app.use('/images', express.static(path.join(__dirname, 'public/images')));
 app.use('/videos', express.static(path.join(__dirname, 'public/videos')));
+app.use(express.static(path.join(__dirname, 'dist')));
 
 const server = http.createServer(app);
 const world = new World();

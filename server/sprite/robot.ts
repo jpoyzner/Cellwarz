@@ -4,7 +4,6 @@ import { EdgeOfCellDataException } from '../errors';
 import { Physics } from '../physics';
 import { Missile, ROCKET_GRAVITY } from './missile';
 import type { MissileLaunch } from './missile';
-import { RocketLauncher } from './rocketLauncher';
 import { Avatar, FLOAT_LEFT_ACTION, FLOAT_RIGHT_ACTION, JUMP_LEFT_ACTION, JUMP_RIGHT_ACTION, LAND_LEFT_ACTION, LAND_RIGHT_ACTION, RUN_LEFT_ACTION, RUN_RIGHT_ACTION, STAND_LEFT_ACTION, STAND_RIGHT_ACTION, START_FLOAT_INTERVAL, START_LAND_INTERVAL } from './avatar';
 
 let count = 0;
@@ -14,19 +13,21 @@ const JUMP_DISTANCE = 1;
 // A robot that hits an obstacle stands still for a second before it turns around and patrols back.
 const TURN_AROUND_PAUSE_FRAMES = Engine.EVERY_SECOND;
 
-// A robot that sees a real player in rocket range stops, pulls out a rocket launcher, fires an arcing rocket and
-// puts the launcher away again. Distances are grid cells, speeds cells per frame.
+// A robot that sees a real player in rocket range stops, takes aim for a moment and fires an arcing rocket.
+// Distances are grid cells, speeds cells per frame.
 const ROCKET_MIN_RANGE = 24;
 const ROCKET_MAX_RANGE = 70;
 const ROCKET_MAX_HEIGHT_DIFFERENCE = 30;
 const ROCKET_SPEED_X = 0.7;
 const ROCKET_MAX_LAUNCH_SPEED_Y = 2.2;
-const DRAW_LAUNCHER_FRAMES = Math.round(Engine.EVERY_SECOND * 0.9);
-const PUT_AWAY_LAUNCHER_FRAMES = Math.round(Engine.EVERY_SECOND * 0.75);
+const AIM_FRAMES = Math.round(Engine.EVERY_SECOND * 0.9);
+// Where a rocket starts, relative to the robot: just past its side, and a little below its top.
+const MUZZLE_REACH = 5;
+const MUZZLE_DROP = 2;
 const ROCKET_COOLDOWN_FRAMES = Engine.EVERY_SECOND * 4;
 const MISSED_TARGET_COOLDOWN_FRAMES = Engine.EVERY_SECOND;
 
-type RocketPhase = 'idle' | 'drawing' | 'putting-away';
+type RocketPhase = 'idle' | 'aiming';
 
 interface RocketShot {
   facingRight: boolean;
@@ -41,7 +42,6 @@ export class Robot extends Avatar {
   private rocketPhase: RocketPhase = 'idle';
   private rocketPhaseFrames = 0;
   private rocketCooldownFrames = 0;
-  private launcher: RocketLauncher | undefined;
 
   constructor(x: number, y: number, cellInit: boolean, cell: Cell) {
     super(`Cyborg${++count}`, x, y, cellInit, cell);
@@ -82,7 +82,7 @@ export class Robot extends Avatar {
     if (this.rocketCooldownFrames > 0) this.rocketCooldownFrames--;
 
     if (this.updateRocketAttack()) {
-      // Busy with the launcher: stand still until it is put away.
+      // Taking aim: stand still until the rocket is away.
     } else if (this.turnAroundPauseFrames > 0) {
       this.turnAroundPauseFrames--;
       if (this.turnAroundPauseFrames === 0) this.turnAround();
@@ -100,55 +100,42 @@ export class Robot extends Avatar {
     this.killTouchedPlayers();
   }
 
-  /** Runs the pull-out / fire / put-away sequence; returns true while the robot is tied up with it. */
+  /** Runs the aim-then-fire sequence; returns true while the robot is tied up with it. */
   private updateRocketAttack(): boolean {
     if (this.rocketPhase === 'idle') {
       if (this.rocketCooldownFrames === 0 && this.turnAroundPauseFrames === 0 && this.engine.actionMatchesFrequency(Engine.EIGHTH_STEP)) {
         const shot = this.findShot();
-        if (shot) this.drawLauncher(shot);
+        if (shot) this.startAiming(shot);
       }
 
       return this.rocketPhase !== 'idle';
     }
 
-    this.launcher?.follow(this.facingRight);
     this.rocketPhaseFrames--;
+    if (this.rocketPhaseFrames > 0) return true;
 
-    if (this.rocketPhaseFrames <= 0) {
-      if (this.rocketPhase === 'drawing') this.fire();
-      else this.putAwayLauncher();
-    }
-
-    return true;
+    this.fire();
+    return false;
   }
 
-  private drawLauncher(shot: RocketShot): void {
+  private startAiming(shot: RocketShot): void {
     this.xPower = Physics.NONE;
     this.slidePower = Physics.NONE;
     this.facingRight = shot.facingRight;
-    this.launcher = new RocketLauncher(this, this.facingRight, this.cell);
-    this.rocketPhase = 'drawing';
-    this.rocketPhaseFrames = DRAW_LAUNCHER_FRAMES;
+    this.rocketPhase = 'aiming';
+    this.rocketPhaseFrames = AIM_FRAMES;
   }
 
-  /** Fires at wherever the target is by now, or just puts the launcher away if nobody is in range any more. */
+  /** Fires at wherever the target is by now (or just gives up if nobody is in range any more), then resumes patrolling. */
   private fire(): void {
     const shot = this.findShot();
 
     if (shot) {
       this.facingRight = shot.facingRight;
-      this.launcher?.follow(this.facingRight);
       new Missile(shot.muzzleX, shot.muzzleY, shot.facingRight ? Physics.RIGHT : Physics.LEFT, this.cell, shot.launch);
     }
 
     this.rocketCooldownFrames = shot ? ROCKET_COOLDOWN_FRAMES : MISSED_TARGET_COOLDOWN_FRAMES;
-    this.rocketPhase = 'putting-away';
-    this.rocketPhaseFrames = PUT_AWAY_LAUNCHER_FRAMES;
-  }
-
-  private putAwayLauncher(): void {
-    this.launcher?.removePermanently();
-    this.launcher = undefined;
     this.rocketPhase = 'idle';
 
     if (this.facingRight) this.runRight();
@@ -174,7 +161,8 @@ export class Robot extends Avatar {
     const targetX = target.getX() + target.getWidth() / 2;
     const targetY = target.getY() + target.getHeight() / 2;
     const facingRight = targetX > this.getX() + this.getWidth() / 2;
-    const [muzzleX, muzzleY] = RocketLauncher.muzzleFor(this, facingRight);
+    const muzzleX = facingRight ? this.getX() + this.getWidth() + MUZZLE_REACH : this.getX() - MUZZLE_REACH - 2;
+    const muzzleY = this.getY() + MUZZLE_DROP;
 
     const dx = targetX - muzzleX;
     const dy = targetY - muzzleY;
@@ -196,12 +184,6 @@ export class Robot extends Avatar {
     });
 
     return reaches ? { facingRight, launch, muzzleX, muzzleY } : undefined;
-  }
-
-  override removePermanently(): void {
-    super.removePermanently();
-    this.launcher?.removePermanently();
-    this.launcher = undefined;
   }
 
   override isRobot(): boolean {

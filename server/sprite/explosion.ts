@@ -7,10 +7,13 @@ import { addAction } from './frames';
 
 const FRAME_COUNT = 6;
 const FRAMES_PER_IMAGE = 3;
+const SMALL_ACTION = 'small';
 
 /** A short purely visual fireball (the kill and the shove are done by whatever spawned it). */
 export class Explosion extends Sprite {
   static readonly SIZE = 28;
+  /** The half-size fireball of a ninja star. */
+  static readonly SMALL_SIZE = 14;
 
   private static readonly actionFrames = new Map<string, Frame[]>();
 
@@ -18,6 +21,7 @@ export class Explosion extends Sprite {
 
   static init(cellData: CellData): void {
     addAction(cellData, DEFAULT_ACTION, 'effects/explosion/explosion', FRAME_COUNT, false, Explosion.actionFrames);
+    addAction(cellData, SMALL_ACTION, 'effects/explosion/small', FRAME_COUNT, false, Explosion.actionFrames);
   }
 
   constructor(x: number, y: number, cell: Cell) {
@@ -62,5 +66,20 @@ export class Explosion extends Sprite {
 
     this.setFrame(Math.floor(this.age / FRAMES_PER_IMAGE));
     this.needsRedraw(true);
+  }
+}
+
+/** The ninja star's blast: the same fireball at half the size (its own art, so the client needs no scaling). */
+export class SmallExplosion extends Explosion {
+  override getWidth(): number {
+    return Explosion.SMALL_SIZE;
+  }
+
+  override getHeight(): number {
+    return Explosion.SMALL_SIZE;
+  }
+
+  protected override getDefaultAction(): string {
+    return SMALL_ACTION;
   }
 }

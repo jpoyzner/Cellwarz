@@ -13,10 +13,10 @@ import { Ice } from '../sprite/ice';
 import { Launcher } from '../sprite/launcher';
 import { Mana } from '../sprite/mana';
 import { Missile } from '../sprite/missile';
+import { NinjaStar } from '../sprite/ninjaStar';
 import { Portal } from '../sprite/portal';
 import { RainbowBlock } from '../sprite/rainbowBlock';
 import { Robot } from '../sprite/robot';
-import { RocketLauncher } from '../sprite/rocketLauncher';
 import { Shield } from '../sprite/shield';
 import { SpawnPortal } from '../sprite/spawnPortal';
 import { StickyBlock } from '../sprite/stickyBlock';
@@ -88,7 +88,7 @@ export abstract class Cell {
     StickyBlock.init(this.data);
     RainbowBlock.init(this.data);
     Missile.init(this.data);
-    RocketLauncher.init(this.data);
+    NinjaStar.init(this.data);
   }
 
   init(): Cell {
@@ -299,6 +299,11 @@ export abstract class Cell {
   /** The room's current background planet (if it has any), for clients to draw and to gravitate sprites. */
   getPlanet(): PlanetState | undefined {
     return this.planets?.getState();
+  }
+
+  /** The planet's pull on a flying projectile centred at these world pixels, as a velocity change (cells per frame²). */
+  getProjectilePlanetAcceleration(centerXPx: number, centerYPx: number): { x: number; y: number } {
+    return this.planets?.projectileAcceleration(centerXPx, centerYPx) ?? { x: 0, y: 0 };
   }
 
   getWorld(): World {

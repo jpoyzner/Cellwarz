@@ -7,6 +7,7 @@ import type { Session } from '../session';
 import type { CellData } from '../cellData';
 import { Sprite } from './sprite';
 import { Mana } from './mana';
+import { NinjaStar } from './ninjaStar';
 import { Portal } from './portal';
 import { getAdjacentSprites } from './adjacent';
 import { addAction, addClippedAction } from './frames';
@@ -25,6 +26,13 @@ export const LAND_LEFT_ACTION = 'land_left';
 const RUN_STEP_DISTANCE = 1;
 const JUMP_DISTANCE = 1;
 const DEATH_KNOCKBACK_DISTANCE = 3;
+const HIT_KNOCKBACK_DISTANCE = 2;
+export const MAX_HEALTH = 100;
+// What one rocket or ninja star blast takes off, so five of them are needed to kill an avatar (a red block still kills at once).
+export const HIT_DAMAGE_PERCENT = 20;
+// Ninja stars: a short pause between throws, and a cap on how many one avatar can have in flight.
+const STAR_COOLDOWN_FRAMES = 20;
+const MAX_STARS_IN_FLIGHT = 3;
 // A thrown block's launch velocity (cells per frame): forward and up, so it flies in a short arc.
 const THROW_SPEED_X = 0.8;
 const THROW_SPEED_Y = -1.5;
@@ -67,6 +75,10 @@ export class Avatar extends Sprite {
   private handledMana: Mana | undefined;
   private sleeping = false;
   private liftedFrames = 0;
+  private pressingDown = false;
+  private health = MAX_HEALTH;
+  private starCooldownFrames = 0;
+  private readonly stars = new Set<NinjaStar>();
 
   protected facingRight = true;
   protected yPower = Physics.NONE;
@@ -115,6 +127,7 @@ export class Avatar extends Sprite {
   protected override doAction(): void {
     const lifted = this.liftedFrames > 0;
     if (lifted) this.liftedFrames--;
+    if (this.starCooldownFrames > 0) this.starCooldownFrames--;
 
     if (this.yPower === Physics.NONE) {
       const grounded = this.physics.touchSprite(this, Physics.NONE, Physics.DOWN, false);
@@ -143,7 +156,7 @@ export class Avatar extends Sprite {
       }
 
       if (lifted) {
-        if (this.engine.actionMatchesFrequency(LIFTED_RISE_FRAMES)) this.moveCarrying(Physics.NONE, Physics.UP, 1);
+        if (this.engine.actionMatchesFrequency(LIFTED_RISE_FRAMES)) this.riseOneCell();
       } else {
         this.physics.gravitate(this);
       }
@@ -185,6 +198,7 @@ export class Avatar extends Sprite {
     }
 
     this.touchAdjacentMana();
+    this.standOnMana();
     this.recordPosition();
 
     if (this.firstDraw !== 0) {
@@ -229,6 +243,26 @@ export class Avatar extends Sprite {
   private touchAdjacentMana(): void {
     for (const sprite of getAdjacentSprites(this)) {
       if (sprite instanceof Mana && !sprite.removed()) sprite.touch();
+    }
+  }
+
+  /** One cell of a lifted glide; a block standing under the feet (the yellow one) follows, so it carries the avatar up like an elevator. */
+  private riseOneCell(): void {
+    const under = [...this.physics.getSpritesUnder(this, Physics.NONE, 0)];
+    if (!this.moveCarrying(Physics.NONE, Physics.UP, 1)) return;
+
+    for (const sprite of under) {
+      if (sprite instanceof Mana && !sprite.removed()) sprite.followRiderUp();
+    }
+  }
+
+  /** Blocks directly under the feet get told so (the yellow one switches on, and lowers while Down is held). Robots don't. */
+  private standOnMana(): void {
+    if (this.isRobot()) return;
+
+    const pressingDown = this.pressingDown && !this.handledMana;
+    for (const sprite of this.physics.getSpritesUnder(this, Physics.NONE, 0)) {
+      if (sprite instanceof Mana && !sprite.removed()) sprite.standOn(pressingDown);
     }
   }
 
@@ -323,6 +357,7 @@ export class Avatar extends Sprite {
     this.sleeping = true;
     this.xPower = Physics.NONE; // no slide either: a sleeper just stands (or finishes falling) where it is.
     this.slidePower = Physics.NONE;
+    this.pressingDown = false;
     this.setFrame(0); // frozen on the first frame of whatever it is doing (a stand, once it is on the ground).
     this.needsRedraw(true); // so clients hear about it even if nothing else changes this frame.
   }
@@ -334,6 +369,38 @@ export class Avatar extends Sprite {
 
   showName(): boolean {
     return this.firstDraw > 0;
+  }
+
+  /** Remaining health in percent (100 = unhurt); at 0 the avatar is dead. */
+  getHealth(): number {
+    return this.health;
+  }
+
+  /** Loses `percent` of the full health, knocked back a little; the hit that takes the last of it is a death. */
+  takeDamage(percent: number, knockbackXDirection: number = Physics.NONE, knockbackYDirection: number = Physics.NONE): void {
+    this.health = Math.max(0, this.health - percent);
+    if (this.health === 0) {
+      this.die(knockbackXDirection, knockbackYDirection);
+      return;
+    }
+
+    if (knockbackXDirection !== Physics.NONE || knockbackYDirection !== Physics.NONE) {
+      this.physics.move(this, knockbackXDirection, knockbackYDirection, HIT_KNOCKBACK_DISTANCE, false);
+    }
+    this.needsRedraw(true); // so clients hear about the new health even if nothing else changes this frame.
+  }
+
+  /** Throws a ninja star straight ahead from the chest; rate-limited (a short cooldown, and a few at a time). */
+  throwStar(): void {
+    for (const star of this.stars) if (star.removed()) this.stars.delete(star);
+    if (this.starCooldownFrames > 0 || this.stars.size >= MAX_STARS_IN_FLIGHT) return;
+
+    const direction = this.facingRight ? Physics.RIGHT : Physics.LEFT;
+    const x = this.facingRight ? this.getX() + this.getWidth() : this.getX() - NinjaStar.SIZE;
+    const y = this.getY() + Math.floor((this.getHeight() - NinjaStar.SIZE) / 2);
+
+    this.stars.add(new NinjaStar(x, y, direction, this, this.cell));
+    this.starCooldownFrames = STAR_COOLDOWN_FRAMES;
   }
 
   /** Optional knockback direction gives death a little physicality instead of an instant, silent vanish. */
@@ -438,6 +505,16 @@ export class Avatar extends Sprite {
     }
 
     return true;
+  }
+
+  /** Down: puts a carried block down, otherwise (while it stays held) lowers a yellow block this avatar stands on. */
+  pressDown(): void {
+    if (this.handledMana) this.putDownMana();
+    else this.pressingDown = true;
+  }
+
+  releaseDown(): void {
+    this.pressingDown = false;
   }
 
   /** Puts the carried block back down under this avatar's feet. */

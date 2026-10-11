@@ -20,7 +20,7 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   sim speed stays correct even if Node's timer drifts or briefly coalesces. `Session` maps a login to the
   player's current `Avatar`.
 - **Realtime transport**: a single `ws` `WebSocketServer` mounted at `/socketrefresh` in [server.ts](server.ts).
-  Each connection gets its own [SocketHub](server/socketHub.ts), which runs its own 48 FPS render loop and speaks
+  Each connection gets its own [SocketHub](server/socketHub.ts), which polls every few ms and sends one frame right after each engine step (`Engine.getStepCount()`; the frame holds every sprite redrawn since its last one via `Engine.getRedrawSpritesSince` — a free-running second 48 FPS timer used to drift against the engine's, so frames went out unevenly and could skip a step's changes) and speaks
   a small JSON protocol (`connect` / key-down-up) via [jsonGenerator.ts](server/jsonGenerator.ts).
 - **Physics/world model**: [CellData](server/cellData.ts) stores sprites in a 2D grid of `Set<Sprite>`
   (`ANIMATION_STEP = 8` px per grid unit). [Physics](server/physics.ts) implements move/push/collision on that
@@ -84,9 +84,9 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   — a lifted avatar rises one cell per 3 frames instead of falling, so a carrier glides upward; a lifted block feels a faint
   upward pull; both lapse 3 frames after the touch ends). Hitting the underside of a `CellBlock` wall (or the room edge)
   while rising and *not* carried (`onImpact(wasThrown, direction)` — the new `direction` is the vertical hit direction)
-  switches the reversal off and marks it `spent`, so only being picked up re-arms it (not an avatar standing beside it), red [Launcher](server/sprite/launcher.ts) (5s fuse then explosion: kill radius
+  switches the reversal off and marks it `spent`, so only being picked up re-arms it (not an avatar standing beside it) — or standing *on* it: `Avatar.standOnMana()` calls `Mana.standOn()` → `Thruster.onStoodOn()`, which re-arms it, and the avatar's lift glide (`Avatar.riseOneCell()`) drags it up via `followRiderUp()` so it works as an elevator; holding Down (`Avatar.pressDown()`/`releaseDown()`, wired in `server/ui.ts`; ignored while carrying, where Down puts the block down) sets `loweringFrames` so it stops lifting and is lowered, red [Launcher](server/sprite/launcher.ts) (5s fuse then explosion: kill radius
   28 with a line-of-sight check to head/middle/feet, shove radius 30), blue [Ice](server/sprite/ice.ts) (constant
-  slide drive, reverses when blocked so it never stops), green [Shield](server/sprite/shield.ts) (+ [ShieldBubble](server/sprite/shieldBubble.ts)),
+  slide drive, reverses when blocked so it never stops; a driven block with |drive| ≤ 1 steps whole cells on engine frames shared with avatars' run steps, not a free-running fractional phase, so riders/runners don't wobble ±1 cell every frame), green [Shield](server/sprite/shield.ts) (+ [ShieldBubble](server/sprite/shieldBubble.ts)),
   purple [GravityBlock](server/sprite/gravityBlock.ts) (impulses toward itself; `MainRoom` places none for now), orange
   [StickyBlock](server/sprite/stickyBlock.ts) (repels other orange blocks within 24 cells with a fading `applyImpulse` so they spread out, skipping glued group mates; merges `ManaBody`s with adjacent blocks; a stuck block can be carried — `Mana.detachForCarrying()` frees just it, or everything if it is the orange one), rainbow
   [RainbowBlock](server/sprite/rainbowBlock.ts) (right-hand wall-following crawl that wraps corners and falls under gravity when nothing touches it, shatters into [Diamond](server/sprite/diamond.ts)s
@@ -94,7 +94,7 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   body) makes `Physics.move` move all members as one or none, and `Physics.canInteract` ignores group mates.
   `Physics.move` is also guarded against re-entrancy (a `moving` set): a sprite already being moved up the call stack is
   just blocked — two overlapping sprites can each count as "on top" of the other, which used to recurse forever.
-  **Ghost-layer sprites**: visual/effect sprites (`ShieldBubble`, `Explosion`, `Diamond`, `RocketLauncher`) use
+  **Ghost-layer sprites**: visual/effect sprites (`ShieldBubble`, `Explosion`, `Diamond`) use
   `Physics.BACKGROUND_LAYER` (nothing treats it as an obstacle), `melts()` true, mass 0, and `isStable()` true so a mover
   doesn't drag them (a `Shield` re-creates/re-positions its bubble each frame; `Robot`/`Shield` override
   `removePermanently()` to take their prop/bubble with them). Controls (`server/ui.ts`): Space picks up the nearest block the
@@ -105,11 +105,23 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
 - **Robot rockets**: `Robot` (`server/sprite/robot.ts`) runs a small `idle → drawing → putting-away` state machine
   (`updateRocketAttack`): every `EIGHTH_STEP` frames it looks for the nearest real player (`Avatar.isRobot()` false)
   in range (24–70 cells away, ≤30 cells of height difference) for which `aimAt()` solves a launch velocity and
-  `Missile.pathReaches()` (a dry-run of the same integrator the rocket uses) finds a clear arc. It then stops, spawns a
-  [RocketLauncher](server/sprite/rocketLauncher.ts) prop, fires a `Missile` with a launch vector after ~0.9s (rocket speed 0.7 cells/frame) (re-aiming at
-  the target's then-position), and puts the prop away. `Missile` takes an optional `{ vx, vy }` launch (gravity
-  `ROCKET_GRAVITY`) and dies on solid walls/blocks, the round part of a shield bubble and the room's edges; it flies through robots (never exploding on one). On touching a real player or anything solid (wall/block) it explodes via the shared [blast.ts](server/sprite/blast.ts) `detonate()` (also used by `Launcher`: kill radius with line-of-sight, shield immunity, shoves `Mana`, spawns the `Explosion`) with the smaller `ROCKET_KILL_RADIUS` 10 / `ROCKET_SHOVE_RADIUS` 20 — the blast kills robots too; avatars die from the blast, not from the touch. The room's edges and a shield bubble end it without exploding. Client-side, `Renderer.drawSprites` adds [rocketLight.ts](src/game/rocketLight.ts) to every `/projectiles/missile*` sprite — an additive flickering exhaust flame at the tail and a bright light on the tip (facing from the `L` art suffix) so rockets read against dark space. The 31-cell green
+  `Missile.pathReaches()` (a dry-run of the same integrator the rocket uses) finds a clear arc. It then stops (`aiming` phase) and, after ~0.9s, fires a `Missile` with a launch vector (rocket speed 0.7 cells/frame, re-aiming at
+  the target's then-position) and resumes patrolling at once; there is no launcher/bazooka prop or animation (it was removed — the rocket just leaves a point just past the robot's side). `Missile` takes an optional `{ vx, vy }` launch (gravity
+  `ROCKET_GRAVITY`) and dies on solid walls/blocks, the round part of a shield bubble and the room's edges; it flies through robots (never exploding on one). On touching a real player or anything solid (wall/block) it explodes via the shared [blast.ts](server/sprite/blast.ts) `detonate()` (also used by `Launcher`: kill radius with line-of-sight, shield immunity, shoves `Mana`, spawns the `Explosion`) with the smaller `ROCKET_KILL_RADIUS` 10 / `ROCKET_SHOVE_RADIUS` 20 — the blast hurts robots too; avatars lose 20% health from the blast (`damage` option, see "Health & ninja stars"), not from the touch. The room's edges and a shield bubble end it without exploding. Client-side, `Renderer.drawSprites` adds [rocketLight.ts](src/game/rocketLight.ts) to every `/projectiles/missile*` sprite — an additive flickering exhaust flame at the tail and a bright light on the tip (facing from the `L` art suffix) so rockets read against dark space. The 31-cell green
   `ShieldBubble` (art: `public/images/effects/bubble.png`, 248px) is clamped inside the room and also makes avatars inside it (`ShieldBubble.isCovered`) immune to `Launcher` blasts.
+- **Health & ninja stars**: `Avatar` (incl. `Robot`) has `health` (`MAX_HEALTH` 100). Rockets and ninja stars call `detonate()`
+  with `damage: HIT_DAMAGE_PERCENT` (20), which makes it call `Avatar.takeDamage()` (small knockback, `needsRedraw`) instead of
+  `die()`; the hit taking health to 0 is a normal `die()`. A red block's blast (no `damage` option) and robot touch still kill
+  outright. Enter (`server/ui.ts`) → `Avatar.throwStar()` spawns a [NinjaStar](server/sprite/ninjaStar.ts) (3x3, `EFFECTS_LAYER`,
+  1.5 cells/frame with a slight droop (`STAR_GRAVITY` 0.006 cells/frame², ~15 cells over a full flight; a planet's pull adds to it), 72-frame life, never wraps, 20-frame cooldown, max 3 in flight): it explodes on any
+  avatar except its thrower (robots included), `LEVEL_LAYER` sprite or `Mana`, via `detonate()` with `STAR_KILL_RADIUS` 6 /
+  `STAR_SHOVE_RADIUS` 12 and `small: true` → [SmallExplosion](server/sprite/explosion.ts) (14 cells, own art
+  `effects/explosion/small1..6`); a `ShieldBubble` swallows it. Like `Missile`, it must override `getDefaultAction()` (the
+  `Sprite` constructor reads it before subclass fields exist). Client-side, a star is *on fire*: [starFire.ts](src/game/starFire.ts) draws an additive flickering halo with flame tongues over every `/projectiles/star*` sprite, `neonSprites` gives it an orange glow, and `Renderer` spawns `ParticleSystem.spawnSparks()` embers at it on every position update so a trail of sparks hangs along its arc. Wire: key `'4'` = remaining health percent, sent on any
+  `Avatar` below 100 (redraw and full-state frames alike); client `Renderer.health` → [damage.ts](src/game/damage.ts)
+  `damageStage()` (0–4) → `NeonSprites.actor(..., damage)` bakes `applyDamage()` wounds into the body (separate cache table per
+  stage). Stars/avatar art: `public/images/projectiles/star1..4.png`. Only five alive looks exist (100/80/60/40/20%), the
+  sixth state is death. `Renderer.onExplosion` scales burst/shake for the small art.
 - **Death feedback**: `Avatar.die(knockbackXDirection?, knockbackYDirection?)` takes an optional knockback
   direction (explosions, including rocket blasts, knock back away from the blast; robots away from themselves) applied via one
   `Physics.move` before `removePermanently()` — death is still a single hit, this only adds physicality to it.
@@ -124,12 +136,12 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
 - **Client netcode smoothing & "juice" layer** (`src/game/`, all purely cosmetic — none of it changes actual
   positions/collision outcomes, which stay 100% server-authoritative): `Renderer` runs its own
   `requestAnimationFrame` loop, independent of message arrival, that exponentially smooths every sprite's
-  drawn position toward its latest known server position (`SMOOTHING_TAU_MS`) instead of snapping to each new
-  snapshot; `prediction.ts`'s `LocalPredictor` additionally predicts the *local* avatar's left/right movement
+  drawn position toward its latest known server position (two cascaded exponential stages of `SMOOTHING_TAU_MS`, since one left a visible speed ripple on a steady glide arriving as 8px steps) instead of snapping to each new
+  snapshot; `prediction.ts`'s `LocalPredictor` (it keeps a `lead` offset from the server x, so with nothing predicted — no key held, e.g. riding ice — the avatar is drawn exactly at the server x; it used to lag behind a fast server and trip its own snap threshold every few frames, which is the jitter seen in a debug recording) additionally predicts the *local* avatar's left/right movement
   the instant a key is pressed (softly reconciling against the server a few frames later, snapping instead on a
   large mismatch) since the client has no collision geometry to predict jumps/pushes against (it stops predicting
   once the server's x has stalled for ~80ms while a direction is held, so running into a wall doesn't overshoot and
-  slide back). `audio.ts`
+  slide back — only *new headway* in the held direction counts, so a server x that merely wobbles, e.g. against a moving ice block, doesn't count as progress — and it predicts at the server's observed pace when that is faster than a run, as when riding a block). `audio.ts`
   synthesizes short WebAudio blips (no audio asset files were added) and `particles.ts` draws small dust/impact/
   warp bursts, both triggered by diffing incoming sprite positions/deletions (e.g. an avatar sprite disappearing
   ⇒ impact burst; a rendered avatar's y going from falling to flat ⇒ landing dust). **Important**: any state that
@@ -138,7 +150,8 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   for backgrounded/unfocused tabs (this bit a Playwright test with two browser contexts during development;
   see the git history on `src/game/renderer.ts` for the fix), so anything logically load-bearing can't depend
   on it actually running.
-- **Debug recording (backtick)** (`src/game/recorder.ts`, `server/recordingStore.ts`): `attachInputHandlers` turns the
+- **Debug recording, a.k.a. the "Back Box" (backtick)** — a flight recorder; "check the Black Box" means read
+  `recordings/latest.json` (`src/game/recorder.ts`, `server/recordingStore.ts`): `attachInputHandlers` turns the
   backtick key into `onToggleRecording` (never sent to the server). `Recorder` (owned by `GameCanvas`, set on
   `syncer.recorder`) snapshots `renderer.snapshot()` at start, then `Syncer.handleMessage`/`sendKey` log every incoming
   message (deep-cloned: the renderer keeps parts of full-state payloads) and key press with timestamps; it auto-stops
@@ -266,7 +279,7 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   planet id and every 2s) from `SocketHub` — deliberately *not* a key in the flat redraw frames. The client
   extrapolates from `vx`/`vy` (advanced in `SpaceBackground.update`) and snaps on each resync; the look (palette,
   bands, ring) is derived from `seed`. Background tetrominoes are pulled/swallowed client-side
-  (`SpaceBackground.pullPiece`/`consumePiece`: reaching the core shrinks it away over `PLANET_CONSUME_MS`, no shards); the minimap draws it in amber. `CELLWARZ_PLANET_PULL=off` disables only the server
+  (`SpaceBackground.pullPiece`/`consumePiece`: reaching the core shrinks it away over `PLANET_CONSUME_MS`, no shards); the minimap draws it in amber. Flying projectiles (`Missile`, `NinjaStar`) keep their own exact-position integrators, so they aren't in the `isAffectedByPlanets()` loop: each frame they ask `Cell.getProjectilePlanetAcceleration()` (→ `PlanetField.projectileAcceleration`, the same pull × `PROJECTILE_PULL_SCALE` 0.1, cells/frame²) and add it to their velocity (a star now has `vy` too); they are never swallowed, and `Missile.pathReaches` (robot aiming) ignores the pull. `CELLWARZ_PLANET_PULL=off` disables only the server
   pull (Playwright sets it for its own server).
 - **Diamonds** (`#diamonds`, under the score, marked with a 💎 via CSS `::before`): `Diamond.collect()` credits
   `Session.addDiamonds` for the first real player (not a robot) overlapping it; `SocketHub` sends `{ diamonds: n }` as a
@@ -277,7 +290,7 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   catches up as each flyer arrives (`setDiamonds()` never jumps the HUD; it also catches up after 1.5s if nothing flew).
   Explosions are detected client-side by new sprites whose
   image path is under `/effects/explosion/` (bang, sparks, a distance-faded shake). New block/effect art lives under
-  `public/images/{mana/*,effects,weapons}` (generated from the original yellow/red tile art by hue-shifting; frame names
+  `public/images/{mana/*,effects}` (generated from the original yellow/red tile art by hue-shifting; frame names
   follow `addAction`: `name1..N`, mirrored frames get an `L` suffix).
 - **Score** (top-right `#score` DOM element): when the *local* avatar shatters a background piece, its shards
   (`collect` shards in [spaceBackground.ts](src/game/spaceBackground.ts)) burst out, then home in on the HUD
