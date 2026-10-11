@@ -9,7 +9,8 @@
 - check for vulnerabilities, in case some dj asshole hacks into it.
 Show number of users, and show other users in a specific color.
 - speak with basic set of emojis (1 at a time, appearing in a speak bubble above the avatar, no country flags allowed). Maybe robots say SKULL emoji when they see you? Or other things they say to show how they think?...it will dissapear after 5 seconds
-- will real users need passwords?
+- need to figure out mobile device controls
+- will real users need passwords? yes. For now add a password box on the screen to protect you. if you forget it, too bad. If someone else logs into your avatar, all previous connections are dropped.
 
 ## Core Features
 
@@ -25,16 +26,13 @@ Show number of users, and show other users in a specific color.
 
 - Need to decide whether players will have their own room or just a big bag of inventory for picking up and hoarding blocks.
 
-- Be able to see the whole game in the background of the DJ Recognize website (in the space), and make it the entry into this game. Perhaps a spaceship can take you to the game somehow. Maybe it bothers the website users.
-AND VICE VERSA. Maybe make the tertis pieces float by in the cellwarz levels also and wwe try to break them for points?
+- Show the live radar on djrecognize.com
 
 - Add "Fortunate Lies" book to djrecognize.com
 
 ## Game expansions
 
-- Swap the bespoke Physics grid-push system for something like matter-js/planck.js only if you ever want slopes/rotation/finer collision — not necessary for the current flat-platform aesthetic, and would be the highest-effort, lowest-necessity item here. 
-
-- coop games, humans playing against the robots
+- co-op games, humans playing against the robots
 
 - Cyberpunk pass follow-up: a hazard room element (electrified floor blocks / laser grids reusing the engine-fire kill + knockback) and in-game renames (mana → data shards, launcher → pulse rifle) were deferred; only the client-side look/sound was done.
 

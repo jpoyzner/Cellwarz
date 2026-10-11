@@ -224,36 +224,34 @@ body {
   margin: 0;
 }
 
-/* A wall display set into the ship's viewport: the stars and planet show faintly through it. */
+/* A strip set into the floor grating, below the walking line, so it never covers the viewport. */
 #legend {
   background: rgba(4, 10, 24, 0.7);
-  height: 96px;
-  left: 330px;
-  padding: 6px 8px;
-  top: 254px;
-  width: 300px;
+  height: 50px;
+  left: 110px;
+  padding: 5px 10px;
+  top: 484px;
+  width: 740px;
 }
 
 #legend ul {
   display: flex;
   justify-content: space-between;
   list-style: none;
-  margin: 8px 0 0;
+  margin: 6px 0 0;
   padding: 0;
 }
 
 #legend li {
   align-items: center;
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  text-align: center;
+  gap: 6px;
+  text-align: left;
 }
 
 #legend img {
   image-rendering: pixelated;
-  transform: scale(1.5);
-  margin: 6px 0 4px;
+  transform: scale(1.1);
 }
 
 #legend li span {

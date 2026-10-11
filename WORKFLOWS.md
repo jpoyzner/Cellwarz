@@ -22,7 +22,7 @@ at a random bare floor spot at least 60 grid cells from any real player, with a 
 1. Load the site; the login screen (`#login`) is the inside of a huge ship/rocket: a small room (`#ship-canvas`) with
    your own avatar in it (cyan headband and belt until you pick colours), a viewport onto space, a callsign field
    (`#loginName`), headband/belt colour pickers, a short briefing (`#desc`: welcome blurb, the controls clip and key caps,
-   see "Learning to play"), a block index (`#legend`, set into the viewport) and a live radar (see "Login room — live
+   see "Learning to play"), a block index (`#legend`, a strip set into the floor below the walking line) and a live radar (see "Login room — live
    radar"). The room is scaled to fit the window.
 2. Walk the avatar with the Left/Right arrows and jump with Up (the arrow keys work even while the callsign field has
    focus; the room is client-only, nothing is sent to the server for it). A name tag shows the callsign over it.
