@@ -1,13 +1,5 @@
 # TODOs
 
-## Core Gameplay
-
-- make sure all blocks are working correctly (play around with them).
-
-- ask it to give any other proposals for discovery of how to play for people.
-
-- add more videos! (maybe landscape ones too?)
-
 ## INTEGRATION TO REAL SITE
 
 - use my DJ Recognize site to host cellwarz realtime multiplayers that can remember things if you sign up! Think about limiting chat to avoid hate, maybe just one emoji at a time as a speak bubble above, follows the avatar head perfectly.

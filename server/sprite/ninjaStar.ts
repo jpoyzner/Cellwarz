@@ -144,6 +144,7 @@ export class NinjaStar extends Sprite {
       shoveRadius: STAR_SHOVE_RADIUS,
       damage: HIT_DAMAGE_PERCENT,
       small: true,
+      cause: 'star',
       source: this,
     });
     this.removePermanently();

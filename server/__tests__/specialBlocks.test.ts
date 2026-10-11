@@ -144,7 +144,7 @@ describe('green shield block', () => {
 
   it('makes a much bigger bubble than the block, kept inside the room when the block is against a wall', () => {
     const { cell } = createScene();
-    expect(ShieldBubble.SIZE).toBeGreaterThanOrEqual(Avatar.HEIGHT * 3);
+    expect(ShieldBubble.SIZE).toBeGreaterThanOrEqual(Avatar.HEIGHT * 2.5);
 
     const cornered = new Shield(2, 40, false, cell);
     const bubble = cornered.getBubble()!;

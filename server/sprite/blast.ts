@@ -1,5 +1,6 @@
 import type { Cell } from '../cell/cell';
 import type { CellData } from '../cellData';
+import type { DeathCause } from '../deathCause';
 import { EdgeOfCellDataException } from '../errors';
 import { Physics } from '../physics';
 import { Avatar } from './avatar';
@@ -23,6 +24,8 @@ export interface BlastOptions {
   damage?: number;
   /** Shows the half-size fireball (a ninja star's) instead of the full one. */
   small?: boolean;
+  /** What an avatar killed by this blast is told it died of. */
+  cause?: DeathCause;
 }
 
 /** The shared explosion: kills unshielded avatars with a line of sight, shoves nearby blocks and shows the fireball. */
@@ -41,8 +44,8 @@ export function detonate(cell: Cell, cellData: CellData, centerX: number, center
         sprite.getY() + sprite.getHeight() / 2,
       );
       if (distance <= options.killRadius && !shielded && canReach(cellData, centerX, centerY, sprite)) {
-        if (options.damage === undefined) sprite.die(Math.sign(dx), Physics.UP);
-        else sprite.takeDamage(options.damage, Math.sign(dx), Physics.UP);
+        if (options.damage === undefined) sprite.die(Math.sign(dx), Physics.UP, options.cause);
+        else sprite.takeDamage(options.damage, Math.sign(dx), Physics.UP, options.cause);
       }
     } else if (sprite instanceof Mana && distance <= options.shoveRadius) {
       const speed = SHOVE_MIN_SPEED + SHOVE_EXTRA_SPEED * (1 - distance / options.shoveRadius);

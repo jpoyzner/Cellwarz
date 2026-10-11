@@ -1,6 +1,7 @@
 // Background TVs: world-space screens (Cell.getTvs()) hanging from chains that all show one shared, muted video;
-// when it ends they show a plain "YOUR AD HERE" card for a few seconds, then the video starts over. Purely cosmetic
-// and client-side — nothing here touches gameplay, and each client plays its own copy at its own moment.
+// when it ends they show a plain "YOUR AD HERE" card for a few seconds, then a different, randomly chosen video starts
+// from its beginning (the very first one starts at a random point). Purely cosmetic and client-side — nothing here
+// touches gameplay, and each client plays its own copy at its own moment.
 
 export interface Tv {
   x: number;
@@ -21,11 +22,16 @@ const CHAIN_LINK_WIDTH_PX = 8;
 const CHAIN_LINE_WIDTH_PX = 2.5;
 const CHAIN_INSET_RATIO = 0.2;
 
-// Served by the Express server (see server.ts); the WebM copy is there for browsers without H.264.
-const VIDEO_SOURCES: ReadonlyArray<{ src: string; type: string }> = [
-  { src: '/videos/imu_full.mp4', type: 'video/mp4; codecs="avc1.4D401E"' },
-  { src: '/videos/imu_full.webm', type: 'video/webm; codecs="vp9"' },
-];
+// Served by the Express server (see server.ts) from public/videos/<name>.mp4 and .webm (the WebM copy is there for
+// browsers without H.264). Add a video by putting both copies there and listing its name here.
+export const VIDEO_NAMES: readonly string[] = ['imu_full', 'mami_full', 'sapphire_city_full'];
+
+function sourcesOf(name: string): ReadonlyArray<{ src: string; type: string }> {
+  return [
+    { src: `/videos/${name}.mp4`, type: 'video/mp4; codecs="avc1.4D401E"' },
+    { src: `/videos/${name}.webm`, type: 'video/webm; codecs="vp9"' },
+  ];
+}
 const SCREEN_DIM = 0.88;
 const FRAME_PX = 10;
 const NEON_COLORS = ['#00f6ff', '#ff2ea6', '#ffb347', '#b6ff3c'];
@@ -39,6 +45,18 @@ const END_MARGIN_SECONDS = 10;
 export function randomStartTime(duration: number, random: () => number = Math.random): number {
   if (!Number.isFinite(duration) || duration <= END_MARGIN_SECONDS) return 0;
   return random() * (duration - END_MARGIN_SECONDS);
+}
+
+/**
+ * Which of `count` videos plays next: uniformly random, but never the one that just played (`previous`), so the
+ * rotation always visibly changes. With no previous video any of them can open.
+ */
+export function pickVideoIndex(count: number, previous: number | undefined, random: () => number = Math.random): number {
+  if (count <= 1) return 0;
+  if (previous === undefined) return Math.min(count - 1, Math.floor(random() * count));
+
+  const next = Math.min(count - 2, Math.floor(random() * (count - 1)));
+  return next >= previous ? next + 1 : next;
 }
 
 /** Whether a TV overlaps the viewport (frame + glow margin included). */
@@ -102,9 +120,17 @@ export function coverCrop(
 export class TvScreens {
   private video: HTMLVideoElement | undefined;
   private failed = false;
+  /** Index into VIDEO_NAMES of the video loaded now. */
+  private videoIndex: number | undefined;
+  /** Videos in a row that failed to load; the rotation gives up once every one has failed. */
+  private consecutiveErrors = 0;
   /** When the ad card currently showing (after the video ended) gives way to the video again. */
   private adUntil: number | undefined;
 
+  /** The name (see VIDEO_NAMES) of the video currently loaded, for tests. */
+  get currentVideoName(): string | undefined {
+    return this.videoIndex === undefined ? undefined : VIDEO_NAMES[this.videoIndex];
+  }
   /** Whether the shared video is actually playing right now (it is paused while no TV is on screen). */
   get isPlaying(): boolean {
     return this.video !== undefined && !this.video.paused && !this.video.ended;
@@ -237,9 +263,8 @@ export class TvScreens {
   private updateAdPhase(anyVisible: boolean, now: number): boolean {
     if (this.adUntil !== undefined) {
       if (now < this.adUntil) return true;
-      // The ad is over: the video starts again from the beginning (only the very first play starts partway in).
+      // The ad is over: the next video (already loading since the last one ended) plays from its beginning.
       this.adUntil = undefined;
-      if (this.video) this.video.currentTime = 0;
     }
 
     if (anyVisible) {
@@ -262,26 +287,59 @@ export class TvScreens {
     // Kept in the DOM (but invisible) because some browsers won't keep decoding a detached video.
     video.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:0;top:0;';
 
-    const supported = VIDEO_SOURCES.find((source) => video.canPlayType(source.type) !== '');
-    if (supported) video.src = supported.src;
-    else this.failed = true;
-    // The first play starts partway in, as soon as the duration is known.
-    video.addEventListener(
-      'loadedmetadata',
-      () => {
-        video.currentTime = randomStartTime(video.duration);
-      },
-      { once: true },
-    );
+    document.body.appendChild(video);
+    this.video = video;
+
     video.addEventListener('ended', () => {
       this.adUntil = performance.now() + AD_DURATION_MS;
+      // Loads while the ad is up, so the next video is buffered by the time the card goes away.
+      this.loadNext();
+    });
+    video.addEventListener('playing', () => {
+      this.consecutiveErrors = 0;
     });
     video.addEventListener('error', () => {
       this.failed = true;
+      // A video that won't load is skipped, unless every one of them has already failed (then it is NO SIGNAL).
+      if (++this.consecutiveErrors < VIDEO_NAMES.length) this.loadNext();
     });
 
-    document.body.appendChild(video);
-    this.video = video;
+    // Only this very first play starts partway in, as soon as the duration is known.
+    this.load(pickVideoIndex(VIDEO_NAMES.length, undefined), true);
     return video;
+  }
+
+  private loadNext(): void {
+    this.load(pickVideoIndex(VIDEO_NAMES.length, this.videoIndex), false);
+  }
+
+  private load(index: number, randomStart: boolean): void {
+    const video = this.video;
+    if (!video) return;
+
+    const sameVideo = index === this.videoIndex;
+    this.videoIndex = index;
+    const supported = sourcesOf(VIDEO_NAMES[index]).find((source) => video.canPlayType(source.type) !== '');
+    if (!supported) {
+      this.failed = true;
+      return;
+    }
+
+    this.failed = false;
+    if (sameVideo && !randomStart) {
+      video.currentTime = 0;
+      return;
+    }
+
+    video.src = supported.src;
+    if (randomStart) {
+      video.addEventListener(
+        'loadedmetadata',
+        () => {
+          video.currentTime = randomStartTime(video.duration);
+        },
+        { once: true },
+      );
+    }
   }
 }

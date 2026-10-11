@@ -21,8 +21,9 @@ at a random bare floor spot at least 60 grid cells from any real player, with a 
 
 1. Load the site; the login screen (`#login`) is the inside of a huge ship/rocket: a small room (`#ship-canvas`) with
    your own avatar in it (cyan headband and belt until you pick colours), a viewport onto space, a callsign field
-   (`#loginName`), headband/belt colour pickers, a short briefing (`#desc`: welcome blurb, robot warning and the key
-   list) and a live radar (see "Login room — live radar"). The room is scaled to fit the window.
+   (`#loginName`), headband/belt colour pickers, a short briefing (`#desc`: welcome blurb, the controls clip and key caps,
+   see "Learning to play"), a block index (`#legend`, set into the viewport) and a live radar (see "Login room — live
+   radar"). The room is scaled to fit the window.
 2. Walk the avatar with the Left/Right arrows and jump with Up (the arrow keys work even while the callsign field has
    focus; the room is client-only, nothing is sent to the server for it). A name tag shows the callsign over it.
 3. There are two transporters on the floor, each with a button label over it (also clickable): **TELEPORT**
@@ -72,6 +73,44 @@ only for a callsign with a living avatar and wakes it where it sleeps)
 **Covered by**: [e2e/login-room.spec.ts](e2e/login-room.spec.ts) (walls arrive before login; another player shows up),
 [server/__tests__/socketHubLogin.test.ts](server/__tests__/socketHubLogin.test.ts) and
 [src/game/__tests__/radarPreview.test.ts](src/game/__tests__/radarPreview.test.ts).
+
+## Learning to play (controls clip, block index, first-run prompts, death card)
+
+Cellwarz has no tutorial level or chat, so discovery is built into the screens a player already sees. All of it is
+client-side and cosmetic, except the death cause the server names.
+
+1. **Controls clip and key caps** (login screen, `#controls` inside `#desc`): a looping 3.6s canvas clip
+   (`#controls-demo`) of the player's own avatar (it wears their chosen colours) picking a block up, carrying it
+   overhead and throwing it in an arc, with a `[SPACE]` badge flashing at the grab and the throw, drawn from the game's
+   own art. (With "reduce motion" set it holds the carrying pose.) Beside it `#control-keys` lists the six controls as
+   key caps: SPACE grab / throw, ↓ put down, ← → run, ↑ jump, ENTER ninja star, ESC leave; a one-line note says that
+   5 rocket or star hits kill and that Escape puts your avatar to sleep.
+2. **Block index** (login screen, `#legend`): one entry per block kind the main room scatters, with its art and a
+   two-line hint — yellow lifts you up, red has a 5s fuse then booms, blue slides forever, green is a shield bubble,
+   orange glues blocks, rainbow is "throw it for 💎". (Purple blocks are left out while the room places none.)
+3. **First-run prompts** (in the game, `#hint` with `data-hint` = `move`, `grab` or `carry`, low and centred): one shows
+   at a time, only while you are alive and not spectating, and each goes away for good as soon as you do what it
+   asks, remembered in `localStorage` (`cellwarz.hints.done`) so a returning player is never nagged:
+   - `move` ("← → RUN · ↑ JUMP") from the first moment on; it keeps only the half you haven't done yet, and ends once
+     you have both run and jumped.
+   - `grab` ("SPACE: GRAB THE BLOCK") while you are touching a block (within a cell of it) and aren't carrying one; it ends once
+     a block is actually overhead.
+   - `carry` ("SPACE: THROW · ↓: PUT DOWN") while you carry a block; it ends when you throw or put it down.
+   Carrying beats grabbing beats moving when more than one applies.
+4. **Death card**: when you die your screen says what killed you and how to avoid it under "YOU DIED" (`#death-cause`
+   and `#death-tip`): "KILLED BY: RED BLOCK BLAST" (a red block's 5s fuse; throw it away or stand in a green bubble),
+   "ROBOT ROCKET" and "NINJA STAR" (5 hits kill; break line of sight or stand in a green bubble / ENTER throws your own)
+   and "THE GAS GIANT" (keep clear of its core). The server names the cause in the one-shot death message
+   (`{ died: true, cause }`); a death with no named cause (a robot's touch, see "Death and respawn") shows nothing extra.
+
+**Covered by**: [e2e/login-room.spec.ts](e2e/login-room.spec.ts) (clip draws, six key caps, six block entries with art),
+[e2e/main-room-workflows.spec.ts](e2e/main-room-workflows.spec.ts) (the move prompt trims, ends and stays gone across visits; a returning player vs a fresh one; grab → carry → gone while picking up the green block; the
+death card after the red-block explosion), [src/game/__tests__/hints.test.ts](src/game/__tests__/hints.test.ts),
+[src/game/__tests__/controlsDemo.test.ts](src/game/__tests__/controlsDemo.test.ts),
+[src/game/__tests__/deathCause.test.ts](src/game/__tests__/deathCause.test.ts) and, for the server side,
+[server/__tests__/deathCause.test.ts](server/__tests__/deathCause.test.ts) (each cause is recorded on the session; only the
+finishing rocket/star hit counts) plus [server/__tests__/socketHubRobotBody.test.ts](server/__tests__/socketHubRobotBody.test.ts)
+(the cause rides the death ping). How the clip and index look is manual-only.
 
 ## Avatar colours (headband and belt)
 
@@ -288,7 +327,7 @@ settles at the known fixed spawn portal position after dropping) and
 3. The player who died sees their own screen flash/shake briefly (a one-shot server ping tells their client to
    play the effect), then **spectates**: nothing freezes — the world keeps moving as normal, and a message
    ("YOU DIED", with the controls) is shown at the top of the screen until they press Escape (the same applies if a
-   planet swallows you). The arrow keys move a free camera around the room (it stays inside the room's bounds).
+   planet swallows you), followed by what killed them and how to avoid it (see "Learning to play"). The arrow keys move a free camera around the room (it stays inside the room's bounds).
 4. **A death by robot touch assimilates you**: your body immediately gets up as a new robot (red headband, no name
    tag, like every other robot) where you fell, and patrols like any robot — it doesn't freeze. Your own screen
    doesn't freeze either: it keeps showing the world, with the camera following your robot (you can no longer
@@ -305,7 +344,7 @@ The knockback and death-flash are covered at the unit level
 the touch itself because robot positions are random), the follow-your-robot-body stream by
 [server/__tests__/socketHubRobotBody.test.ts](server/__tests__/socketHubRobotBody.test.ts), and the client camera
 following it (and an arrow key releasing it) by [e2e/robot-body.spec.ts](e2e/robot-body.spec.ts); the spectating
-message, the world continuing and the free camera after a real death are asserted in the red-block spec of
+message, the death card, the world continuing and the free camera after a real death are asserted in the red-block spec of
 [e2e/main-room-workflows.spec.ts](e2e/main-room-workflows.spec.ts); the client-side flash/shake/sound itself
 is manual-only (no automated assertions on canvas pixels or WebAudio output). Death by robot rocket is unit-tested
 only (robots are switched off in the e2e run).
@@ -508,22 +547,25 @@ colors) and [server/__tests__/cellBackground.test.ts](server/__tests__/cellBackg
    screens (9:16, matching the source video), drawn over the lamp beams but behind the sprites, so avatars stand out
    against the glowing screens.
 2. Every TV hangs by two metal chains running up to the platform row directly above it.
-3. Every TV shows the same video (`IMU_FULL`, from `public/videos/`), muted. Each player's browser plays its own
+3. Every TV shows the same video at any moment, muted, chosen at random from the three in rotation (`IMU_FULL`,
+   `MAMI_full`, `SapphireCityMusicVideo_FULL`, from `public/videos/`). Each player's browser plays its own
    copy, so players don't see the same moment. The video only plays while at least one TV is on screen. When it
-   ends, the TVs show plain white "YOUR AD HERE" text on black for about 5 seconds, then the video restarts from the beginning.
-   Only the first play after you enter the room starts from a random point in the video (never within 10 seconds of
+   ends, the TVs show plain white "YOUR AD HERE" text on black for about 5 seconds, then a **different, randomly
+   chosen** video plays from its beginning (it is never the one that just played, so the rotation always changes).
+   Only the first play after you enter the room starts from a random point in a random video (never within 10 seconds of
    the end) rather than the beginning.
-   If the browser can't decode either source, the TVs show a flickering "NO SIGNAL" screen instead.
+   If the browser can't decode either source, the TVs show a flickering "NO SIGNAL" screen instead; a video file that
+   fails to load is skipped for another one.
 4. TVs are purely cosmetic — they never block, push or collide with anything. Only MainRoom has them.
-5. The source master lives in `media-src/` (git-ignored); the game serves small MP4 (H.264) and WebM (VP9) copies
+5. The source masters live in `media-src/` (git-ignored); the game serves small MP4 (H.264) and WebM (VP9) copies
    (see AGENTS.md for the ffmpeg commands). The paid-ad system from [TODOS.md](TODOS.md) is not built yet — the ad
    card is only a placeholder.
 
 **Covered by**: [e2e/tvs.spec.ts](e2e/tvs.spec.ts) (4 TVs received, shared muted video plays while the ground-floor TVs
-are on screen (wide viewport); the video's first play starts from a random point; after it ends the ad card shows for ~5s and the video then restarts from the beginning),
+are on screen (wide viewport); the first play starts from a random point; after it ends the ad card shows for ~5s and a different video then plays from the beginning; every video is served as MP4 and WebM),
 [server/__tests__/mainRoomTvs.test.ts](server/__tests__/mainRoomTvs.test.ts) (layout: floors, inside the room, no
 overlaps, chains reach the platform row above, floor 1 TVs lowered, MainRoom-only) and
-[src/game/__tests__/tvs.test.ts](src/game/__tests__/tvs.test.ts) (cover-crop, on-screen culling, chain-link and chain-visibility math, random start time). The look
+[src/game/__tests__/tvs.test.ts](src/game/__tests__/tvs.test.ts) (cover-crop, on-screen culling, chain-link and chain-visibility math, random start time, the next-video pick). The look
 of the screens is manual-only.
 
 ## Block-spitting flower (and its ceiling vines)

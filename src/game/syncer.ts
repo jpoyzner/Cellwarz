@@ -68,7 +68,7 @@ export class Syncer {
     } else if ('diamonds' in data) {
       this.renderer.setDiamonds(data.diamonds as number);
     } else if (data.died) {
-      this.renderer.onLocalAvatarDeath();
+      this.renderer.onLocalAvatarDeath(data.cause);
     } else {
       this.renderer.render(data);
     }

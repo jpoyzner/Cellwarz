@@ -3,6 +3,7 @@ import { LOOK_PALETTE, loadSavedLogin, resolveLook, saveLogin } from '../game/lo
 import type { Look } from '../game/look';
 import { LoginRoom, PADS, ROOM_HEIGHT, ROOM_WIDTH } from '../game/loginRoom';
 import type { PadId } from '../game/loginRoom';
+import { ControlsDemo } from '../game/controlsDemo';
 import { RadarPreview } from '../game/radarPreview';
 import type { RadarCounts } from '../game/radarPreview';
 
@@ -23,6 +24,26 @@ const READOUT_INTERVAL_MS = 250;
 const ARROW_KEYS: Record<string, 'left' | 'right' | 'jump'> = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'jump' };
 const LABEL_TOP = 262;
 const LABEL_WIDTH = PADS.teleport.halfWidth * 2;
+
+// The blocks MainRoom actually scatters (art from public/images/mana), with what each does in two short lines.
+const BLOCK_LEGEND = [
+  { id: 'yellow', image: 'engine/engine', lines: ['LIFTS', 'YOU UP'] },
+  { id: 'red', image: 'launcher/launcher', lines: ['5s FUSE,', 'THEN BOOM'] },
+  { id: 'blue', image: 'ice/ice', lines: ['SLIDES', 'FOREVER'] },
+  { id: 'green', image: 'shield/shield', lines: ['SHIELD', 'BUBBLE'] },
+  { id: 'orange', image: 'sticky/sticky', lines: ['GLUES', 'BLOCKS'] },
+  { id: 'rainbow', image: 'rainbow/rainbow1', lines: ['THROW IT', 'FOR \u{1F48E}'] },
+];
+
+// Mirrors server/ui.ts and src/game/ui.ts; the first row is the one the demo clip performs.
+const CONTROL_KEYS = [
+  { keys: ['SPACE'], action: 'GRAB / THROW' },
+  { keys: ['\u2193'], action: 'PUT DOWN' },
+  { keys: ['\u2190', '\u2192'], action: 'RUN' },
+  { keys: ['\u2191'], action: 'JUMP' },
+  { keys: ['ENTER'], action: 'NINJA STAR' },
+  { keys: ['ESC'], action: 'LEAVE' },
+];
 
 function fitScale(): number {
   return Math.min(window.innerWidth / ROOM_WIDTH, window.innerHeight / ROOM_HEIGHT, MAX_SCALE);
@@ -75,6 +96,8 @@ export function LoginScreen({ onEnter }: LoginScreenProps) {
   const radarCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const nameInputRef = useRef<HTMLInputElement | null>(null);
   const roomRef = useRef<LoginRoom | null>(null);
+  const demoCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const demoRef = useRef<ControlsDemo | null>(null);
   // The room's callbacks outlive any one render, so they read the latest values through refs.
   const nameRef = useRef(loginName);
   nameRef.current = loginName;
@@ -105,6 +128,11 @@ export function LoginScreen({ onEnter }: LoginScreenProps) {
     room.setScale(fitScale());
     radar.start();
     room.start();
+    const demoCanvas = demoCanvasRef.current;
+    const demo = demoCanvas ? new ControlsDemo(demoCanvas) : null;
+    demoRef.current = demo;
+    demo?.setLook(resolveLook(colorsRef.current.headband, colorsRef.current.belt));
+    demo?.start();
     window.__cellwarzLogin = { room, radar };
 
     const onResize = () => {
@@ -136,7 +164,9 @@ export function LoginScreen({ onEnter }: LoginScreenProps) {
       window.removeEventListener('keyup', onKeyUp);
       room.stop();
       radar.stop();
+      demo?.stop();
       roomRef.current = null;
+      demoRef.current = null;
       delete window.__cellwarzLogin;
     };
   }, []);
@@ -147,6 +177,7 @@ export function LoginScreen({ onEnter }: LoginScreenProps) {
     room.name = loginName;
     room.wakeAvailable = wakeAvailable;
     room.setLook(resolveLook(headband, belt));
+    demoRef.current?.setLook(resolveLook(headband, belt));
     if (loginName.length !== 0) setNotice('');
   }, [loginName, wakeAvailable, headband, belt]);
 
@@ -193,15 +224,40 @@ export function LoginScreen({ onEnter }: LoginScreenProps) {
           <div id="desc" className="ship-panel">
             <p>
               Welcome raver! Jack into a multi-player, interactively creative, yet competitively destructive orbital
-              grid with nothing but your ninja avatar. Cell blocks are light enough to shove, and each colour behaves
-              differently: touch or pick one up and see. Break a rainbow block by throwing it and collect the diamonds.
+              grid as a ninja. Beware the robots: they reprogram you on contact and fire rockets.
             </p>
-            <p>Beware the ninja robots: they reprogram you on contact and fire rockets from afar.</p>
-            <p>
-              Up: jump &middot; Left/Right: run &middot; Down: put down the block &middot; Space: pick up the block
-              under you, again to throw &middot; Enter: throw a ninja star (5 hits of rockets or
-              stars to kill) &middot; Escape: leave the grid (your avatar sleeps; WAKE UP returns to it)
-            </p>
+            <div id="controls">
+              <canvas id="controls-demo" ref={demoCanvasRef} />
+              <ul id="control-keys">
+                {CONTROL_KEYS.map(({ keys, action }) => (
+                  <li key={action}>
+                    <span className="keys">
+                      {keys.map((key) => (
+                        <kbd key={key}>{key}</kbd>
+                      ))}
+                    </span>
+                    {action}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <p id="controls-note">5 rocket/star hits kill. ESC: leave, avatar sleeps.</p>
+          </div>
+
+          <div id="legend" className="ship-panel">
+            <div className="panel-title">BLOCK INDEX &middot; TOUCH OR GRAB ONE</div>
+            <ul>
+              {BLOCK_LEGEND.map(({ id, image, lines }) => (
+                <li key={id} data-block={id}>
+                  <img src={`/images/mana/${image}.png`} alt={`${id} block`} width={24} height={24} />
+                  <span>
+                    {lines[0]}
+                    <br />
+                    {lines[1]}
+                  </span>
+                </li>
+              ))}
+            </ul>
           </div>
 
           <button

@@ -107,7 +107,7 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   in range (24–70 cells away, ≤30 cells of height difference) for which `aimAt()` solves a launch velocity and
   `Missile.pathReaches()` (a dry-run of the same integrator the rocket uses) finds a clear arc. It then stops (`aiming` phase) and, after ~0.9s, fires a `Missile` with a launch vector (rocket speed 0.7 cells/frame, re-aiming at
   the target's then-position) and resumes patrolling at once; there is no launcher/bazooka prop or animation (it was removed — the rocket just leaves a point just past the robot's side). `Missile` takes an optional `{ vx, vy }` launch (gravity
-  `ROCKET_GRAVITY`) and dies on solid walls/blocks, the round part of a shield bubble and the room's edges; it flies through robots (never exploding on one). On touching a real player or anything solid (wall/block) it explodes via the shared [blast.ts](server/sprite/blast.ts) `detonate()` (also used by `Launcher`: kill radius with line-of-sight, shield immunity, shoves `Mana`, spawns the `Explosion`) with the smaller `ROCKET_KILL_RADIUS` 10 / `ROCKET_SHOVE_RADIUS` 20 — the blast hurts robots too; avatars lose 20% health from the blast (`damage` option, see "Health & ninja stars"), not from the touch. The room's edges and a shield bubble end it without exploding. Client-side, `Renderer.drawSprites` adds [rocketLight.ts](src/game/rocketLight.ts) to every `/projectiles/missile*` sprite — an additive flickering exhaust flame at the tail and a bright light on the tip (facing from the `L` art suffix) so rockets read against dark space. The 25-cell green
+  `ROCKET_GRAVITY`) and dies on solid walls/blocks, the round part of a shield bubble and the room's edges; it flies through robots (never exploding on one). On touching a real player or anything solid (wall/block) it explodes via the shared [blast.ts](server/sprite/blast.ts) `detonate()` (also used by `Launcher`: kill radius with line-of-sight, shield immunity, shoves `Mana`, spawns the `Explosion`) with the smaller `ROCKET_KILL_RADIUS` 10 / `ROCKET_SHOVE_RADIUS` 20 — the blast hurts robots too; avatars lose 20% health from the blast (`damage` option, see "Health & ninja stars"), not from the touch. The room's edges and a shield bubble end it without exploding. Client-side, `Renderer.drawSprites` adds [rocketLight.ts](src/game/rocketLight.ts) to every `/projectiles/missile*` sprite — an additive flickering exhaust flame at the tail and a bright light on the tip (facing from the `L` art suffix) so rockets read against dark space. The 23-cell green
   `ShieldBubble` (art: `public/images/effects/bubble.png`, 248px) is clamped inside the room and also makes avatars inside it (`ShieldBubble.isCovered`) immune to `Launcher` blasts.
 - **Health & ninja stars**: `Avatar` (incl. `Robot`) has `health` (`MAX_HEALTH` 100). Rockets and ninja stars call `detonate()`
   with `damage: HIT_DAMAGE_PERCENT` (20), which makes it call `Avatar.takeDamage()` (small knockback, `needsRedraw`) instead of
@@ -122,9 +122,12 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   `damageStage()` (0–4) → `NeonSprites.actor(..., damage)` bakes `applyDamage()` wounds into the body (separate cache table per
   stage). Stars/avatar art: `public/images/projectiles/star1..4.png`. Only five alive looks exist (100/80/60/40/20%), the
   sixth state is death. `Renderer.onExplosion` scales burst/shake for the small art.
-- **Death feedback**: `Avatar.die(knockbackXDirection?, knockbackYDirection?)` takes an optional knockback
+- **Death feedback**: `Avatar.die(knockbackXDirection?, knockbackYDirection?, cause?)` takes an optional knockback
   direction (explosions, including rocket blasts, knock back away from the blast; robots away from themselves) applied via one
   `Physics.move` before `removePermanently()` — death is still a single hit, this only adds physicality to it.
+  `cause` (a [DeathCause](server/deathCause.ts): `'blast' | 'rocket' | 'star' | 'planet'`, passed through
+  `BlastOptions.cause` / `takeDamage`) is recorded on the `Session` and rides the death ping as
+  `{ died: true, cause }` so the death card can say how to avoid it (robot assimilation names none).
   A dead player **spectates** instead of freezing: once their session unplugs, `SocketHub.renderClient()` keeps
   streaming the room (it remembers the last `cell`) and sends a one-shot `{ died: true }` followed by one full
   refresh (no local avatar; `following` = their robot body's cell index, or null). The client reacts in
@@ -196,6 +199,17 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   avatar is a `CellBlock` (no blocks/portals/avatars) and no robot is within `ROBOT_SAFE_DISTANCE` (24 cells); after
   `RANDOM_FLOOR_ATTEMPTS` failures it falls back to an entrance. `CELLWARZ_RANDOM_TELEPORT=off` (set by Playwright) makes it
   use the entrances so e2e specs have deterministic spawns.
+- **Learning to play (discoverability, all client-side/cosmetic)**: there is no chat or tutorial level, so teaching lives
+  in the screens players already see. [hints.ts](src/game/hints.ts)'s `HintSystem` (owned by `Renderer.hints`,
+  rendered as `#hint` by `GameCanvas`) shows one first-run prompt at a time (`move` → `grab` → `carry`), driven by
+  `Renderer.updateHints()` (every ~100ms from the raw server sprite positions: a `/mana/` sprite within the avatar's one-cell
+  ring = touching, one sitting on its head = carrying — mirrors `Avatar.getHandledManaX/Y`) plus `onLocalKey`. Each prompt ends when the
+  player does what it asks and is remembered in `localStorage` (`cellwarz.hints.done`). The login screen's
+  [controlsDemo.ts](src/game/controlsDemo.ts) is a looping grab-and-throw clip on `#controls-demo` (`demoFrame(t)` is a pure
+  function of time, so it is unit-tested) next to key caps, and `#legend` ("block index") is a static list in
+  [LoginScreen.tsx](src/components/LoginScreen.tsx) (`BLOCK_LEGEND`: keep it in step with the blocks MainRoom scatters and
+  what they do). The death card ([deathCause.ts](src/game/deathCause.ts) `describeDeath`) turns the server's `cause` into
+  `#death-cause`/`#death-tip` under "YOU DIED". Remaining ideas are in [TODOS.md](TODOS.md).
 - **Leaving the game (Escape)**: `ui.ts` handles Escape itself and sends key-up for the movement keys first. While the
   avatar is alive (`Renderer.canFallAsleep()`) the *first* Escape sends key 27 (`ESCAPE_KEY`, [server/ui.ts](server/ui.ts)
   → `Avatar.fallAsleep()`) and the player becomes a spectator of their sleeping avatar (`SpectatorMode` `'asleep'`: the
@@ -242,13 +256,16 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   the spawn floor; floors 2 and 4 have none, nor does the spawn portal area).
   One shared muted `<video>` (kept in the DOM, invisible, since some browsers stop decoding detached videos) is
   drawn into every visible TV with `drawImage`; it is paused whenever no TV is on screen. It does **not** loop: when it
-  ends every TV shows a plain white "YOUR AD HERE" on black for `AD_DURATION_MS` (5s), then the video restarts from the beginning. Only the first play (on load) seeks to `randomStartTime()` — a random point at least 10s before the end. The TVs
+  ends every TV shows a plain white "YOUR AD HERE" on black for `AD_DURATION_MS` (5s), then a *different* randomly picked video (`pickVideoIndex`, never the one that just
+  played) plays from its beginning; `loadNext()` swaps the element's `src` the moment the last one ends so the next file buffers during the ad. The rotation is the `VIDEO_NAMES` list in tvs.ts
+  (`imu_full`, `mami_full`, `sapphire_city_full`; a file that errors is skipped). Only the first play (on load) picks a random video and seeks to `randomStartTime()` — a random point at least 10s before the end. The TVs
   show "NO SIGNAL" if no source can be decoded. Each client plays
   independently (no synced playback). Videos are served from `public/videos/` via a `/videos` Express route (and an
-  rsbuild dev-proxy entry) — a WebM copy exists because Playwright's Chromium has no H.264. The full-size master lives in
-  git-ignored `media-src/`; regenerate the web copies with
+  rsbuild dev-proxy entry) — a WebM copy exists because Playwright's Chromium has no H.264. The full-size masters live in
+  git-ignored `media-src/`; regenerate each web copy (all are 720x1280 portrait masters) with
   `ffmpeg -i media-src/IMU_FULL.mov -an -vf scale=360:640,fps=24 -c:v libx264 -profile:v main -pix_fmt yuv420p -crf 30 -preset slow -movflags +faststart public/videos/imu_full.mp4`
-  and `... -c:v libvpx-vp9 -crf 38 -b:v 0 -row-mt 1 -cpu-used 4 public/videos/imu_full.webm`. The ad/contact slots between
+  and `... -c:v libvpx-vp9 -crf 38 -b:v 0 -row-mt 1 -cpu-used 4 public/videos/imu_full.webm` (likewise `MAMI_full.mov` → `mami_full.*`,
+  `SapphireCityMusicVideo_FULL.mov` → `sapphire_city_full.*`). To add a video, drop both copies in `public/videos/` and add its name to `VIDEO_NAMES`. The ad/contact slots between
   videos (see TODOS.md) are intentionally not built yet.
 - **Block-spitting flower** ([flower.ts](server/sprite/flower.ts), art in `public/images/flower/`): MainRoom hangs one from the
   ceiling just right of the middle lamp (`FLOWER_PIXELS`). A ghost-layer, mass-0 `Sprite` (not a `Mana`) whose `doAction()` counts

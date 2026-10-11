@@ -1,7 +1,10 @@
 import type { Analyzer } from './analyzer';
 import { AudioManager } from './audio';
 import { DiamondFlight } from './diamondFlight';
+import { describeDeath } from './deathCause';
+import type { DeathCard } from './deathCause';
 import { drawLamps } from './lamps';
+import { HintSystem } from './hints';
 import { VineField } from './vines';
 import type { Look } from './look';
 import { TvScreens } from './tvs';
@@ -99,6 +102,11 @@ const DIAMOND_SIZE_PX = 16;
 // A collected diamond vanishes while overlapping the avatar, so anything gone from farther than this wasn't collected by us.
 const DIAMOND_COLLECT_RANGE_PX = 120;
 const DIAMOND_CATCH_UP_MS = 1500;
+// Block art is 3x3 grid cells; an avatar picks up what touches its one-cell (8px) ring, and carries a block on its head.
+const MANA_SIZE_PX = 24;
+const TOUCH_RING_PX = 8;
+const CARRY_TOLERANCE_PX = 6;
+const HINT_CHECK_INTERVAL_MS = 100;
 
 /** Mirrors js/renderer.js: draws directly to canvas every frame, bypassing React reconciliation for perf. */
 export class Renderer {
@@ -141,6 +149,7 @@ export class Renderer {
   private starImages = new Set<number>();
   private stargateImages = new Set<number>();
   private diamondImages = new Set<number>();
+  private manaImages = new Set<number>();
   private scoreScrambleTimer: number | undefined;
   private readonly minimap: Minimap | undefined;
   private minimapOpen = true;
@@ -169,8 +178,13 @@ export class Renderer {
   private readonly heldArrows = new Set<number>();
   /** Camera peek below the avatar while Down is held (purely visual). */
   private readonly lookDown = new LookDown();
+  /** First-run control prompts (see hints.ts); public so the React layer can show them and e2e can read them. */
+  readonly hints = new HintSystem();
+  private lastHintCheck = 0;
   /** Called whenever the spectator mode changes, so the UI can show/hide its message. */
   onSpectatorChange: ((mode: SpectatorMode) => void) | undefined;
+  /** Told what killed the local avatar (null when the server named no cause), the moment the death ping arrives. */
+  onDeathCard: ((card: DeathCard | null) => void) | undefined;
 
   private me: StoredSprite | undefined;
   private offsetX = 0;
@@ -307,6 +321,8 @@ export class Renderer {
       }
     }
 
+    if (this.spectator === 'off') this.hints.onKey(keyCode, down);
+
     if (down && this.spectator === 'off') {
       if (keyCode === 32) this.audio.play('manaPickup');
       else if (keyCode === 40) this.audio.play('manaDrop');
@@ -314,8 +330,9 @@ export class Renderer {
   }
 
   /** One-shot server ping sent the instant the local avatar's session unplugs — see server/socketHub.ts. */
-  onLocalAvatarDeath(): void {
+  onLocalAvatarDeath(cause?: unknown): void {
     this.died = true;
+    this.onDeathCard?.(describeDeath(cause));
     this.audio.play('death');
     this.triggerShake(400, 10);
     this.triggerFlash(350, 'rgba(200, 30, 20, 0.35)');
@@ -337,6 +354,9 @@ export class Renderer {
     this.stargateImages = new Set(this.imagePaths.flatMap((path, index) => (isStargatePath(path) ? [index] : [])));
     this.diamondImages = new Set(
       this.imagePaths.flatMap((path, index) => (path.includes('/effects/diamond') ? [index] : [])),
+    );
+    this.manaImages = new Set(
+      this.imagePaths.flatMap((path, index) => (path.includes('/mana/') && !path.includes('/fire/') ? [index] : [])),
     );
 
     this.imagePaths.forEach((path, i) => {
@@ -678,10 +698,44 @@ export class Renderer {
     this.advanceRenderPositions(dtMs);
     this.updateSleepZs(dtMs);
     this.advanceSpectatorCamera(dtMs);
+    this.updateHints(now);
     this.draw(now);
 
     this.rafHandle = requestAnimationFrame(this.tick);
   };
+
+  /** Looks at the raw server positions around the local avatar: is it touching a block, or carrying one on its head? */
+  private updateHints(now: number): void {
+    if (now - this.lastHintCheck < HINT_CHECK_INTERVAL_MS) return;
+    this.lastHintCheck = now;
+
+    const spriteId = this.avatars[this.context.loginName];
+    const avatar = spriteId ? this.sprites[spriteId] : undefined;
+    if (!avatar || this.spectator !== 'off' || this.shrinks.has(spriteId)) {
+      this.hints.update({ alive: false, touchingBlock: false, carryingBlock: false });
+      return;
+    }
+
+    const [, avatarX, avatarY] = avatar;
+    let touchingBlock = false;
+    let carryingBlock = false;
+    for (const [imageIndex, x, y] of Object.values(this.sprites)) {
+      if (!this.manaImages.has(imageIndex)) continue;
+
+      // A carried block sits on the avatar's head, one cell in from its left edge (see Avatar.getHandledManaX/Y).
+      if (Math.abs(x - (avatarX + TOUCH_RING_PX)) <= CARRY_TOLERANCE_PX && Math.abs(y + MANA_SIZE_PX - avatarY) <= CARRY_TOLERANCE_PX) {
+        carryingBlock = true;
+      } else if (
+        x < avatarX + AVATAR_WIDTH_PX + TOUCH_RING_PX &&
+        x + MANA_SIZE_PX > avatarX - TOUCH_RING_PX &&
+        y < avatarY + AVATAR_HEIGHT_PX + TOUCH_RING_PX &&
+        y + MANA_SIZE_PX > avatarY - TOUCH_RING_PX
+      ) {
+        touchingBlock = true;
+      }
+    }
+    this.hints.update({ alive: true, touchingBlock, carryingBlock });
+  }
 
   private advanceRenderPositions(dtMs: number): void {
     const factor = 1 - Math.exp(-dtMs / SMOOTHING_TAU_MS);

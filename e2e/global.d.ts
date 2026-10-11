@@ -33,7 +33,7 @@ declare global {
         onLocalAvatarDeath: () => void;
         vines?: { config: { rootX: number; faceY: number; minX: number; maxX: number }; tinted: unknown[]; hanging: unknown[] };
         tvs: Array<{ x: number; y: number; width: number; height: number; chainTopY: number }>;
-        tvScreens: { isPlaying: boolean; isShowingAd: boolean; hasSignal: boolean };
+        tvScreens: { isPlaying: boolean; isShowingAd: boolean; hasSignal: boolean; currentVideoName: string | undefined };
         planet?: { x: number; y: number; vx: number; vy: number; radius: number };
         spaceBackground?: {
           pieces: TestPiece[];

@@ -131,6 +131,7 @@ export class Missile extends Sprite {
       killRadius: ROCKET_KILL_RADIUS,
       shoveRadius: ROCKET_SHOVE_RADIUS,
       damage: HIT_DAMAGE_PERCENT,
+      cause: 'rocket',
       source: this,
     });
     this.removePermanently();

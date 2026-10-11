@@ -225,6 +225,10 @@ test.describe('MainRoom deterministic workflows', () => {
     await walkTo(page, loginName, 'ArrowRight', SHIELD_X - 100, { tolerance: 8, timeoutMs: 25000 });
     await standOnBlock(page, loginName, shieldId!);
 
+    // First-run prompts follow what is happening: touching a block offers to grab it, carrying one to throw it, and
+    // once Down puts it back the player has learned all three.
+    await expect(page.locator('#hint')).toHaveAttribute('data-hint', 'grab');
+    await expect(page.locator('#hint')).toContainText('SPACE');
     const isCarried = ({ id, name }: { id: string; name: string }) => {
       const state = window.__cellwarz;
       if (!state) return false;
@@ -237,6 +241,8 @@ test.describe('MainRoom deterministic workflows', () => {
     // Space picks it up — it should now track just above the avatar's position every frame.
     await page.keyboard.press('Space');
     await page.waitForFunction(isCarried, { id: shieldId, name: loginName }, { timeout: 3000 });
+    await expect(page.locator('#hint')).toHaveAttribute('data-hint', 'carry');
+    await expect(page.locator('#hint')).toContainText('THROW');
 
     // It should keep following as the avatar moves while carried.
     const beforeMove = await getAvatarPosition(page, loginName);
@@ -261,6 +267,7 @@ test.describe('MainRoom deterministic workflows', () => {
       { id: shieldId, name: loginName },
       { timeout: 3000 },
     );
+    await expect(page.locator('#hint')).toHaveCount(0);
 
     // Pick it up again, face left, and press Space again to throw it: it arcs away (up first, then down).
     await page.waitForTimeout(300);
@@ -328,6 +335,9 @@ test.describe('MainRoom deterministic workflows', () => {
       // The victim spectates instead of freezing: a message shows, the world keeps moving (the exploded block is gone
       // from their view too) and the arrow keys pan a free camera.
       await expect(page.locator('#spectator')).toContainText('YOU DIED');
+      // …and tells them what killed them and how to avoid it.
+      await expect(page.locator('#death-cause')).toHaveText('KILLED BY: RED BLOCK BLAST');
+      await expect(page.locator('#death-tip')).toContainText('GREEN BUBBLE');
       await expect.poll(() => page.evaluate(() => window.__cellwarz!.renderer.spectatorMode)).toBe('free');
       await expect.poll(() => page.evaluate((id) => window.__cellwarz!.renderer.sprites[id], launcherId)).toBeUndefined();
       const cameraBefore = await page.evaluate(() => window.__cellwarz!.renderer.getPlayerOffset().offsetX);
@@ -433,6 +443,57 @@ test.describe('MainRoom deterministic workflows', () => {
       expect(bSeenByB).not.toBeNull();
     } finally {
       await contextB.close();
+    }
+  });
+
+  // These run here (not in their own spec file) because every login shares the one room: a stray parallel avatar
+  // running about at the spawn portal can shove the avatars of the deterministic tests above.
+  test('a first-run prompt teaches running and jumping, trims itself as you learn, and never comes back', async ({ page }) => {
+    const name = `hint-${Date.now()}`;
+
+    await login(page, name);
+    await expect(page.locator('#canvas')).toBeVisible();
+    await waitForAvatar(page, name);
+
+    await expect(page.locator('#hint')).toHaveAttribute('data-hint', 'move');
+    await expect(page.locator('#hint')).toContainText('RUN');
+    await expect(page.locator('#hint')).toContainText('JUMP');
+
+    // Running satisfies half of it: only what is left to learn stays on screen.
+    await page.keyboard.down('ArrowRight');
+    await page.waitForTimeout(250);
+    await page.keyboard.up('ArrowRight');
+    await expect(page.locator('#hint')).toHaveText('\u2191 JUMP');
+
+    await page.keyboard.press('ArrowUp');
+    await expect(page.locator('#hint')).toHaveCount(0);
+
+    // It is remembered across visits (localStorage): the next login starts without it.
+    const second = `hint2-${Date.now()}`;
+    await login(page, second);
+    await expect(page.locator('#canvas')).toBeVisible();
+    await waitForAvatar(page, second);
+    await page.waitForTimeout(600);
+    await expect(page.locator('#hint')).toHaveCount(0);
+  });
+
+  test('a player who has already learned the controls is not prompted again, but a fresh one is', async ({ page, browser }) => {
+    const name = `hint3-${Date.now()}`;
+    await page.addInitScript(() => localStorage.setItem('cellwarz.hints.done', JSON.stringify(['move', 'grab', 'carry'])));
+    await login(page, name);
+    await waitForAvatar(page, name);
+    await page.waitForTimeout(600);
+    await expect(page.locator('#hint')).toHaveCount(0);
+
+    const context = await browser.newContext();
+    try {
+      const fresh = await context.newPage();
+      const freshName = `hint4-${Date.now()}`;
+      await login(fresh, freshName);
+      await waitForAvatar(fresh, freshName);
+      await expect(fresh.locator('#hint')).toHaveAttribute('data-hint', 'move');
+    } finally {
+      await context.close();
     }
   });
 });

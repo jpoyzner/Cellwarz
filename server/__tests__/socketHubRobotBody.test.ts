@@ -65,6 +65,14 @@ describe('SocketHub for a dead or assimilated player', () => {
     expect(later.every((message) => !('died' in message) && !('connect' in message))).toBe(true);
   });
 
+  it('keeps the named cause on the death ping', () => {
+    const { hub, sent, avatar } = setup();
+    avatar.die(Physics.NONE, Physics.NONE, 'rocket');
+
+    hub.renderClient();
+    expect(sent.filter((message) => !isPlanetPing(message))[0]).toEqual({ died: true, cause: 'rocket' });
+  });
+
   it('keeps streaming to a player who simply died (no robot body): death ping, one full refresh, then frames', () => {
     const { hub, sent, avatar } = setup();
     avatar.die();

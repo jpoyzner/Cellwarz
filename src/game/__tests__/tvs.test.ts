@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { areChainsVisible, chainXs, coverCrop, isTvVisible, randomStartTime, visibleChainLinks } from '../tvs';
+import { areChainsVisible, chainXs, coverCrop, isTvVisible, pickVideoIndex, randomStartTime, VIDEO_NAMES, visibleChainLinks } from '../tvs';
 
 describe('coverCrop', () => {
   it('uses the whole video when the shapes match', () => {
@@ -79,6 +79,30 @@ describe('visibleChainLinks', () => {
     expect(links[links.length - 1].y + 16).toBeLessThanOrEqual(110);
     expect(links[links.length - 1].y + 16).toBeGreaterThan(100 - 12);
     expect(visibleChainLinks(0, 0, 800)).toEqual([]);
+  });
+});
+
+describe('pickVideoIndex', () => {
+  it('opens with any video, evenly', () => {
+    expect([0, 0.2, 0.5, 0.7, 0.999999].map((r) => pickVideoIndex(3, undefined, () => r))).toEqual([0, 0, 1, 2, 2]);
+  });
+
+  it('never repeats the video that just played, and can reach every other one', () => {
+    for (let previous = 0; previous < 3; previous++) {
+      const picks = new Set<number>();
+      for (let step = 0; step < 100; step++) picks.add(pickVideoIndex(3, previous, () => step / 100));
+      expect([...picks].sort()).toEqual([0, 1, 2].filter((index) => index !== previous));
+    }
+  });
+
+  it('copes with a single video', () => {
+    expect(pickVideoIndex(1, 0, () => 0.9)).toBe(0);
+    expect(pickVideoIndex(1, undefined, () => 0.9)).toBe(0);
+  });
+
+  it('has three videos in the rotation, all distinct', () => {
+    expect(VIDEO_NAMES).toHaveLength(3);
+    expect(new Set(VIDEO_NAMES).size).toBe(3);
   });
 });
 

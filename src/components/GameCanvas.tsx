@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Analyzer } from '../game/analyzer';
+import type { DeathCard } from '../game/deathCause';
+import type { Hint } from '../game/hints';
 import type { Look } from '../game/look';
 import { Recorder } from '../game/recorder';
 import { Renderer } from '../game/renderer';
@@ -35,6 +37,8 @@ export function GameCanvas({ loginName, jump, look, onExit }: GameCanvasProps) {
   const rendererRef = useRef<Renderer | null>(null);
   const [minimapOpen, setMinimapOpen] = useState(true);
   const [spectator, setSpectator] = useState<SpectatorMode>('off');
+  const [hint, setHint] = useState<Hint | null>(null);
+  const [deathCard, setDeathCard] = useState<DeathCard | null>(null);
   // Milliseconds left in the debug recording (backtick key), or null when not recording.
   const [recordingMsLeft, setRecordingMsLeft] = useState<number | null>(null);
 
@@ -71,7 +75,14 @@ export function GameCanvas({ loginName, jump, look, onExit }: GameCanvasProps) {
     syncer.connect();
     // An idle player is sent back to the login screen (same as pressing Escape) instead of watching a frozen level.
     syncer.onInactive = () => onExitRef.current();
-    renderer.onSpectatorChange = setSpectator;
+    renderer.onSpectatorChange = (mode) => {
+      setSpectator(mode);
+      if (mode === 'off') setDeathCard(null);
+    };
+    setHint(null);
+    setDeathCard(null);
+    renderer.onDeathCard = setDeathCard;
+    renderer.hints.onChange = setHint;
     renderer.onBlocksCollected = (blocks) => syncer.sendBlocksCollected(blocks);
 
     const recorder = new Recorder({
@@ -128,6 +139,17 @@ export function GameCanvas({ loginName, jump, look, onExit }: GameCanvasProps) {
                 ? 'SPECTATING \u00B7 ARROW KEYS: MOVE CAMERA \u00B7 SPACE: WAKE UP \u00B7 ESC: LEAVE'
                 : 'SPECTATING \u00B7 ARROW KEYS: MOVE CAMERA \u00B7 ESC: LEAVE'}
           </div>
+          {spectator === 'free' && deathCard && (
+            <div id="death-card">
+              <div id="death-cause">{deathCard.cause}</div>
+              <div id="death-tip">{deathCard.tip}</div>
+            </div>
+          )}
+        </div>
+      )}
+      {spectator === 'off' && hint && (
+        <div id="hint" data-hint={hint.id}>
+          {hint.text}
         </div>
       )}
       {/* Not a <button>: a focused button would also fire on Space, which is the in-game block pickup/throw key. */}

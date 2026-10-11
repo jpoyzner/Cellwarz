@@ -169,6 +169,100 @@ body {
   margin: 0 0 6px;
 }
 
+#controls {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+#controls-demo {
+  background: rgba(0, 12, 24, 0.7);
+  border: 1px solid rgba(0, 246, 255, 0.35);
+  flex: none;
+  height: 100px;
+  image-rendering: pixelated;
+  width: 130px;
+}
+
+#control-keys {
+  font-size: 9px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+#control-keys li {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  letter-spacing: 0.08em;
+  line-height: 15px;
+}
+
+#control-keys .keys {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+  justify-content: flex-end;
+  width: 42px;
+}
+
+#control-keys kbd {
+  background: rgba(0, 246, 255, 0.12);
+  border: 1px solid rgba(0, 246, 255, 0.7);
+  border-radius: 2px;
+  color: #00f6ff;
+  font: bold 8px ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  padding: 0 3px;
+}
+
+#controls-note {
+  color: #ffae1a;
+  font-size: 8.5px;
+  letter-spacing: 0.04em;
+  margin: 0;
+}
+
+/* A wall display set into the ship's viewport: the stars and planet show faintly through it. */
+#legend {
+  background: rgba(4, 10, 24, 0.7);
+  height: 96px;
+  left: 330px;
+  padding: 6px 8px;
+  top: 254px;
+  width: 300px;
+}
+
+#legend ul {
+  display: flex;
+  justify-content: space-between;
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+
+#legend li {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: center;
+}
+
+#legend img {
+  image-rendering: pixelated;
+  transform: scale(1.5);
+  margin: 6px 0 4px;
+}
+
+#legend li span {
+  color: #8ff7ff;
+  font-size: 7.5px;
+  letter-spacing: 0.04em;
+  line-height: 1.25;
+}
+
 .transporter-label {
   background: rgba(4, 10, 24, 0.7);
   border: 1px solid currentcolor;
@@ -271,6 +365,48 @@ body {
   font-size: 30px;
   letter-spacing: 0.25em;
   text-shadow: 0 0 10px #ff2ea6, 0 0 22px rgba(255, 46, 166, 0.5);
+}
+
+#death-card {
+  margin-top: 10px;
+}
+
+#death-cause {
+  color: #ffae1a;
+  font-size: 20px;
+  letter-spacing: 0.2em;
+  text-shadow: 0 0 10px #ffae1a;
+}
+
+#death-tip {
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+/* First-run control prompt, low and centred so it sits under the action without covering it. */
+#hint {
+  animation: hint-pulse 1.6s ease-in-out infinite;
+  background: rgba(4, 10, 24, 0.7);
+  border: 1px solid rgba(0, 246, 255, 0.7);
+  bottom: 18%;
+  box-shadow: 0 0 14px rgba(0, 246, 255, 0.35);
+  color: #00f6ff;
+  font: bold 18px ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  left: 50%;
+  letter-spacing: 0.16em;
+  padding: 8px 18px;
+  pointer-events: none;
+  position: fixed;
+  text-shadow: 0 0 8px #00f6ff;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+@keyframes hint-pulse {
+  50% {
+    border-color: rgba(255, 46, 166, 0.9);
+    box-shadow: 0 0 18px rgba(255, 46, 166, 0.5);
+  }
 }
 
 .minimap {

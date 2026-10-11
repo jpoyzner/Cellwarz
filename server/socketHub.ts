@@ -206,7 +206,7 @@ export class SocketHub {
     // react, then send a full refresh (their own sprite is gone, and `following` names their robot body if they have one).
     if (!avatar && !this.diedNotified) {
       this.diedNotified = true;
-      this.send({ [DIED_PARAM]: true });
+      this.send({ [DIED_PARAM]: true, ...(session.getDeathCause() && { cause: session.getDeathCause() }) });
       this.send(this.getCellState(cell));
     }
     this.sendPlanetIfDue(cell);

@@ -1,4 +1,5 @@
 import type { Cell } from '../cell/cell';
+import type { DeathCause } from '../deathCause';
 import { EdgeOfCellDataException } from '../errors';
 import { Engine } from '../engine';
 import type { Frame } from '../frame';
@@ -305,7 +306,7 @@ export class Avatar extends Sprite {
   }
 
   override onConsumed(): void {
-    this.die();
+    this.die(Physics.NONE, Physics.NONE, 'planet');
   }
 
   runLeft(): void {
@@ -383,10 +384,15 @@ export class Avatar extends Sprite {
   }
 
   /** Loses `percent` of the full health, knocked back a little; the hit that takes the last of it is a death. */
-  takeDamage(percent: number, knockbackXDirection: number = Physics.NONE, knockbackYDirection: number = Physics.NONE): void {
+  takeDamage(
+    percent: number,
+    knockbackXDirection: number = Physics.NONE,
+    knockbackYDirection: number = Physics.NONE,
+    cause?: DeathCause,
+  ): void {
     this.health = Math.max(0, this.health - percent);
     if (this.health === 0) {
-      this.die(knockbackXDirection, knockbackYDirection);
+      this.die(knockbackXDirection, knockbackYDirection, cause);
       return;
     }
 
@@ -410,9 +416,10 @@ export class Avatar extends Sprite {
   }
 
   /** Optional knockback direction gives death a little physicality instead of an instant, silent vanish. */
-  die(knockbackXDirection: number = Physics.NONE, knockbackYDirection: number = Physics.NONE): void {
+  die(knockbackXDirection: number = Physics.NONE, knockbackYDirection: number = Physics.NONE, cause?: DeathCause): void {
     const session = this.cell.getWorld().getZion().getHardlines().get(this.name);
     if (session) {
+      session.setDeathCause(cause);
       session.unplug();
     }
 

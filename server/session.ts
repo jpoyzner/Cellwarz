@@ -1,4 +1,5 @@
 import type { Look } from './look';
+import type { DeathCause } from './deathCause';
 import type { Avatar } from './sprite/avatar';
 import type { Robot } from './sprite/robot';
 import { UI } from './ui';
@@ -18,7 +19,7 @@ export class Session {
   /** The connection currently driving this session; only it can put the avatar to sleep by leaving. */
   private owner: object | undefined;
   private look: Look | undefined;
-
+  private deathCause: DeathCause | undefined;
   constructor(avatar: Avatar) {
     this.avatar = avatar;
     avatar.setSession(this);
@@ -59,6 +60,15 @@ export class Session {
     return this.avatar;
   }
 
+  /** How this player's last avatar died, if it was one of the causes worth telling them about. */
+  getDeathCause(): DeathCause | undefined {
+    return this.deathCause;
+  }
+
+  setDeathCause(cause: DeathCause | undefined): void {
+    this.deathCause = cause;
+  }
+
   /** The live robot this player became (undefined once it is destroyed, or after they take a new avatar). */
   getRobotBody(): Robot | undefined {
     return this.robotBody?.removed() ? undefined : this.robotBody;
@@ -83,6 +93,7 @@ export class Session {
 
   plugin(avatar: Avatar): void {
     this.robotBody = undefined;
+    this.deathCause = undefined;
     if (this.avatar) {
       this.avatar.setManaDown();
       this.avatar.removePermanently();

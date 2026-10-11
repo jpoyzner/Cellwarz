@@ -68,6 +68,7 @@ export class Launcher extends Mana {
     detonate(this.cell, this.cellData, this.getX() + this.getWidth() / 2, this.getY() + this.getHeight() / 2, {
       killRadius: KILL_RADIUS,
       shoveRadius: SHOVE_RADIUS,
+      cause: 'blast',
       source: this,
     });
     this.removePermanently();

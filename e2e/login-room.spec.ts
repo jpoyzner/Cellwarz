@@ -36,6 +36,36 @@ test('the login screen is a ship interior with your avatar, a TELEPORT transport
   expect(consoleErrors).toEqual([]);
 });
 
+test('the login screen teaches the controls (a looping demo and key caps) and what each block does', async ({ page }) => {
+  await page.goto('/');
+
+  await expect(page.locator('#controls-demo')).toBeVisible();
+  const keys = page.locator('#control-keys li');
+  await expect(keys).toHaveCount(6);
+  await expect(keys.first()).toContainText('SPACE');
+  await expect(keys.first()).toContainText('GRAB / THROW');
+  await expect(page.locator('#control-keys')).toContainText('NINJA STAR');
+
+  // The clip is drawn from the game's own art: once it has loaded the canvas is no longer blank.
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const canvas = document.querySelector<HTMLCanvasElement>('#controls-demo')!;
+        const { data } = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height);
+        return data.some((value, index) => index % 4 === 3 && value > 0);
+      }),
+    )
+    .toBe(true);
+
+  // One entry per block the main room scatters, each with its art loaded.
+  const entries = page.locator('#legend [data-block]');
+  await expect(entries).toHaveCount(6);
+  await expect(page.locator('#legend')).toContainText('5s FUSE');
+  await expect
+    .poll(() => page.evaluate(() => [...document.querySelectorAll<HTMLImageElement>('#legend img')].every((img) => img.naturalWidth > 0)))
+    .toBe(true);
+});
+
 test('a transporter will not fire without a callsign', async ({ page }) => {
   await page.goto('/');
   await page.locator('#teleport').click();
