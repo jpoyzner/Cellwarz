@@ -107,7 +107,7 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   in range (24–70 cells away, ≤30 cells of height difference) for which `aimAt()` solves a launch velocity and
   `Missile.pathReaches()` (a dry-run of the same integrator the rocket uses) finds a clear arc. It then stops (`aiming` phase) and, after ~0.9s, fires a `Missile` with a launch vector (rocket speed 0.7 cells/frame, re-aiming at
   the target's then-position) and resumes patrolling at once; there is no launcher/bazooka prop or animation (it was removed — the rocket just leaves a point just past the robot's side). `Missile` takes an optional `{ vx, vy }` launch (gravity
-  `ROCKET_GRAVITY`) and dies on solid walls/blocks, the round part of a shield bubble and the room's edges; it flies through robots (never exploding on one). On touching a real player or anything solid (wall/block) it explodes via the shared [blast.ts](server/sprite/blast.ts) `detonate()` (also used by `Launcher`: kill radius with line-of-sight, shield immunity, shoves `Mana`, spawns the `Explosion`) with the smaller `ROCKET_KILL_RADIUS` 10 / `ROCKET_SHOVE_RADIUS` 20 — the blast hurts robots too; avatars lose 20% health from the blast (`damage` option, see "Health & ninja stars"), not from the touch. The room's edges and a shield bubble end it without exploding. Client-side, `Renderer.drawSprites` adds [rocketLight.ts](src/game/rocketLight.ts) to every `/projectiles/missile*` sprite — an additive flickering exhaust flame at the tail and a bright light on the tip (facing from the `L` art suffix) so rockets read against dark space. The 31-cell green
+  `ROCKET_GRAVITY`) and dies on solid walls/blocks, the round part of a shield bubble and the room's edges; it flies through robots (never exploding on one). On touching a real player or anything solid (wall/block) it explodes via the shared [blast.ts](server/sprite/blast.ts) `detonate()` (also used by `Launcher`: kill radius with line-of-sight, shield immunity, shoves `Mana`, spawns the `Explosion`) with the smaller `ROCKET_KILL_RADIUS` 10 / `ROCKET_SHOVE_RADIUS` 20 — the blast hurts robots too; avatars lose 20% health from the blast (`damage` option, see "Health & ninja stars"), not from the touch. The room's edges and a shield bubble end it without exploding. Client-side, `Renderer.drawSprites` adds [rocketLight.ts](src/game/rocketLight.ts) to every `/projectiles/missile*` sprite — an additive flickering exhaust flame at the tail and a bright light on the tip (facing from the `L` art suffix) so rockets read against dark space. The 25-cell green
   `ShieldBubble` (art: `public/images/effects/bubble.png`, 248px) is clamped inside the room and also makes avatars inside it (`ShieldBubble.isCovered`) immune to `Launcher` blasts.
 - **Health & ninja stars**: `Avatar` (incl. `Robot`) has `health` (`MAX_HEALTH` 100). Rockets and ninja stars call `detonate()`
   with `damage: HIT_DAMAGE_PERCENT` (20), which makes it call `Avatar.takeDamage()` (small knockback, `needsRedraw`) instead of
@@ -206,7 +206,7 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
 - **Sleeping avatars** (Escape, closed tab or lost connection while alive): each `SocketHub` claims its `Session` on
   login (`Session.attach(hub)`) and releases it when its socket closes (`Session.detach(hub)` — ignored if a newer
   connection already took over, so a quick reattach/reload can't put the fresh session to sleep). Detaching calls
-  `Avatar.fallAsleep()` (clears run/slide; the avatar just stands, or finishes falling, and **stops animating**:
+  `Avatar.fallAsleep()` (clears run/slide; sleepers stay in the room indefinitely on purpose — only death or the planet removes them; the avatar just stands, or finishes falling, and **stops animating**:
   `animate()` is false, frozen on frame 0) and attaching calls `wakeUp()`. `UI.reactTo` ignores every key for a
   sleeping avatar except Space, which calls `wakeUp()` (the player, still spectating it, takes control again; the client
   leaves `'asleep'` mode when the flag drops from the next frame). A dead player has no avatar, so nothing sleeps. The flag rides the terse sprite entry's extra info as
@@ -247,6 +247,23 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   `ffmpeg -i media-src/IMU_FULL.mov -an -vf scale=360:640,fps=24 -c:v libx264 -profile:v main -pix_fmt yuv420p -crf 30 -preset slow -movflags +faststart public/videos/imu_full.mp4`
   and `... -c:v libvpx-vp9 -crf 38 -b:v 0 -row-mt 1 -cpu-used 4 public/videos/imu_full.webm`. The ad/contact slots between
   videos (see TODOS.md) are intentionally not built yet.
+- **Block-spitting flower** ([flower.ts](server/sprite/flower.ts), art in `public/images/flower/`): MainRoom hangs one from the
+  ceiling just right of the middle lamp (`FLOWER_PIXELS`). A ghost-layer, mass-0 `Sprite` (not a `Mana`) whose `doAction()` counts
+  down `SPIT_INTERVAL_FRAMES` (30s), then creates a random kind of block (`BLOCK_KINDS`, no purple) at its mouth and
+  fires it with the new `Mana.eject(vx, vy)` — like `launch()` but without the thrown flag, so a rainbow block doesn't shatter on
+  landing. Angle is uniform over the half circle below it, speed 1–3 cells/frame, and is picked one second ahead (`CHARGE_FRAMES`): the head
+  turns to face it using pre-drawn poses (`flower/charge/<deg>_1..2`, `flower/spit/<deg>`, every 15° from 0 = right through 90 = down to 180 =
+  left; the wire format only carries an image index, so a turn is a frame swap — regenerate the art if the head design changes) and the
+  block is created at the mouth for that angle (`HEAD_PIVOT`/`MOUTH_DISTANCE`, inside the flower's own box, so `isClear()` ignores the
+  flower rather than using `cellInit` clustering). A mouth that's occupied waits for a clear frame.
+  There is deliberately no cap on blocks in the room (to be addressed later). `MainRoom` passes `randomBlocks` as the flower's `spitsBlocks`, so `CELLWARZ_RANDOM_BLOCKS=off`
+  keeps it decorative for e2e. Client: a glow color in `glowColorForPath`, plus the flower's **roots and vines**
+  ([vines.ts](src/game/vines.ts)): `Cell.getVines()` (MainRoom only, `vines` in the full-state payload) gives the stem's x, the ceiling
+  wall's top/lower-face y, the x span (MainRoom: only the ceiling over the central opening, `CENTER_OPENING_PIXELS`, about one screen),
+  any `gaps` inside it (no wall, so nothing is drawn across them) and `noHanging` spans (flower, lamp fixtures); `VineField` grows
+  seeded-deterministic roots over the wall face — a dense knot of concentric arcs and fanning roots right above the stem, then strands
+  out to the span's ends — and hanging vines below it,
+  and `Renderer.drawSprites` draws the wall blocks first, then the vines, then everything else so actors stay on top. Cosmetic only.
 - **Cyberpunk look (all client-side, cosmetic)**: [neonSprites.ts](src/game/neonSprites.ts) re-skins art at load time
   with no new assets — wall tiles become dark steel with a neon rim, the red headband on every `/me/` frame is recolored
   and given a glow halo (cyan = local avatar, magenta = other players, red = robots; both avatars and robots use the
@@ -264,12 +281,15 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   [planet.ts](src/game/planet.ts)): `PlanetField` keeps one planet at a time crossing the room (random size/speed/
   height/direction/`seed`), stepped from `Cell.process()`, replaced by a new one once fully off the far side. It
   is not a `Sprite` (no grid presence/collision); its pull is applied each step to sprites whose
-  `isAffectedByPlanets()` is true (Avatar incl. Robot, every Mana subclass except the rainbow block) via ordinary `Physics.move`s with a
+  `isAffectedByPlanets()` is true (Avatar incl. Robot, every Mana subclass except the rainbow block, and `Diamond`) via ordinary `Physics.move`s with a
   per-sprite fractional accumulator, so walls/mass still block it. Range = 6 avatar heights from the surface,
   quadratic falloff, peak `MAX_PULL_PER_FRAME` = 0.55 grid units/frame at the surface (below gravity's 1, so outside
   the planet it never lifts anything); *inside* its disc the pull is a flat `INSIDE_PULL_PER_FRAME` = 1.2 (client
   pieces: `PLANET_PIECE_ACCEL_INSIDE`). An upward pull weaker than gravity is ignored to avoid floor jitter, so only the
-  inside pull can lift a sprite. A sprite whose centre gets within `CORE_RADIUS_FRACTION` (0.15) of the planet's radius from
+  inside pull can lift a sprite, so the planet's centre may go as low as `MAX_Y_FRACTION` = 93% of the room height: that lets its
+  disc reach MainRoom's bottom floor (surface at 96%), which is otherwise unreachable and where everything piles up. It is the
+  room's only cleanup, so anything that can multiply must be pullable or capped (the flower stops making rainbow blocks at
+  `MAX_RAINBOW_BLOCKS` = 10, since the planet ignores them; robots are not capped). A sprite whose centre gets within `CORE_RADIUS_FRACTION` (0.15) of the planet's radius from
   its centre is *swallowed*: `PlanetField` tracks it in `consuming`, `advanceConsumed()` slides it to the (moving)
   centre with `Physics.moveTo` over `CONSUME_FRAMES` (1s) while `Sprite.setConsumeScale()` goes 1 → 0 (and
   `Sprite.process()` skips `doAction()` so its own gravity/AI/input stop), then `Sprite.onConsumed()` runs
@@ -298,6 +318,11 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   reports `{ scored: n }` over the socket. The server (`Session.addBlocks`, `POINTS_PER_BLOCK`) keeps the
   authoritative per-user total, sent back as `score` in the full-state payload. The old top-left analyzer text
   was removed (`Analyzer` still exists but is no longer drawn).
+- **Crouch & look-down**: while grounded with Down held (`pressingDown`, not carrying a block), `Avatar.doAction` plays
+  `CROUCH_*_ACTION` (single frame `me/crouch[L].png`, made by cutting the thigh rows out of `stand1` — same frame size and
+  red headband so `neonSprites` tints it like every `/me/` frame; hitbox unchanged). Client-side, `Renderer.onLocalKey`
+  feeds Down into [lookDown.ts](src/game/lookDown.ts), which after 250ms scrolls the camera down up to a quarter of the window
+  height (cosmetic only; `computeCameraOffset` adds it for alive players only and the base `lastCameraCenter` excludes it).
 - **Stand animation already exists**: `Avatar`'s `STAND_LEFT_ACTION`/`STAND_RIGHT_ACTION` already cycle through
   6 art frames (`me/stand1..6`) at `Engine.QUARTER_STEP` — there's no "frozen idle" gap to fill.
 
@@ -360,7 +385,10 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   *second* browser context (see the red-block spec).
   A `Robot` that is blocked by a solid obstacle stands still (facing it) for `TURN_AROUND_PAUSE_FRAMES` (one second),
   then `Robot.turnAround()` reverses direction, and it keeps patrolling indefinitely — re-enabled via
-  `MainRoom.getNumRobots()` now that this is covered. **Robots are lethal**: every frame `Robot.killTouchedPlayers()`
+  `MainRoom.getNumRobots()` now that this is covered. A room whose `getNumRobots()` is positive is never left without
+  one: `Cell.keepARobotAround()` (from `Cell.process()`, checked once a second) warps a new `Robot` onto a random bare
+  floor spot ≥60 cells from real players when none is alive, and the client shows a warp burst for a robot sprite that
+  first appears in a redraw frame ([robotWarpIn.test.ts](server/__tests__/robotWarpIn.test.ts)). **Robots are lethal**: every frame `Robot.killTouchedPlayers()`
   kills any non-robot `Avatar` overlapping or directly adjacent to it (sides, top and bottom; knocked away from the
   robot), so a wandering robot can now kill an e2e spec's avatar — another reason for the keepout zone above.
   The victim is **assimilated**: `Robot.assimilate()` dies the avatar (knocked away) then spawns a new `Robot` at the

@@ -13,6 +13,9 @@ and no stepping stone hangs low enough above it to stop an avatar, so walking in
 specs hop over or onto them instead). Robots patrol back and forth, standing still for one
 second before turning around when blocked, killing any player they touch and shooting arcing rockets at players
 in range (they stop to take aim for a moment first, with no weapon animation) — see [robot.ts](server/sprite/robot.ts).
+The room is never left without one: once the last robot is gone (a check runs about once a second) a new one warps in
+at a random bare floor spot at least 60 grid cells from any real player, with a small warp burst on screen
+(see "Robots always around" below).
 
 ## Login room (the ship)
 
@@ -73,15 +76,15 @@ only for a callsign with a living avatar and wakes it where it sleeps)
 ## Avatar colours (headband and belt)
 
 1. In the login room pick a headband colour and a belt colour (`#headband-colors`, `#belt-colors`): a swatch row each
-   with a "default" swatch, a palette and a custom colour input. The avatar in the room changes at once. Picking
+   with a "default" swatch and a fixed palette (no custom colour input). The avatar in the room changes at once. Picking
    nothing keeps the old behaviour (cyan for you, magenta for other players); picking one part fills the other with cyan.
-2. Robot red cannot be chosen (the picker says "RED IS RESERVED FOR ROBOTS" and ignores it; the server rejects such a
-   look too and the player keeps the default colours).
+2. Robot red cannot be chosen: the palette has no red, and the server rejects such a look anyway (the player keeps the
+   default colours). A saved choice that is no longer in the palette is forgotten.
 3. The colours are sent when entering the game, stored on the player's session (they survive respawns) and shown on the
    avatar to everyone: full-state payloads carry `looks` (name → [headband, belt]) and a one-shot `{ looks }` message
    goes out whenever anyone's colours change. Robots (including an assimilated player's robot body) stay red.
 
-**Covered by**: [e2e/login-room.spec.ts](e2e/login-room.spec.ts) (picking, red rejected, another player sees them),
+**Covered by**: [e2e/login-room.spec.ts](e2e/login-room.spec.ts) (picking, another player sees them),
 [server/__tests__/look.test.ts](server/__tests__/look.test.ts), [server/__tests__/socketHubLogin.test.ts](server/__tests__/socketHubLogin.test.ts),
 [server/__tests__/session.test.ts](server/__tests__/session.test.ts) and [src/game/__tests__/look.test.ts](src/game/__tests__/look.test.ts) /
 [neonSprites.test.ts](src/game/__tests__/neonSprites.test.ts). The baked pixel colours are manual-only.
@@ -107,6 +110,8 @@ only for a callsign with a living avatar and wakes it where it sleeps)
    It takes no input until its player wakes it (Space while spectating it) or reattaches.
 3. When the player reattaches (WAKE UP) the avatar wakes up: the lean and the Zs stop. (A dead player has no
    avatar left, so nothing sleeps.)
+4. A sleeping avatar stays in the room indefinitely (it shows the game is being played); the only things that remove it
+   are a death or the planet swallowing it (see "Gas giant planet").
 
 **Covered by**: [e2e/login.spec.ts](e2e/login.spec.ts) (second browser context watches the sleeper) and
 [server/__tests__/session.test.ts](server/__tests__/session.test.ts) / [src/game/__tests__/sleepZs.test.ts](src/game/__tests__/sleepZs.test.ts).
@@ -132,8 +137,15 @@ message, which would otherwise take a minute) and the server side in
 4. Pressing Up up to ~6 frames (an eighth of a second) after walking off a ledge still jumps (coyote time), and
    pressing Up up to ~6 frames before landing queues the jump to fire the instant you land (jump buffering) —
    both are forgiveness-only and never change the jump's height or arc.
+5. **Crouch**: holding Down while standing on the ground (not carrying a block, which Down puts down instead) shows the
+   avatar crouching (`me/crouch` art, also while running; in mid-air nothing changes). It is purely a pose — the
+   avatar's size and collision are unchanged — and it ends when Down is released.
+6. **Looking down**: after Down has been held for a quarter of a second the camera starts scrolling down, up to a
+   quarter of the screen height below the avatar, and glides back once Down is released (a quick tap does not move it). Purely visual; it
+   does not apply while spectating.
 
-**Covered by**: [e2e/movement.spec.ts](e2e/movement.spec.ts) (run right); jump, gravity/collision physics, variable
+**Covered by**: [e2e/movement.spec.ts](e2e/movement.spec.ts) (run right), [e2e/main-room-workflows.spec.ts](e2e/main-room-workflows.spec.ts)
+(crouch pose and camera scroll), [src/game/__tests__/lookDown.test.ts](src/game/__tests__/lookDown.test.ts) (scroll timing and limit); jump, gravity/collision physics, variable
 jump height, coyote time, and jump buffering are covered at the unit level in
 [server/__tests__/physics.test.ts](server/__tests__/physics.test.ts) and
 [server/__tests__/avatar.test.ts](server/__tests__/avatar.test.ts).
@@ -205,8 +217,8 @@ works, see below).
   of its centre dies (with a knockback away from the blast), unless a wall is in the way, and every block within 30
   cells is shot away from the blast (more strongly the closer it is). The red block is destroyed; a fireball plays
   (with a bang and a small screen shake that fades with distance).
-- **Green (shield)**: always wrapped in a big round protective bubble (a translucent green sphere, 31 cells — about
-  four avatars — across, centred on the block and following it, also while carried; kept inside the room when the
+- **Green (shield)**: always wrapped in a big round protective bubble (a translucent green sphere, 25 cells — about
+  three avatars — across, centred on the block and following it, also while carried; kept inside the room when the
   block is against an outer wall). The bubble blocks nothing physically, but rockets that enter it are destroyed and
   a red block's explosion can't kill anyone inside it (it doesn't stop robot touches).
 - **Purple (gravity)** (currently not placed in the room): pulls every other block within 36 cells toward itself (harder the closer they are) until they
@@ -295,6 +307,18 @@ message, the world continuing and the free camera after a real death are asserte
 [e2e/main-room-workflows.spec.ts](e2e/main-room-workflows.spec.ts); the client-side flash/shake/sound itself
 is manual-only (no automated assertions on canvas pixels or WebAudio output). Death by robot rocket is unit-tested
 only (robots are switched off in the e2e run).
+
+## Robots always around
+
+1. A room that is meant to have robots (every production room; the e2e run switches them off with `CELLWARZ_ROBOTS=off`)
+   is checked about once a second (`Cell.keepARobotAround`). If no live robot is left — all destroyed, or none yet — one
+   warps in at a random bare floor spot (the same kind of spot a teleporting player gets) that is at least 60 grid
+   cells from every real player. It then patrols like any robot. While at least one robot exists nothing is added, so
+   the room does not refill back to its starting number.
+2. Players see a small warp burst where the robot appears (cosmetic, manual check).
+
+**Covered by**: [server/__tests__/robotWarpIn.test.ts](server/__tests__/robotWarpIn.test.ts). Not in the browser tests:
+the e2e run switches robots off.
 
 ## Robot rockets
 
@@ -500,6 +524,44 @@ overlaps, chains reach the platform row above, floor 1 TVs lowered, MainRoom-onl
 [src/game/__tests__/tvs.test.ts](src/game/__tests__/tvs.test.ts) (cover-crop, on-screen culling, chain-link and chain-visibility math, random start time). The look
 of the screens is manual-only.
 
+## Block-spitting flower (and its roots)
+
+1. [MainRoom](server/cell/mainRoom.ts) has one [flower](server/sprite/flower.ts) hanging by its stem from the ceiling,
+   just right of the middle ceiling lamp (`FLOWER_PIXELS` in `mainRoom.ts`). It is scenery that nothing collides with,
+   drawn with a neon pink glow. Its bloom sways gently while idle.
+2. Every 30 seconds (counted from when the server starts) it spits one block out of its mouth: a random kind (yellow,
+   red, blue, green, orange or rainbow — no purple, matching the room's switched-off purple blocks) fired at a random
+   angle across the half circle below the flower and a random speed (1–3 cells per frame), so the blocks land (and
+   bounce/slide) all over the room instead of in one pile. A spat block is not a "throw" (a rainbow block doesn't
+   shatter on landing). The angle is picked a second beforehand: the head turns to face that way (one of 13 poses, every
+   15° from facing right through straight down to facing left, nearest to the real angle) and glows, the block
+   appears at the mouth and shoots out along that direction, and the head holds the open pose for half a second
+   before swinging back down.
+3. If something is in the way of the mouth, the spit waits and fires on the first clear frame. The planet cleans up
+   the other blocks (see "Gas giant planet") but ignores rainbow blocks, so the flower stops making them while 10 exist
+   in the room (the other kinds are still picked) and makes them again once one is gone.
+4. With `CELLWARZ_RANDOM_BLOCKS=off` (set by the Playwright run) the flower is still there but never spits, so the
+   deterministic specs don't get random blocks dropped on them.
+5. The flower's roots wrap the ceiling wall above it, and vines hang below it, but only over the stretch of ceiling above
+   the central opening through the platform rows (about one screen wide, `CENTER_OPENING_PIXELS`) — the rest of the
+   ceiling stays bare. Right above the flower is a thick knot of roots: concentric arcs that leave the wall's lower face on
+   one side of the stem, climb over it and come back down the other side, plus roots fanning up and out from the stem's
+   foot, all drawn over the wall blocks. Thinner strands then run out from the knot along the wall (at several heights,
+   with short side roots) to both ends of that stretch. Leafy vines hang from the wall's lower face along the stretch
+   (varied lengths, swaying gently, some tipped with a pink bud), except in front of the flower and the middle lamp's
+   fixture. Avatars are drawn over them. They are cosmetic only (they never block or touch anything), generated
+   identically on every client from the server's `vines` description (`Cell.getVines()`, sent in the full-state
+   payload; MainRoom only).
+
+**Covered by**: [e2e/flower.spec.ts](e2e/flower.spec.ts) (the flower sprite is at its fixed spot; roots and vines received, confined to the central stretch of ceiling),
+[src/game/__tests__/vines.test.ts](src/game/__tests__/vines.test.ts) (deterministic growth, the knot of arcs over the stem, roots inside the wall
+and reaching both ends of the stretch, none across gaps, hanging vines clear of gaps/flower/lamps, on-screen culling),
+[server/__tests__/mainRoomVines.test.ts](server/__tests__/mainRoomVines.test.ts) (the vine description) and
+[server/__tests__/flower.test.ts](server/__tests__/flower.test.ts) (30-second cadence, spit position, random angle and
+speed range, head turns toward the spit direction before the spit and holds that pose, block starts at the mouth, every block kind, the rainbow-block cap, not counted as a throw, waits for a clear mouth, decorative mode) plus
+[server/__tests__/mainRoomBlocks.test.ts](server/__tests__/mainRoomBlocks.test.ts) (placement beside the middle lamp;
+spits normally, quiet when random blocks are off). The look of the art and vines is manual-only.
+
 ## Gas giant planet
 
 1. [MainRoom](server/cell/mainRoom.ts) has one randomly generated gas giant with rings flying by in the background at
@@ -510,19 +572,23 @@ of the screens is manual-only.
    and as a separate `{ planet }` message when a new planet appears and every 2s as a drift correction (the flat
    redraw frames are untouched); clients extrapolate from its velocity in between.
 2. Within about 6 avatar heights (384px) of its surface, things are pulled toward it, harder the closer they get
-   (quadratic falloff): avatars/robots and every coloured block except the rainbow one, which ignores gravity (not ones being
+   (quadratic falloff): avatars/robots, uncollected diamonds and every coloured block except the rainbow one, which ignores gravity (not ones being
    carried) are moved on the server grid through normal physics, so walls and heavier things still block the pull
    and you can run or jump out of the weak outer edge. The pull is deliberately gentle outside the
    planet (about half of gravity even at its surface), so it drags things sideways/down but never lifts a sprite off
    the ground. Over the planet itself (anywhere within its disc) the pull is much stronger — stronger than normal
-   gravity, so it can drag a sprite up into it and quickly sends it to the core. The background tetromino pieces
+   gravity, so it can drag a sprite up into it and quickly sends it to the core. The planet's centre can be as low as
+   93% of the room's height, so on some passes its disc reaches the bottom floor and lifts whatever rests there
+   (blocks, diamonds, robots, sleeping avatars) — the planet is the room's cleanup. (The top platform row is still
+   rarely reached, and anything wedged where walls block the pull stays put.) The background tetromino pieces
    (client-side) fall toward it too (also harder over the planet), without being broken by it.
    Flying **rockets and ninja stars** are bent by it too: the same pull (scaled down to a gentle acceleration) steers their
    flight toward the planet, so a star no longer flies dead straight and a rocket's arc curves toward it. They aren't
    swallowed — they're short-lived and simply end as usual.
 3. Anything whose centre reaches the planet's core (the middle 15% of its radius) is swallowed: it slides into the
    exact centre while shrinking away over one second (as if being pulled off into the distance), and only when it
-   has vanished is it destroyed — a block is removed from the game, an avatar or robot dies (the usual death
+   has vanished is it destroyed — a block or diamond is removed from the game (a diamond swallowed next to you is not
+   "collected"),  an avatar or robot dies (the usual death
    effects and respawn). The server drives this (`consume scale` is sent as extra info `'2'` on the sprite's redraw
    entry and the client draws the sprite scaled around its centre; the avatar's name tag is hidden meanwhile). A
    tetromino piece reaching the core shrinks away the same way (client-side) and a new one appears elsewhere; it
@@ -534,7 +600,7 @@ Playwright config does this so its deterministic movement specs aren't shoved ar
 Playwright starts the server itself).
 
 **Covered by**: [server/__tests__/planet.test.ts](server/__tests__/planet.test.ts) (one planet at a time, respawn,
-range/falloff, stronger pull over the planet, bending rocket/ninja-star flight, walls blocking, lifting only inside the planet, shrink-then-destroy of avatars/mana, wire extra info, MainRoom-only),
+range/falloff, stronger pull over the planet, reaching the floor and swallowing a resting diamond, bending rocket/ninja-star flight, walls blocking, lifting only inside the planet, shrink-then-destroy of avatars/mana, wire extra info, MainRoom-only),
 [src/game/__tests__/planet.test.ts](src/game/__tests__/planet.test.ts),
 [src/game/__tests__/spaceBackground.test.ts](src/game/__tests__/spaceBackground.test.ts) (pieces pulled, not broken, shrunk away at the core),
 [src/game/__tests__/minimap.test.ts](src/game/__tests__/minimap.test.ts) and

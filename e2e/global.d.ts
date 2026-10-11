@@ -31,6 +31,7 @@ declare global {
         getPlayerOffset: () => { offsetX: number; offsetY: number; me: [number, number, number] | undefined };
         applyFullState: (data: Record<string, unknown>) => void;
         onLocalAvatarDeath: () => void;
+        vines?: { config: { rootX: number; faceY: number; minX: number; maxX: number }; roots: unknown[]; hanging: unknown[] };
         tvs: Array<{ x: number; y: number; width: number; height: number; chainTopY: number }>;
         tvScreens: { isPlaying: boolean; isShowingAd: boolean; hasSignal: boolean };
         planet?: { x: number; y: number; vx: number; vy: number; radius: number };

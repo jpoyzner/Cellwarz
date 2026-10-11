@@ -8,6 +8,7 @@ import type { World } from '../world';
 import { Avatar } from '../sprite/avatar';
 import { CellBlock } from '../sprite/cellBlock';
 import type { Entrance } from '../sprite/entrance';
+import { Flower } from '../sprite/flower';
 import { GravityBlock } from '../sprite/gravityBlock';
 import { Ice } from '../sprite/ice';
 import { Launcher } from '../sprite/launcher';
@@ -29,6 +30,11 @@ export const OUTER_WALL_SIZE = CellBlock.SIZE * 4;
 // Random-floor spawning (see addAvatarAtRandomFloor): how many spots to try, and how far (grid units) a robot must be.
 const RANDOM_FLOOR_ATTEMPTS = 400;
 const ROBOT_SAFE_DISTANCE = 24;
+
+// A room that is meant to have robots (getNumRobots() > 0) is checked this often (frames) and a robot warps in if none
+// are left; it never lands this close (grid units) to a real player.
+const ROBOT_CHECK_FRAMES = 48;
+const ROBOT_WARP_PLAYER_DISTANCE = 60;
 
 export type BackgroundKind = 'space' | 'station' | 'temple';
 
@@ -53,6 +59,28 @@ export interface Tv {
   chainTopY: number;
 }
 
+/** A horizontal pixel span. */
+export interface PixelSpan {
+  start: number;
+  end: number;
+}
+
+/**
+ * Cosmetic roots and vines (pixels) growing from one point on the ceiling wall: roots spread through the wall face
+ * between `topY` and `faceY` (the wall's lower face) out to `minX`/`maxX`, and vines hang from `faceY` into the room.
+ */
+export interface Vines {
+  rootX: number;
+  topY: number;
+  faceY: number;
+  minX: number;
+  maxX: number;
+  /** Stretches with no wall at all (the ceiling's wrap openings), which roots and vines skip. */
+  gaps: PixelSpan[];
+  /** Stretches of the ceiling where nothing hangs (the flower itself, lamp fixtures). */
+  noHanging: PixelSpan[];
+}
+
 export abstract class Cell {
   private readonly width: number;
   private readonly height: number;
@@ -60,6 +88,7 @@ export abstract class Cell {
   private readonly world: World;
   private readonly data: CellData;
   private engine!: Engine;
+  private robotCheckFrames = 0;
   // Multiple deposit points (spawn/warp-arrival) are supported; addAvatarAtEntrance picks one at random.
   protected entrances: Entrance[] = [];
   private readonly planets: PlanetField | undefined;
@@ -89,6 +118,7 @@ export abstract class Cell {
     RainbowBlock.init(this.data);
     Missile.init(this.data);
     NinjaStar.init(this.data);
+    Flower.init(this.data);
   }
 
   init(): Cell {
@@ -246,6 +276,32 @@ export abstract class Cell {
     return this.addAvatarAtEntrance(name);
   }
 
+  /** Rooms with robots are never left without one: once every robot is gone a new one warps in at a random bare floor spot. */
+  private keepARobotAround(): void {
+    if (this.getNumRobots() <= 0 || ++this.robotCheckFrames < ROBOT_CHECK_FRAMES) return;
+    this.robotCheckFrames = 0;
+    if (this.data.getSprites().some((sprite) => sprite instanceof Robot && !sprite.removed())) return;
+
+    const players = this.data.getSprites().filter((sprite): sprite is Avatar => sprite instanceof Avatar && !sprite.isRobot());
+    const xRange = this.width - OUTER_WALL_SIZE * 2 - Avatar.WIDTH;
+    const yRange = this.height - OUTER_WALL_SIZE * 2 - Avatar.HEIGHT;
+    if (xRange <= 0 || yRange <= 0) return;
+
+    for (let attempt = 0; attempt < RANDOM_FLOOR_ATTEMPTS; attempt++) {
+      const x = OUTER_WALL_SIZE + randomInt(xRange);
+      const y = this.findBareFloorTop(x, OUTER_WALL_SIZE + randomInt(yRange));
+      if (y === undefined) continue;
+      if (players.some((player) => Math.hypot(player.getX() - x, player.getY() - y) < ROBOT_WARP_PLAYER_DISTANCE)) continue;
+
+      try {
+        new Robot(x, y, true, this);
+        return;
+      } catch (e) {
+        if (!(e instanceof ClusteredInitException)) throw e;
+      }
+    }
+  }
+
   /** The top y an avatar at column `x` would stand at after falling from `startY` onto bare floor, if it can. */
   private findBareFloorTop(x: number, startY: number): number | undefined {
     for (let y = startY; y + Avatar.HEIGHT < this.height; y++) {
@@ -286,6 +342,8 @@ export abstract class Cell {
   }
 
   process(): void {
+    this.keepARobotAround();
+
     if (!this.planets) return;
 
     const physics = this.world.getPhysics();
@@ -340,6 +398,11 @@ export abstract class Cell {
   /** Purely cosmetic client-drawn lighting; lit avatars glow, unlit ones are left in the dark. */
   getLamps(): Lamp[] {
     return [];
+  }
+
+  /** Purely cosmetic client-drawn roots and vines creeping over the ceiling wall; none by default. */
+  getVines(): Vines | undefined {
+    return undefined;
   }
 
   /** Purely cosmetic client-drawn background TVs; the client picks and plays the video. */

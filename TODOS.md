@@ -2,17 +2,9 @@
 
 ## Core Gameplay
 
-- there should always be at least one robot in the main room, they should just warp in, in a random location when there are none left
-
-- give my avatar a crouching position if you press down. and if you hold down, the camera starts to scroll down temporarily up to half a screen away.
-
-- I want a flower attached near the top light in the middle that spits out mana blocks every 30 seconds and shoots them out at random angles so there is more of a chance for the blocks to be spread out to different places when they land.
-
 - make sure all blocks are working correctly (play around with them).
 
 - ask it to give any other proposals for discovery of how to play for people.
-
-- The planet is what basically does garbage cleanup so that the level does not get too full. Ask it if there are any gaps with this? Does the planet normally cover all areas given enough time, and can it pull everything that can increase in number in (so there is no "runaway" efffect on the amount of any item in the main room?
 
 - add more videos! (maybe landscape ones too?)
 

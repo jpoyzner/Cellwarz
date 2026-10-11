@@ -33,7 +33,9 @@ const SPEED_RANGE_PX_PER_SECOND = 40;
 // Rings reach about twice the radius on the client; spawning/despawning this many radii out keeps them fully off-screen.
 const OFFSCREEN_RADII = 3;
 const MIN_Y_FRACTION = 0.15;
-const MAX_Y_FRACTION = 0.8;
+// Low enough that the planet's centre can sit just above MainRoom's bottom floor (its surface is at 96% of the room's
+// height), so a sprite resting there can end up inside the planet's disc and be lifted — the only way to clean the floor.
+const MAX_Y_FRACTION = 0.93;
 const GRAVITY_RANGE_AVATAR_HEIGHTS = 6;
 // Grid units per frame at the planet's surface; falls off quadratically to nothing at the edge of the range. Kept
 // below 1 (ordinary gravity) so outside the planet the pull only gently drags sprites around and never lifts them.

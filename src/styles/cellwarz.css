@@ -121,15 +121,6 @@ body {
   box-shadow: 0 0 8px #fff;
 }
 
-.swatch-custom {
-  background: none;
-  border: 1px solid rgba(255, 255, 255, 0.35);
-  cursor: pointer;
-  height: 19px;
-  padding: 0;
-  width: 19px;
-}
-
 #login-notice {
   color: #ffae1a;
   font-size: 9px;

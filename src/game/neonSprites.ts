@@ -149,6 +149,7 @@ export function glowColorForPath(path: string): string | undefined {
   if (path.includes('/mana/gravity/')) return '#b45cff';
   if (path.includes('/mana/sticky/')) return '#ff9a2e';
   if (path.includes('/mana/rainbow/')) return '#ffffff';
+  if (path.includes('/flower/')) return '#ff4fd8';
   if (path.includes('/effects/bubble')) return '#3cff7a';
   if (path.includes('/effects/diamond')) return '#3aa8ff';
   if (path.includes('/effects/explosion/')) return '#ff7a29';

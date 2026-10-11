@@ -118,16 +118,16 @@ test('headband and belt colours are chosen in the login room and worn in the gam
   const watcherName = `watcher-${Date.now()}`;
   await page.goto('/');
   await page.locator('#loginName').fill(name);
-  await page.locator('#headband-colors [data-color="#3cff7a"]').click();
+  await page.locator('#headband-colors [data-color="#b45cff"]').click();
   await page.locator('#belt-colors [data-color="#ff2ea6"]').click();
 
   // The avatar in the room wears them straight away.
-  expect(await page.evaluate(() => window.__cellwarzLogin!.room.look)).toEqual({ headband: '#3cff7a', belt: '#ff2ea6' });
+  expect(await page.evaluate(() => window.__cellwarzLogin!.room.look)).toEqual({ headband: '#b45cff', belt: '#ff2ea6' });
   await page.locator('#teleport').click();
   await waitForAvatar(page, name);
   await expect
     .poll(() => page.evaluate((n) => window.__cellwarz!.renderer.looks[n], name))
-    .toEqual(['#3cff7a', '#ff2ea6']);
+    .toEqual(['#b45cff', '#ff2ea6']);
 
   const watcherContext = await browser.newContext();
   const watcherPage = await watcherContext.newPage();
@@ -136,25 +136,10 @@ test('headband and belt colours are chosen in the login room and worn in the gam
     await waitForAvatar(watcherPage, name);
     await expect
       .poll(() => watcherPage.evaluate((n) => window.__cellwarz!.renderer.looks[n], name))
-      .toEqual(['#3cff7a', '#ff2ea6']);
+      .toEqual(['#b45cff', '#ff2ea6']);
     // The watcher picked nothing, so they wear the defaults.
     expect(await watcherPage.evaluate((n) => window.__cellwarz!.renderer.looks[n], watcherName)).toBeUndefined();
   } finally {
     await watcherContext.close();
   }
-});
-
-test('robot red cannot be picked for the headband or belt', async ({ page }) => {
-  await page.goto('/');
-
-  await page.locator('#headband-colors input[type="color"]').fill('#ff0000');
-  await expect(page.locator('#login-notice')).toContainText('RED IS RESERVED FOR ROBOTS');
-  expect(await page.evaluate(() => window.__cellwarzLogin!.room.look)).toBeNull();
-
-  await page.locator('#belt-colors input[type="color"]').fill('#ff2040');
-  await expect(page.locator('#login-notice')).toContainText('RED IS RESERVED FOR ROBOTS');
-  expect(await page.evaluate(() => window.__cellwarzLogin!.room.look)).toBeNull();
-
-  await page.locator('#headband-colors input[type="color"]').fill('#00aaff');
-  expect(await page.evaluate(() => window.__cellwarzLogin!.room.look)).toEqual({ headband: '#00aaff', belt: '#00f6ff' });
 });

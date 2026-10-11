@@ -1,10 +1,11 @@
 import type { World } from '../world';
 import { Cell, OUTER_WALL_SIZE } from './cell';
-import type { BackgroundKind, Lamp, Tv } from './cell';
+import type { BackgroundKind, Lamp, Tv, Vines } from './cell';
 import { ClusteredInitException } from '../errors';
 import { CellData } from '../cellData';
 import { Avatar } from '../sprite/avatar';
 import { CellBlock } from '../sprite/cellBlock';
+import { Flower } from '../sprite/flower';
 import { Launcher } from '../sprite/launcher';
 import { Mana } from '../sprite/mana';
 import { Portal } from '../sprite/portal';
@@ -17,6 +18,9 @@ import { Wall } from '../sprite/wall';
 const HOLE_LEFT = 190;
 const HOLE_RIGHT = 310;
 const ROW_Y = [40, 100, 160];
+// The central opening through the platform rows, in pixels: roughly one screen wide, and the stretch of ceiling above
+// it is where the flower's roots and vines live.
+export const CENTER_OPENING_PIXELS = { left: HOLE_LEFT * CellData.ANIMATION_STEP, right: HOLE_RIGHT * CellData.ANIMATION_STEP } as const;
 const STONE_LENGTH = 5;
 const LEFT_COLUMN_X = 210;
 const MID_LEFT_COLUMN_X = 230;
@@ -107,6 +111,19 @@ export const WRAP_OPENING_PIXELS = {
 // Lamps are evenly spaced; each beam is narrower than the spacing so dark gaps remain on the floor to hide in.
 const LAMP_COUNT = 5;
 const LAMP_FLOOR_HALF_WIDTH_PX = 300;
+// Half the width kept clear around a lamp's hanging fixture (about 18px either side, plus a margin).
+const LAMP_FIXTURE_CLEARANCE_PX = 32;
+
+// The block-spitting flower hangs from the ceiling with its stem just right of the middle lamp's fixture (which is
+// ~36px wide): the stem is at the middle of the (wide enough to turn its head either way) sprite.
+const MIDDLE_LAMP_X_PX = (ROOM_WIDTH_PX * (Math.floor(LAMP_COUNT / 2) + 0.5)) / LAMP_COUNT;
+const FLOWER_X = Math.round(MIDDLE_LAMP_X_PX / CellData.ANIMATION_STEP) + 10 - Flower.WIDTH / 2;
+export const FLOWER_PIXELS = {
+  x: FLOWER_X * CellData.ANIMATION_STEP,
+  y: OUTER_WALL_SIZE * CellData.ANIMATION_STEP,
+  width: Flower.WIDTH * CellData.ANIMATION_STEP,
+  height: Flower.HEIGHT * CellData.ANIMATION_STEP,
+} as const;
 
 // Background TVs match the vertical source video's 9:16 shape and hang by two chains from the platform row directly
 // above them: the outer two on floor 3, and two on the ground floor (floor 1), lowered an avatar height below center.
@@ -164,6 +181,27 @@ export class MainRoom extends Cell {
     }));
   }
 
+  /** The flower's roots and vines: confined to the stretch of ceiling over the central opening (about one screen wide),
+   * with nothing hanging in front of the flower or the lamp fixtures. */
+  override getVines(): Vines {
+    const step = CellData.ANIMATION_STEP;
+    const { left, right } = CENTER_OPENING_PIXELS;
+    const overlapsSpan = (span: Span): boolean => span.start * step < right && span.end * step > left;
+
+    return {
+      rootX: FLOWER_PIXELS.x + FLOWER_PIXELS.width / 2,
+      topY: 0,
+      faceY: OUTER_WALL_SIZE * step,
+      minX: left,
+      maxX: right,
+      gaps: VERTICAL_WRAP_OPENINGS.filter(overlapsSpan).map((span) => ({ start: span.start * step, end: span.end * step })),
+      noHanging: [
+        { start: FLOWER_PIXELS.x, end: FLOWER_PIXELS.x + FLOWER_PIXELS.width },
+        ...this.getLamps().map((lamp) => ({ start: lamp.x - LAMP_FIXTURE_CLEARANCE_PX, end: lamp.x + LAMP_FIXTURE_CLEARANCE_PX })),
+      ],
+    };
+  }
+
   override getTvs(): Tv[] {
     return TV_BANDS.flatMap(([hangRow, bottomRow, drop, centers]) => {
       const bandTop = (hangRow + CellBlock.SIZE) * CellData.ANIMATION_STEP;
@@ -190,9 +228,9 @@ export class MainRoom extends Cell {
     return true;
   }
 
-  // Set CELLWARZ_RANDOM_BLOCKS=off to leave out the randomly scattered blocks (the fixed test fixtures stay), and
-  // CELLWARZ_ROBOTS=off to leave out the robots: both would otherwise shove, kill or shoot the avatars of the
-  // deterministic e2e specs at random (the Playwright run sets them).
+  // Set CELLWARZ_RANDOM_BLOCKS=off to leave out the randomly scattered blocks and stop the flower spitting more
+  // (the fixed test fixtures stay), and CELLWARZ_ROBOTS=off to leave out the robots: both would otherwise shove, kill
+  // or shoot the avatars of the deterministic e2e specs at random (the Playwright run sets them).
   private readonly randomBlocks = process.env.CELLWARZ_RANDOM_BLOCKS !== 'off';
   private readonly robots = process.env.CELLWARZ_ROBOTS !== 'off';
 
@@ -247,6 +285,7 @@ export class MainRoom extends Cell {
     this.buildStargatePortals(width);
     this.buildSpawnPortal(width, floorY);
     this.buildTestFixtures(floorY);
+    this.buildFlower();
     this.buildPickupsAndRobots();
 
     return this;
@@ -362,6 +401,16 @@ export class MainRoom extends Cell {
   private buildSpawnPortal(width: number, floorY: number): void {
     try {
       this.entrances.push(new SpawnPortal(width / 2 - SpawnPortal.WIDTH / 2, floorY - SpawnPortal.HEIGHT - SPAWN_PORTAL_GAP, true, this));
+    } catch (e) {
+      if (!(e instanceof ClusteredInitException)) throw e;
+    }
+  }
+
+  /** The flower on the ceiling by the middle lamp. Like the scattered blocks, the blocks it spits are random, so the
+   * deterministic e2e run (CELLWARZ_RANDOM_BLOCKS=off) gets a flower that stays quiet. */
+  private buildFlower(): void {
+    try {
+      new Flower(FLOWER_X, OUTER_WALL_SIZE, true, this, this.randomBlocks);
     } catch (e) {
       if (!(e instanceof ClusteredInitException)) throw e;
     }

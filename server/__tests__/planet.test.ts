@@ -6,6 +6,7 @@ import { PlanetField } from '../planet';
 import { Physics } from '../physics';
 import { getSprites } from '../jsonGenerator';
 import { Avatar } from '../sprite/avatar';
+import { Diamond } from '../sprite/diamond';
 import { Ice } from '../sprite/ice';
 import { CellBlock } from '../sprite/cellBlock';
 import { Missile } from '../sprite/missile';
@@ -65,7 +66,7 @@ describe('PlanetField', () => {
     expect(right.vx).toBeLessThan(0);
     expect(right.x).toBeGreaterThan(1000);
     expect(left.y).toBeGreaterThanOrEqual(0.15 * 800);
-    expect(left.y).toBeLessThanOrEqual(0.8 * 800);
+    expect(left.y).toBeLessThanOrEqual(0.93 * 800);
   });
 
   it('pulls an avatar within 6 avatar heights of the surface toward the planet', () => {
@@ -206,6 +207,24 @@ describe('PlanetField', () => {
       for (let i = 0; i < FRAMES; i++) field.advanceConsumed(physics);
 
       expect(ice.removed()).toBe(true);
+    });
+
+    it('lifts a diamond resting on the floor into the core and removes it', () => {
+      const { cell, physics } = createScene(200, 160);
+      Diamond.init(cell.getCellData());
+      for (let x = 0; x < 200; x += 2) new CellBlock(x, 140, false, cell);
+      const diamond = new Diamond(100, 138, 0, 0, cell);
+      expect(diamond.isAffectedByPlanets()).toBe(true);
+      // Centre 120px above the floor's surface (1120px), well within the planet's 150px radius.
+      const { field } = parkedField(diamond.getXPixels() + 8, 1000);
+
+      for (let i = 0; i < FPS * 5 && !diamond.removed(); i++) {
+        diamond.process();
+        field.applyPull(diamond, physics);
+        field.advanceConsumed(physics);
+      }
+
+      expect(diamond.removed()).toBe(true);
     });
 
     it('does not swallow a sprite that only gets close to the surface', () => {

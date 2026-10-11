@@ -9,6 +9,8 @@ import { addAction } from './frames';
 
 const FRAME_COUNT = 6;
 export const DIAMONDS_PER_BLOCK = 5;
+// The planet leaves rainbow blocks alone, so the flower stops making them once this many are in the room.
+export const MAX_RAINBOW_BLOCKS = 10;
 const DIAMOND_SPREAD = 0.9;
 const DIAMOND_LIFT = 0.9;
 

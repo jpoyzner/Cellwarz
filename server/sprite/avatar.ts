@@ -22,6 +22,8 @@ export const FLOAT_RIGHT_ACTION = 'float_right';
 export const FLOAT_LEFT_ACTION = 'float_left';
 export const LAND_RIGHT_ACTION = 'land_right';
 export const LAND_LEFT_ACTION = 'land_left';
+export const CROUCH_RIGHT_ACTION = 'crouch_right';
+export const CROUCH_LEFT_ACTION = 'crouch_left';
 
 const RUN_STEP_DISTANCE = 1;
 const JUMP_DISTANCE = 1;
@@ -104,6 +106,8 @@ export class Avatar extends Sprite {
     addAction(cellData, FLOAT_LEFT_ACTION, 'me/float', 1, true, Avatar.actionFrames);
     addAction(cellData, LAND_RIGHT_ACTION, 'me/land', 1, false, Avatar.actionFrames);
     addAction(cellData, LAND_LEFT_ACTION, 'me/land', 1, true, Avatar.actionFrames);
+    addAction(cellData, CROUCH_RIGHT_ACTION, 'me/crouch', 1, false, Avatar.actionFrames);
+    addAction(cellData, CROUCH_LEFT_ACTION, 'me/crouch', 1, true, Avatar.actionFrames);
   }
 
   constructor(name: string, x: number, y: number, cellInit: boolean, cell: Cell) {
@@ -146,7 +150,9 @@ export class Avatar extends Sprite {
       }
 
       if (grounded) {
-        if (this.xPower === Physics.NONE) {
+        if (this.pressingDown) {
+          this.setAnimationSequence(this.facingRight ? CROUCH_RIGHT_ACTION : CROUCH_LEFT_ACTION);
+        } else if (this.xPower === Physics.NONE) {
           this.setAnimationSequence(this.facingRight ? STAND_RIGHT_ACTION : STAND_LEFT_ACTION);
         } else {
           this.setAnimationSequence(this.facingRight ? RUN_RIGHT_ACTION : RUN_LEFT_ACTION);
@@ -507,7 +513,7 @@ export class Avatar extends Sprite {
     return true;
   }
 
-  /** Down: puts a carried block down, otherwise (while it stays held) lowers a yellow block this avatar stands on. */
+  /** Down: puts a carried block down, otherwise (while it stays held) crouches and lowers a yellow block this avatar stands on. */
   pressDown(): void {
     if (this.handledMana) this.putDownMana();
     else this.pressingDown = true;

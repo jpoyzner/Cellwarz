@@ -106,6 +106,37 @@ test.describe('MainRoom deterministic workflows', () => {
     expect(spawn.y).toBeGreaterThan(SPAWN_ENTRANCE_PIXELS.y);
   });
 
+  test('holding Down crouches the avatar and scrolls the camera down by up to a quarter of a screen, then it eases back', async ({ page }) => {
+    test.setTimeout(30000);
+    const loginName = `crouch-${Date.now()}`;
+
+    await login(page, loginName);
+    await waitForAvatar(page, loginName);
+    await page.locator('#canvas').click();
+    await waitUntilGrounded(page, loginName);
+
+    const imagePath = () =>
+      page.evaluate((name) => {
+        const renderer = window.__cellwarz!.renderer;
+        return renderer.imagePaths[renderer.sprites[renderer.avatars[name]][0]];
+      }, loginName);
+    const cameraOffsetY = () => page.evaluate(() => window.__cellwarz!.renderer.getPlayerOffset().offsetY);
+    const restingOffsetY = await cameraOffsetY();
+    expect(await imagePath()).not.toContain('/me/crouch');
+
+    await page.keyboard.down('ArrowDown');
+    await expect.poll(imagePath).toContain('/me/crouch');
+    // The camera starts scrolling after a moment and stops a quarter of a screen (the window height / 4) below where it was.
+    await expect.poll(async () => (await cameraOffsetY()) - restingOffsetY, { timeout: 5000 }).toBeGreaterThan(100);
+    const maxScroll = await page.evaluate(() => window.innerHeight / 4);
+    await page.waitForTimeout(1500);
+    expect(Math.abs((await cameraOffsetY()) - restingOffsetY - maxScroll)).toBeLessThan(2);
+
+    await page.keyboard.up('ArrowDown');
+    await expect.poll(imagePath).not.toContain('/me/crouch');
+    await expect.poll(async () => Math.abs((await cameraOffsetY()) - restingOffsetY), { timeout: 5000 }).toBeLessThan(2);
+  });
+
   test('the HUD shows the credits and diamonds counters, and no tool dashboard icons any more', async ({ page }) => {
     const loginName = `hud-${Date.now()}`;
     await login(page, loginName);

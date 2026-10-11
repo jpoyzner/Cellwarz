@@ -10,7 +10,7 @@ import { addAction } from './frames';
  * and anyone inside it is safe from blasts (see Launcher). The art is a circle filling the sprite's square.
  */
 export class ShieldBubble extends Sprite {
-  static readonly SIZE = 31;
+  static readonly SIZE = 25;
 
   private static readonly actionFrames = new Map<string, Frame[]>();
 

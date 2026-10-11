@@ -39,11 +39,11 @@ describe('look colours', () => {
 describe('saved login', () => {
   it('round-trips the name and colours', () => {
     stubStorage();
-    saveLogin({ name: 'neo', headband: '#3cff7a', belt: null });
-    expect(loadSavedLogin()).toEqual({ name: 'neo', headband: '#3cff7a', belt: null });
+    saveLogin({ name: 'neo', headband: '#b45cff', belt: null });
+    expect(loadSavedLogin()).toEqual({ name: 'neo', headband: '#b45cff', belt: null });
   });
 
-  it('starts blank when nothing is stored and ignores corrupt or red stored values', () => {
+  it('starts blank when nothing is stored and ignores corrupt, red or off-palette stored values', () => {
     stubStorage();
     expect(loadSavedLogin()).toEqual({ name: '', headband: null, belt: null });
 
@@ -52,5 +52,9 @@ describe('saved login', () => {
 
     stubStorage({ 'cellwarz.login': JSON.stringify({ name: 'x', headband: '#ff2040', belt: 5 }) });
     expect(loadSavedLogin()).toEqual({ name: 'x', headband: null, belt: null });
+
+    // A custom colour or the removed green swatch saved by an older version.
+    stubStorage({ 'cellwarz.login': JSON.stringify({ name: 'y', headband: '#123456', belt: '#3cff7a' }) });
+    expect(loadSavedLogin()).toEqual({ name: 'y', headband: null, belt: null });
   });
 });

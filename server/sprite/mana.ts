@@ -239,10 +239,15 @@ export abstract class Mana extends Sprite {
 
   /** Sends the block flying with the given velocity; its first impact afterwards counts as a throw landing. */
   launch(vx: number, vy: number): void {
+    this.eject(vx, vy);
+    this.thrownFlag = true;
+  }
+
+  /** Sends the block flying like launch(), but it isn't a throw: its landing triggers nothing (a rainbow block won't shatter). */
+  eject(vx: number, vy: number): void {
     this.body.stop();
     this.body.vx = vx;
     this.body.vy = vy;
-    this.thrownFlag = true;
   }
 
   isThrown(): boolean {

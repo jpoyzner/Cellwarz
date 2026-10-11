@@ -21,7 +21,6 @@ export const LOOK_PALETTE: readonly string[] = [
   '#ff9a2e',
   '#ffe83a',
   '#b6ff3c',
-  '#3cff7a',
   '#ffffff',
 ];
 
@@ -64,15 +63,15 @@ export interface SavedLogin {
 
 const STORAGE_KEY = 'cellwarz.login';
 
-/** The name and colours used last time, so coming back to the login room is one step; tolerant of anything stored. */
+/** The name and colours used last time, so coming back to the login room is one step; tolerant of anything stored (colours no longer in the palette are dropped). */
 export function loadSavedLogin(): SavedLogin {
   const saved: SavedLogin = { name: '', headband: null, belt: null };
 
   try {
     const parsed = JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? '{}') as Partial<SavedLogin>;
     if (typeof parsed.name === 'string') saved.name = parsed.name;
-    if (typeof parsed.headband === 'string' && isAllowedColor(parsed.headband)) saved.headband = parsed.headband;
-    if (typeof parsed.belt === 'string' && isAllowedColor(parsed.belt)) saved.belt = parsed.belt;
+    if (typeof parsed.headband === 'string' && LOOK_PALETTE.includes(parsed.headband)) saved.headband = parsed.headband;
+    if (typeof parsed.belt === 'string' && LOOK_PALETTE.includes(parsed.belt)) saved.belt = parsed.belt;
   } catch {
     // Storage unavailable or corrupt: start from the defaults.
   }

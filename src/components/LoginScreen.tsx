@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { isAllowedColor, LOOK_PALETTE, loadSavedLogin, resolveLook, saveLogin } from '../game/look';
+import { LOOK_PALETTE, loadSavedLogin, resolveLook, saveLogin } from '../game/look';
 import type { Look } from '../game/look';
 import { LoginRoom, PADS, ROOM_HEIGHT, ROOM_WIDTH } from '../game/loginRoom';
 import type { PadId } from '../game/loginRoom';
@@ -23,7 +23,6 @@ const READOUT_INTERVAL_MS = 250;
 const ARROW_KEYS: Record<string, 'left' | 'right' | 'jump'> = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'jump' };
 const LABEL_TOP = 262;
 const LABEL_WIDTH = PADS.teleport.halfWidth * 2;
-const CUSTOM_COLOR_FALLBACK = '#00f6ff';
 
 function fitScale(): number {
   return Math.min(window.innerWidth / ROOM_WIDTH, window.innerHeight / ROOM_HEIGHT, MAX_SCALE);
@@ -34,10 +33,9 @@ interface SwatchRowProps {
   title: string;
   value: string | null;
   onPick: (color: string | null) => void;
-  onRejected: () => void;
 }
 
-function SwatchRow({ id, title, value, onPick, onRejected }: SwatchRowProps) {
+function SwatchRow({ id, title, value, onPick }: SwatchRowProps) {
   return (
     <div className="swatch-row" id={id}>
       <span className="swatch-title">{title}</span>
@@ -59,13 +57,6 @@ function SwatchRow({ id, title, value, onPick, onRejected }: SwatchRowProps) {
           onClick={() => onPick(color)}
         />
       ))}
-      <input
-        type="color"
-        className="swatch-custom"
-        title="Custom colour"
-        value={value ?? CUSTOM_COLOR_FALLBACK}
-        onChange={(event) => (isAllowedColor(event.target.value) ? onPick(event.target.value) : onRejected())}
-      />
     </div>
   );
 }
@@ -163,7 +154,6 @@ export function LoginScreen({ onEnter }: LoginScreenProps) {
     saveLogin({ name: loginName, headband, belt });
   }, [loginName, headband, belt]);
 
-  const rejectColor = () => setNotice('RED IS RESERVED FOR ROBOTS');
   const padLeft = (pad: PadId) => PADS[pad].centerX - LABEL_WIDTH / 2;
 
   return (
@@ -187,8 +177,8 @@ export function LoginScreen({ onEnter }: LoginScreenProps) {
                 if (event.key === 'Enter') event.currentTarget.blur();
               }}
             />
-            <SwatchRow id="headband-colors" title="HEADBAND" value={headband} onPick={setHeadband} onRejected={rejectColor} />
-            <SwatchRow id="belt-colors" title="BELT" value={belt} onPick={setBelt} onRejected={rejectColor} />
+            <SwatchRow id="headband-colors" title="HEADBAND" value={headband} onPick={setHeadband} />
+            <SwatchRow id="belt-colors" title="BELT" value={belt} onPick={setBelt} />
             <div id="login-notice">{notice || 'WALK ONTO A TRANSPORTER (\u2190 \u2192 \u2191)'}</div>
           </div>
 

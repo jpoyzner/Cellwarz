@@ -307,6 +307,7 @@ export class SocketHub {
       worldHeight: cell.getMinCellHeight(),
       following: robotBody?.getCellIndex() ?? null,
       lamps: cell.getLamps(),
+      vines: cell.getVines() ?? null,
       tvs: cell.getTvs(),
       [PLANET_KEY]: planet ?? null,
       [SCORE_KEY]: score,

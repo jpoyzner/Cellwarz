@@ -1,5 +1,6 @@
 import type { Lamp } from './lamps';
 import type { Tv } from './tvs';
+import type { VinesConfig } from './vines';
 
 export type IncomingSprite = [number] | [number, number, number, Record<string, unknown>?];
 export type StoredSprite = [number, number, number];
@@ -31,6 +32,7 @@ export interface ConnectPayload {
   worldHeight: number;
   lamps: Lamp[];
   tvs?: Tv[];
+  vines?: VinesConfig | null;
   /** Sprite the camera follows once a robot has turned the local player into a robot (they have no avatar then). */
   following?: number | null;
   planet?: PlanetState | null;

@@ -55,6 +55,11 @@ export class Diamond extends Sprite {
     return true;
   }
 
+  // Uncollected diamonds would otherwise pile up forever, so the room's planet pulls them in like blocks.
+  override isAffectedByPlanets(): boolean {
+    return true;
+  }
+
   protected override doAction(): void {
     this.fall();
     this.slide();

@@ -2,6 +2,7 @@ import type { Analyzer } from './analyzer';
 import { AudioManager } from './audio';
 import { DiamondFlight } from './diamondFlight';
 import { drawLamps } from './lamps';
+import { VineField } from './vines';
 import type { Look } from './look';
 import { TvScreens } from './tvs';
 import type { Tv } from './tvs';
@@ -18,6 +19,7 @@ import { PostFx } from './postFx';
 import { LocalPredictor } from './prediction';
 import { SleepFaces } from './sleepFace';
 import { damageStage, HEALTH_KEY } from './damage';
+import { LOOK_DOWN_MAX_SCREEN_FRACTION, LookDown } from './lookDown';
 import { SleepZs, SLEEPING_KEY, sleepLean } from './sleepZs';
 import { SpaceBackground } from './spaceBackground';
 import type { TouchRect } from './spaceBackground';
@@ -106,6 +108,8 @@ export class Renderer {
   backgroundKind: BackgroundKind | undefined;
   lamps: Lamp[] = [];
   tvs: Tv[] = [];
+  /** The roots and vines over the ceiling wall, if the room has any (cosmetic; drawn right after the wall blocks). */
+  vines: VineField | undefined;
   /** The shared video behind every background TV (public so e2e can check it plays). */
   readonly tvScreens = new TvScreens();
   spaceBackground: SpaceBackground | undefined;
@@ -161,6 +165,8 @@ export class Renderer {
   private spectatorCamera: { x: number; y: number } | undefined;
   private lastCameraCenter: { x: number; y: number } | undefined;
   private readonly heldArrows = new Set<number>();
+  /** Camera peek below the avatar while Down is held (purely visual). */
+  private readonly lookDown = new LookDown();
   /** Called whenever the spectator mode changes, so the UI can show/hide its message. */
   onSpectatorChange: ((mode: SpectatorMode) => void) | undefined;
 
@@ -289,6 +295,8 @@ export class Renderer {
     // A sleeping avatar takes no orders, so don't move it on screen either; releases still go through.
     if (!(down && this.spectator === 'asleep')) this.predictor.setKey(keyCode, down);
 
+    if (keyCode === ARROW_DOWN) this.lookDown.setHeld(down && this.spectator === 'off');
+
     if (keyCode >= ARROW_LEFT && keyCode <= ARROW_DOWN) {
       if (!down) this.heldArrows.delete(keyCode);
       else if (this.spectator !== 'off') {
@@ -357,6 +365,7 @@ export class Renderer {
     this.setBackground(data.background, data.worldWidth, data.worldHeight);
     this.lamps = data.lamps ?? [];
     this.tvs = data.tvs ?? [];
+    this.vines = data.vines ? new VineField(data.vines) : undefined;
     this.setPlanet(data.planet);
     this.score = data.score ?? 0;
     this.updateScoreDisplay();
@@ -518,7 +527,7 @@ export class Renderer {
           this.onAvatarRemoved(spriteId, localSpriteId);
         }
         const removed = this.sprites[spriteId];
-        if (removed && this.diamondImages.has(removed[0])) this.onDiamondRemoved(spriteId, removed, localSpriteId);
+        if (removed && this.diamondImages.has(removed[0]) && !this.shrinks.has(spriteId)) this.onDiamondRemoved(spriteId, removed, localSpriteId);
         if (removed && this.minimap?.kindOf(removed[0]) === 'wall') this.minimap.invalidateWalls();
         delete this.sprites[spriteId];
         this.shrinks.delete(spriteId);
@@ -557,6 +566,11 @@ export class Renderer {
           this.avatars[avatarName] = spriteId;
         }
 
+      }
+
+      // A robot (an actor that never sends a name) showing up in a redraw frame has just warped into the room.
+      if (previousX === undefined && !extraInfo?.['0'] && this.minimap?.kindOf(imageIndex) === 'actor' && !avatarSpriteIds.has(spriteId)) {
+        this.particles.spawnWarp(x + 24, y + 32);
       }
 
       // A burning star sheds embers every update, so they hang along the whole arc it flew.
@@ -848,6 +862,8 @@ export class Renderer {
     this.offsetX = 0;
     this.offsetY = 0;
 
+    if (this.spectator !== 'off') this.lookDown.reset();
+
     if ((this.spectator === 'free' || this.spectator === 'asleep') && this.spectatorCamera) {
       this.me = undefined;
       this.centerCameraOn(this.spectatorCamera.x, this.spectatorCamera.y);
@@ -870,6 +886,7 @@ export class Renderer {
     const meY = rendered?.y ?? this.me[2];
 
     this.centerCameraOn(meX + 24, meY + 16);
+    if (this.spectator === 'off') this.offsetY += this.lookDown.update(this.lastDtMs, this.windowHeight * LOOK_DOWN_MAX_SCREEN_FRACTION);
   }
 
   private centerCameraOn(x: number, y: number): void {
@@ -879,7 +896,6 @@ export class Renderer {
   }
 
   private drawSprites(offsetX: number, offsetY: number): void {
-    const { ctx } = this.context;
     const playerSpriteIds = new Set(Object.values(this.avatars));
     const looksBySprite = new Map<string, Look>();
     for (const [name, [headband, belt]] of Object.entries(this.looks)) {
@@ -887,73 +903,88 @@ export class Renderer {
       if (spriteId !== undefined) looksBySprite.set(spriteId, { headband, belt });
     }
 
-    for (const spriteId of Object.keys(this.sprites)) {
-      const sprite = this.sprites[spriteId];
-      const index = sprite[0];
-      const image = this.context.images[index];
-      if (!image) continue;
+    // Wall blocks first, then the vines creeping over them, then everything else (avatars stay on top of the vines).
+    const isWall = (spriteId: string): boolean => this.imageKinds[this.sprites[spriteId][0]] === 'wall';
+    const spriteIds = Object.keys(this.sprites);
+    const draw = (spriteId: string): void => this.drawSprite(spriteId, offsetX, offsetY, playerSpriteIds, looksBySprite);
 
-      const rendered = this.smoothed.get(spriteId);
-      const x = (rendered?.x ?? sprite[1]) - offsetX;
-      const y = (rendered?.y ?? sprite[2]) - offsetY;
+    spriteIds.filter(isWall).forEach(draw);
+    this.drawVines(offsetX, offsetY);
+    spriteIds.filter((spriteId) => !isWall(spriteId)).forEach(draw);
+  }
 
-      const shrink = this.shrinks.get(spriteId);
-      if (shrink !== undefined) {
-        if (shrink <= 0.02) continue;
-        const centerX = x + image.width / 2;
-        const centerY = y + image.height / 2;
-        ctx.save();
-        ctx.translate(centerX, centerY);
-        ctx.scale(shrink, shrink);
-        ctx.translate(-centerX, -centerY);
-      }
+  private drawVines(offsetX: number, offsetY: number): void {
+    const { ctx, canvas } = this.context;
+    this.vines?.draw(ctx, offsetX, offsetY, canvas.width, canvas.height, performance.now());
+  }
 
-      const asleep = this.sleeping.has(spriteId);
-      if (asleep) {
-        // Slump forward around the feet, breathing slowly.
-        const feetX = x + image.width / 2;
-        const feetY = y + image.height;
-        ctx.save();
-        ctx.translate(feetX, feetY);
-        ctx.rotate(sleepLean(this.isFacingLeft(index), performance.now()));
-        ctx.translate(-feetX, -feetY);
-      }
+  private drawSprite(spriteId: string, offsetX: number, offsetY: number, playerSpriteIds: Set<string>, looksBySprite: Map<string, Look>): void {
+    const { ctx } = this.context;
+    const sprite = this.sprites[spriteId];
+    const index = sprite[0];
+    const image = this.context.images[index];
+    if (!image) return;
 
-      const kind = this.imageKinds[index];
-      let baked: BakedSprite | undefined;
-      if (kind === 'wall') {
-        baked = this.neon.wall(index, image);
-      } else if (kind === 'actor') {
-        const tint: ActorTint =
-          spriteId === this.localSpriteId ? 'local' : playerSpriteIds.has(spriteId) ? 'player' : 'robot';
-        baked = this.neon.actor(index, image, tint, looksBySprite.get(spriteId), damageStage(this.health.get(spriteId) ?? 100));
-      }
+    const rendered = this.smoothed.get(spriteId);
+    const x = (rendered?.x ?? sprite[1]) - offsetX;
+    const y = (rendered?.y ?? sprite[2]) - offsetY;
 
-      if (baked) {
-        ctx.drawImage(baked.source, x - baked.pad, y - baked.pad);
-      } else {
-        const glow = this.glowColors[index];
-        if (glow) {
-          ctx.shadowColor = glow;
-          ctx.shadowBlur = SPRITE_GLOW_BLUR_PX;
-        }
-        ctx.drawImage(image, x, y);
-        if (glow) ctx.shadowBlur = 0;
-      }
-
-      const path = this.imagePaths[index];
-      if (path && isRocketPath(path)) {
-        drawRocketLight(ctx, x, y, image.width, image.height, rocketFacesLeft(path), performance.now());
-      }
-
-      if (this.starImages.has(index)) drawStarFire(ctx, x, y, image.width, image.height, performance.now(), Number(spriteId) || 0);
-
-      if (asleep) {
-        this.sleepFaces.drawClosedEyes(ctx, image, x, y);
-        ctx.restore();
-      }
-      if (shrink !== undefined) ctx.restore();
+    const shrink = this.shrinks.get(spriteId);
+    if (shrink !== undefined) {
+      if (shrink <= 0.02) return;
+      const centerX = x + image.width / 2;
+      const centerY = y + image.height / 2;
+      ctx.save();
+      ctx.translate(centerX, centerY);
+      ctx.scale(shrink, shrink);
+      ctx.translate(-centerX, -centerY);
     }
+
+    const asleep = this.sleeping.has(spriteId);
+    if (asleep) {
+      // Slump forward around the feet, breathing slowly.
+      const feetX = x + image.width / 2;
+      const feetY = y + image.height;
+      ctx.save();
+      ctx.translate(feetX, feetY);
+      ctx.rotate(sleepLean(this.isFacingLeft(index), performance.now()));
+      ctx.translate(-feetX, -feetY);
+    }
+
+    const kind = this.imageKinds[index];
+    let baked: BakedSprite | undefined;
+    if (kind === 'wall') {
+      baked = this.neon.wall(index, image);
+    } else if (kind === 'actor') {
+      const tint: ActorTint =
+        spriteId === this.localSpriteId ? 'local' : playerSpriteIds.has(spriteId) ? 'player' : 'robot';
+      baked = this.neon.actor(index, image, tint, looksBySprite.get(spriteId), damageStage(this.health.get(spriteId) ?? 100));
+    }
+
+    if (baked) {
+      ctx.drawImage(baked.source, x - baked.pad, y - baked.pad);
+    } else {
+      const glow = this.glowColors[index];
+      if (glow) {
+        ctx.shadowColor = glow;
+        ctx.shadowBlur = SPRITE_GLOW_BLUR_PX;
+      }
+      ctx.drawImage(image, x, y);
+      if (glow) ctx.shadowBlur = 0;
+    }
+
+    const path = this.imagePaths[index];
+    if (path && isRocketPath(path)) {
+      drawRocketLight(ctx, x, y, image.width, image.height, rocketFacesLeft(path), performance.now());
+    }
+
+    if (this.starImages.has(index)) drawStarFire(ctx, x, y, image.width, image.height, performance.now(), Number(spriteId) || 0);
+
+    if (asleep) {
+      this.sleepFaces.drawClosedEyes(ctx, image, x, y);
+      ctx.restore();
+    }
+    if (shrink !== undefined) ctx.restore();
   }
 
   private drawAvatarsNames(offsetX: number, offsetY: number): void {

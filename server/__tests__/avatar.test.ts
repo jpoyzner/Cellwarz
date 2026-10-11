@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Avatar, FULL_JUMP_ACTION_LENGTH, HIT_DAMAGE_PERCENT } from '../sprite/avatar';
+import { Avatar, CROUCH_LEFT_ACTION, CROUCH_RIGHT_ACTION, FULL_JUMP_ACTION_LENGTH, HIT_DAMAGE_PERCENT, STAND_RIGHT_ACTION } from '../sprite/avatar';
 import { CellBlock } from '../sprite/cellBlock';
 import { Ice } from '../sprite/ice';
 import { Physics } from '../physics';
@@ -51,6 +51,36 @@ describe('Avatar', () => {
 
     expect(grounded.getY()).toBeLessThan(groundedYBefore);
     expect(airborne.getY()).toBeGreaterThan(airborneYBefore);
+  });
+
+  it('crouches while Down is held on the ground and stands up again on release', () => {
+    const { cell } = createTestScene(50, 50);
+    new CellBlock(10, 20, false, cell);
+    const avatar = new Avatar('crouching', 10, 12, false, cell);
+    avatar['doAction']();
+    expect(avatar.getAnimationSequence()).toBe(STAND_RIGHT_ACTION);
+
+    avatar.pressDown();
+    avatar['doAction']();
+    expect(avatar.getAnimationSequence()).toBe(CROUCH_RIGHT_ACTION);
+
+    avatar.runLeft();
+    avatar.pressDown();
+    avatar['doAction']();
+    expect(avatar.getAnimationSequence()).toBe(CROUCH_LEFT_ACTION);
+
+    avatar.stopRunning();
+    avatar.releaseDown();
+    avatar['doAction']();
+    expect(avatar.getAnimationSequence()).not.toBe(CROUCH_LEFT_ACTION);
+  });
+
+  it('does not crouch in mid-air', () => {
+    const { cell } = createTestScene(50, 50);
+    const avatar = new Avatar('falling', 10, 0, false, cell);
+    avatar.pressDown();
+    avatar['doAction']();
+    expect(avatar.getAnimationSequence()).not.toBe(CROUCH_RIGHT_ACTION);
   });
 
   it('picks up the block beneath it, and puts it back down', () => {

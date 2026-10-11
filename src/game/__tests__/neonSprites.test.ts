@@ -50,6 +50,7 @@ describe('neonSprites', () => {
     expect(glowColorForPath('/images/doors/entrance/idle1.png')).toBe('#ff2ea6');
     expect(glowColorForPath('/images/mana/shield/shield.png')).toBe('#3cff7a');
     expect(glowColorForPath('/images/effects/diamond.png')).toBe('#3aa8ff');
+    expect(glowColorForPath('/images/flower/idle1.png')).toBe('#ff4fd8');
     expect(glowColorForPath('/images/projectiles/missile.png')).toBe('#ff7a29');
     expect(glowColorForPath('/images/projectiles/star1.png')).toBe('#ff8a1f');
     expect(glowColorForPath('/images/blocks/blockC.png')).toBeUndefined();
