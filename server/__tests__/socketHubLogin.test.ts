@@ -87,6 +87,27 @@ describe('SocketHub login room connections', () => {
     expect(Object.keys(full.avatars as object)).toEqual(['seen']);
   });
 
+  it('sends a spectator the Disco-shard leaderboard up front, then again only when the ranking changes', () => {
+    const { hardlines, connect } = setup();
+    const player = connect();
+    player.message({ connect: true, login: 'ace', jump: true });
+    hardlines.get('ace')!.addBlocks(5);
+    const watcher = connect();
+
+    watcher.message({ connect: true, spectate: true });
+    expect(watcher.sent.filter((payload) => 'leaderboard' in payload)).toEqual([{ leaderboard: [['ace', 100]] }]);
+
+    watcher.sent.length = 0;
+    watcher.hub['leaderboardCheckedAt'] = 0;
+    watcher.hub.renderClient();
+    expect(watcher.sent.some((payload) => 'leaderboard' in payload)).toBe(false);
+
+    hardlines.get('ace')!.addBlocks(1);
+    watcher.hub['leaderboardCheckedAt'] = 0;
+    watcher.hub.renderClient();
+    expect(watcher.sent.filter((payload) => 'leaderboard' in payload)).toEqual([{ leaderboard: [['ace', 120]] }]);
+  });
+
   it('teleports a new login onto a random floor spot, stores its colours and tells everyone', () => {
     const { hardlines, room, connect } = setup();
     const player = connect();

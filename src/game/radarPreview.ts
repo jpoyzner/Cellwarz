@@ -5,6 +5,9 @@ const RECONNECT_DELAY_MS = 2000;
 const DELETED_CODE = -1;
 const AVATAR_NAME_KEY = '0';
 
+/** `[callsign, Disco shards]`: one row of the login screen's leaderboard, best first. */
+export type LeaderboardEntry = [string, number];
+
 export interface RadarCounts {
   pilots: number;
   robots: number;
@@ -20,6 +23,8 @@ export class RadarPreview {
   /** Player name -> sprite id, as in the game's Renderer (robots never send a name). */
   avatars: Record<string, string> = {};
   planet: PlanetState | undefined;
+  /** The top Disco-shard collectors; replaced (never mutated) whenever the server sends a new ranking. */
+  leaderboard: LeaderboardEntry[] = [];
 
   private readonly minimap: Minimap;
   private connection: WebSocket | undefined;
@@ -78,6 +83,8 @@ export class RadarPreview {
       this.applyFullState(data);
     } else if ('planet' in data) {
       this.setPlanet(data.planet as PlanetState | null);
+    } else if ('leaderboard' in data) {
+      this.leaderboard = Array.isArray(data.leaderboard) ? (data.leaderboard as LeaderboardEntry[]) : [];
     } else if (!('looks' in data) && !('diamonds' in data) && !data.died) {
       this.applyFrame(data);
     }

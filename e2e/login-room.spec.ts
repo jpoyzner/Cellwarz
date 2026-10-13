@@ -13,6 +13,8 @@ test('the login screen is a ship interior with your avatar, a TELEPORT transport
   await expect(page.locator('#teleport')).toHaveText('TELEPORT');
   await expect(page.locator('#wakeup')).toHaveCount(0);
   await expect(page.locator('#radar-canvas')).toBeVisible();
+  await expect(page.locator('#leaderboard')).toContainText('DISCO SHARDS');
+  await expect(page.locator('#desc')).toContainText('Disco shards');
   await expect(page.locator('#loginName')).toBeVisible();
   expect(await page.locator('#enter, #random').count()).toBe(0); // the old buttons are gone
 
@@ -151,6 +153,35 @@ test('the radar shows other players in the main room before you enter it', async
   } finally {
     await otherContext.close();
   }
+});
+
+test('the leaderboard under the callsign panel ranks the players with the most Disco shards', async ({ page }) => {
+  const name = `shiny-${Date.now()}`;
+  await page.goto('/');
+  await expect(page.locator('#leaderboard')).toBeVisible();
+
+  // Collect more shards than whoever leads now (the server may have been up a while), the way the game client reports
+  // shattered blocks: in reports of at most 100 blocks (20 shards each).
+  await expect
+    .poll(() => page.evaluate(() => Object.keys(window.__cellwarzLogin!.radar.sprites).length), { timeout: 5000 })
+    .toBeGreaterThan(100);
+  const leading = await page.evaluate(() => window.__cellwarzLogin!.radar.leaderboard[0]?.[1] ?? 0);
+  const blocks = Math.floor(leading / 20) + 1;
+  await page.evaluate(
+    ({ login, total }) => {
+      const socket = new WebSocket(`ws://${window.location.host}/socketrefresh`);
+      socket.onopen = () => {
+        socket.send(JSON.stringify({ connect: true, login, jump: true }));
+        for (let left = total; left > 0; left -= 100) socket.send(JSON.stringify({ scored: Math.min(left, 100) }));
+      };
+    },
+    { login: name, total: blocks },
+  );
+
+  const firstRow = page.locator('#leaderboard li').first();
+  await expect(firstRow.locator('.leader-name')).toHaveText(name, { timeout: 5000 });
+  await expect(firstRow.locator('.leader-shards')).toHaveText(String(blocks * 20));
+  expect(await page.locator('#leaderboard li').count()).toBeLessThanOrEqual(3);
 });
 
 test('headband and belt colours are chosen in the login room and worn in the game, where other players see them too', async ({ page, browser }) => {

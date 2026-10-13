@@ -7,6 +7,7 @@ import { parseLook } from './look';
 import { Session } from './session';
 import type { Cell } from './cell/cell';
 import { saveLatestRecording } from './recordingStore';
+import { topScores } from './leaderboard';
 
 const CONNECT_PARAM = 'connect';
 const INACTIVE_PARAM = 'inactive';
@@ -28,6 +29,8 @@ const RECORDING_PARAM = 'recording';
 const SCORE_KEY = 'score';
 const DIAMONDS_KEY = 'diamonds';
 const PLANET_KEY = 'planet';
+const LEADERBOARD_KEY = 'leaderboard';
+const LEADERBOARD_POLL_MS = 1000;
 // Clients extrapolate the planet from its velocity, so a periodic resync only has to correct small drift.
 const PLANET_RESYNC_MS = 2000;
 // Sanity cap on one report; a client reports a few blocks at a time.
@@ -49,6 +52,8 @@ export class SocketHub {
   private sentPlanetAt = 0;
   private sentDiamonds = 0;
   private sentLooksRevision = Session.looksRevision;
+  private sentLeaderboard = '';
+  private leaderboardCheckedAt = 0;
   /** A login-screen connection that only watches the main room (for the radar); it has no avatar or session. */
   private spectating = false;
 
@@ -103,6 +108,7 @@ export class SocketHub {
     this.spectating = true;
     this.cell = this.world.getZion().getRandomEngine().getCell();
     this.send(this.getCellState(this.cell));
+    this.sendLeaderboardIfChanged(true);
     this.startRendering();
   }
 
@@ -228,13 +234,28 @@ export class SocketHub {
     this.inactivityCount++;
   }
 
-  // Radar-only: the room's frames and planet, with no avatar, score or inactivity cut-off.
+  // Radar-only: the room's frames and planet (plus the leaderboard), with no avatar, score or inactivity cut-off.
   private renderSpectator(): void {
     const cell = this.cell;
     if (!cell) return;
 
     this.sendPlanetIfDue(cell);
+    this.sendLeaderboardIfChanged();
     this.send(getSprites(this.takeRedraws(cell), true));
+  }
+
+  // The login screen's top Disco-shard collectors: a one-shot message (not in the flat redraw frames), re-checked about once a second.
+  private sendLeaderboardIfChanged(force = false): void {
+    const now = Date.now();
+    if (!force && now - this.leaderboardCheckedAt < LEADERBOARD_POLL_MS) return;
+
+    this.leaderboardCheckedAt = now;
+    const leaderboard = topScores(this.world.getZion().getHardlines());
+    const serialized = JSON.stringify(leaderboard);
+    if (serialized === this.sentLeaderboard && !force) return;
+
+    this.sentLeaderboard = serialized;
+    this.send({ [LEADERBOARD_KEY]: leaderboard });
   }
 
   // Everyone's colours ride a one-shot message (not the flat redraw frames) and only when somebody's changed.

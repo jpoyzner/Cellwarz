@@ -42,6 +42,16 @@ body {
   width: 100%;
 }
 
+/* The avatar is drawn here, above the panels, so it walks in front of them; clicks fall through to what's below. */
+#ship-front-canvas {
+  height: 100%;
+  left: 0;
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  width: 100%;
+}
+
 .ship-overlay {
   height: 540px;
   left: 0;
@@ -150,6 +160,58 @@ body {
   50% {
     opacity: 0.45;
   }
+}
+
+#leaderboard {
+  height: 72px;
+  left: 330px;
+  padding: 6px 10px;
+  top: 360px;
+  width: 300px;
+}
+
+#leaderboard ol {
+  color: #8ff7ff;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  list-style: none;
+  margin: 3px 0 0;
+  padding: 0;
+}
+
+#leaderboard li {
+  align-items: baseline;
+  display: flex;
+  gap: 8px;
+  line-height: 16px;
+}
+
+#leaderboard .rank {
+  color: #ff2ea6;
+  flex: none;
+  width: 10px;
+}
+
+#leaderboard .leader-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#leaderboard .leader-shards {
+  color: #ffae1a;
+  flex: none;
+  font-weight: bold;
+}
+
+#leaderboard-empty {
+  color: rgba(143, 247, 255, 0.55);
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  margin-top: 10px;
+  text-align: center;
 }
 
 #radar {

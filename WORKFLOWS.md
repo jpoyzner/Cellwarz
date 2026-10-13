@@ -21,8 +21,8 @@ at a random bare floor spot at least 60 grid cells from any real player, with a 
 
 1. Load the site (the page title says "Cyberstation"; the welcome blurb opens "Welcome to the Cyberstation"); the login screen (`#login`) is the inside of a huge ship/rocket: a small room (`#ship-canvas`) with
    your own avatar in it (cyan headband and belt until you pick colours), a viewport onto space, a callsign field
-   (`#loginName`), headband/belt colour pickers, a short briefing (`#desc`: welcome blurb — no mention of hit counts — the controls clip and key caps,
-   see "Learning to play"), a block index (`#legend`, a strip set into the floor below the walking line) and a live radar (see "Login room — live
+   (`#loginName`), headband/belt colour pickers, a short briefing (`#desc`: welcome blurb — no mention of hit counts — which also says to shatter the drifting neon blocks to collect Disco shards, the controls clip and key caps,
+   see "Learning to play"), a Disco shards leaderboard (see "Login room — leaderboard"), a block index (`#legend`, a strip set into the floor below the walking line) and a live radar (see "Login room — live
    radar"). The room is scaled to fit the window.
 2. Walk the avatar with the Left/Right arrows and jump with Up (the arrow keys work even while the callsign field has
    focus; the room is client-only, nothing is sent to the server for it). A name tag shows the callsign over it.
@@ -73,6 +73,22 @@ only for a callsign with a living avatar and wakes it where it sleeps)
 
 **Covered by**: [e2e/login-room.spec.ts](e2e/login-room.spec.ts) (walls arrive before login; another player shows up),
 [server/__tests__/socketHubLogin.test.ts](server/__tests__/socketHubLogin.test.ts) and
+[src/game/__tests__/radarPreview.test.ts](src/game/__tests__/radarPreview.test.ts).
+
+## Login room — leaderboard
+
+1. A panel (`#leaderboard`, titled DISCO SHARDS · TOP 3) hangs under the space window in the middle of the room (your avatar is
+   drawn on a transparent canvas above the panels, `#ship-front-canvas`, so it walks in front of it). It lists the three players with the most **Disco shards** (the
+   score, see "Score"), best first, as rows `li` with a rank, the callsign (`.leader-name`) and the shard count
+   (`.leader-shards`). Players with no shards yet aren't listed; with nobody ranked it reads "NO SHARDS COLLECTED YET".
+2. It rides the radar's spectator connection: the server sends `{ leaderboard: [[callsign, shards], ...] }` once on
+   connect and again, as a one-shot message (not in the flat redraw frames), whenever the ranking changes (checked about
+   once a second). The ranking covers every player the server knows by callsign, in or out of the game; it lives in memory
+   like all scores.
+
+**Covered by**: [e2e/login-room.spec.ts](e2e/login-room.spec.ts) (panel present; a player who collects shards tops it),
+[server/__tests__/leaderboard.test.ts](server/__tests__/leaderboard.test.ts) (ranking),
+[server/__tests__/socketHubLogin.test.ts](server/__tests__/socketHubLogin.test.ts) (sent up front, then only on change) and
 [src/game/__tests__/radarPreview.test.ts](src/game/__tests__/radarPreview.test.ts).
 
 ## Learning to play (controls clip, block index, first-run prompts, death card)
@@ -652,7 +668,7 @@ Avatar/block pull and swallowing are unit-tested only; how the planet looks is m
 
 ## Score
 
-1. Each user has a score, shown in the top-right corner (`#score`, just the number, visually marked with a 🪩 disco ball emoji)
+1. Each user has a score — the game's money, called **Disco shards** — shown in the top-right corner (`#score`, just the number, visually marked with a 🪩 disco ball emoji)
    and starting at 0. A second score sits right under it (`#diamonds`, just the number, visually marked with a
    💎 emoji): the **blue diamonds** collected (see the rainbow block above).
 2. When *your* avatar breaks a background block (see "Space background"), the blocks burst outward, then fly
@@ -660,7 +676,8 @@ Avatar/block pull and swallowing are unit-tested only; how the planet looks is m
    so 80). Blocks broken by other players fly apart without scoring for you.
 3. The client reports collected blocks to the server (`scored` message), which keeps the authoritative total on
    the user's `Session`; it persists across death/respawn and reattach (the full-state payload carries `score`).
-   Scores are in-memory only, like all game state.
+   Scores are in-memory only, like all game state. The top three show on the login screen (see "Login room —
+   leaderboard").
 4. The old debug frame-stats text in the top-left corner has been removed.
 5. **Diamonds**: the first real player (not a robot) whose body touches a diamond collects it — this works for any
    avatar of that player, including after a warp, reattach or respawn. It disappears at your avatar, flies across the

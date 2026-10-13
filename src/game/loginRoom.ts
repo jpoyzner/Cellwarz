@@ -125,6 +125,8 @@ export class LoginRoom {
   constructor(
     private readonly canvas: HTMLCanvasElement,
     private readonly callbacks: LoginRoomCallbacks,
+    /** An optional transparent canvas stacked above the page's panels: the avatar is drawn there so it passes in front of them. */
+    private readonly frontCanvas?: HTMLCanvasElement,
   ) {
     for (const frame of AVATAR_FRAMES) {
       for (const suffix of ['', 'L']) {
@@ -149,6 +151,10 @@ export class LoginRoom {
     this.scale = scale;
     this.canvas.width = Math.round(ROOM_WIDTH * scale);
     this.canvas.height = Math.round(ROOM_HEIGHT * scale);
+    if (this.frontCanvas) {
+      this.frontCanvas.width = this.canvas.width;
+      this.frontCanvas.height = this.canvas.height;
+    }
   }
 
   get isBeaming(): boolean {
@@ -236,11 +242,23 @@ export class LoginRoom {
     this.drawViewport(ctx);
     this.drawFloor(ctx);
     for (const id of Object.keys(PADS) as PadId[]) this.drawPad(ctx, id);
-    this.drawAvatar(ctx, now);
-    this.drawParticles(ctx);
+    if (!this.frontCanvas) this.drawActor(ctx, now);
 
     ctx.restore();
     this.drawVignette(ctx);
+
+    const frontCtx = this.frontCanvas?.getContext('2d');
+    if (!frontCtx) return;
+
+    frontCtx.setTransform(this.scale, 0, 0, this.scale, 0, 0);
+    frontCtx.clearRect(0, 0, ROOM_WIDTH, ROOM_HEIGHT);
+    frontCtx.translate(shakeX, shakeY);
+    this.drawActor(frontCtx, now);
+  }
+
+  private drawActor(ctx: CanvasRenderingContext2D, now: number): void {
+    this.drawAvatar(ctx, now);
+    this.drawParticles(ctx);
   }
 
   private drawHull(ctx: CanvasRenderingContext2D): void {

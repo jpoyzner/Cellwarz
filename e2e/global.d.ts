@@ -54,6 +54,7 @@ declare global {
         sprites: Record<string, [number, number, number]>;
         hasLivingAvatar: (name: string) => boolean;
         counts: () => { pilots: number; robots: number };
+        leaderboard: Array<[string, number]>;
       };
     };
   }

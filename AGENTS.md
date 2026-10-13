@@ -334,6 +334,13 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   image path is under `/effects/explosion/` (bang, sparks, a distance-faded shake). New block/effect art lives under
   `public/images/{mana/*,effects}` (generated from the original yellow/red tile art by hue-shifting; frame names
   follow `addAction`: `name1..N`, mirrored frames get an `L` suffix).
+- **Disco shards leaderboard** (money = the score, shown on the login screen as "Disco shards"; the in-game HUD stays just
+  the 🪩 number): [leaderboard.ts](server/leaderboard.ts) `topScores()` ranks the `Zion` hardlines' scores (top 3, zeros left
+  out). It only goes to login-screen spectator connections, as a one-shot `{ leaderboard: [[name, shards], ...] }` message
+  (on connect, then on change, checked ~1s in `SocketHub.sendLeaderboardIfChanged`) — never in the flat redraw frames;
+  `RadarPreview.leaderboard` stores it and `LoginScreen`'s `#leaderboard` panel (under the viewport window) renders it. The login room draws its avatar/beam/particles on a second transparent canvas (`#ship-front-canvas`,
+  `LoginRoom`'s optional third constructor arg, `pointer-events: none`) stacked above the DOM panels so the avatar walks in
+  front of the leaderboard.
 - **Score** (top-right `#score` DOM element): when the *local* avatar shatters a background piece, its shards
   (`collect` shards in [spaceBackground.ts](src/game/spaceBackground.ts)) burst out, then home in on the HUD
   (converted to world coordinates by the camera offset) and are counted on arrival; `Renderer` adds 20/block and

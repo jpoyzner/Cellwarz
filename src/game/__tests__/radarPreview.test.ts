@@ -64,6 +64,27 @@ describe('RadarPreview', () => {
     expect(radar.counts()).toEqual({ pilots: 1, robots: 1 });
   });
 
+  it('keeps the latest leaderboard and does not mistake it for a redraw frame', () => {
+    radar.handleMessage(fullState());
+    expect(radar.leaderboard).toEqual([]);
+
+    radar.handleMessage({
+      leaderboard: [
+        ['alice', 120],
+        ['bob', 40],
+      ],
+    });
+    expect(radar.leaderboard).toEqual([
+      ['alice', 120],
+      ['bob', 40],
+    ]);
+    expect(Object.keys(radar.sprites)).not.toContain('leaderboard');
+    expect(radar.counts()).toEqual({ pilots: 1, robots: 1 });
+
+    radar.handleMessage({ leaderboard: [] });
+    expect(radar.leaderboard).toEqual([]);
+  });
+
   it('tracks the planet from the full state and its one-shot updates', () => {
     const planet = { id: 1, x: 10, y: 20, vx: 1, vy: 0, radius: 50, seed: 3 };
     radar.handleMessage(fullState({ planet }));

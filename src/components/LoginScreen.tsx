@@ -5,7 +5,7 @@ import { LoginRoom, PADS, ROOM_HEIGHT, ROOM_WIDTH } from '../game/loginRoom';
 import type { PadId } from '../game/loginRoom';
 import { ControlsDemo } from '../game/controlsDemo';
 import { RadarPreview } from '../game/radarPreview';
-import type { RadarCounts } from '../game/radarPreview';
+import type { LeaderboardEntry, RadarCounts } from '../game/radarPreview';
 
 declare global {
   interface Window {
@@ -89,10 +89,12 @@ export function LoginScreen({ onEnter }: LoginScreenProps) {
   const [belt, setBelt] = useState<string | null>(saved.belt);
   const [wakeAvailable, setWakeAvailable] = useState(false);
   const [counts, setCounts] = useState<RadarCounts | null>(null);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [notice, setNotice] = useState('');
   const [scale, setScale] = useState(fitScale);
 
   const shipCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const frontCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const radarCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const nameInputRef = useRef<HTMLInputElement | null>(null);
   const roomRef = useRef<LoginRoom | null>(null);
@@ -123,7 +125,7 @@ export function LoginScreen({ onEnter }: LoginScreenProps) {
         saveLogin({ name: nameRef.current, headband: chosenHeadband, belt: chosenBelt });
         onEnterRef.current(nameRef.current, pad === 'teleport', resolveLook(chosenHeadband, chosenBelt));
       },
-    });
+    }, frontCanvasRef.current ?? undefined);
     roomRef.current = room;
     room.setScale(fitScale());
     radar.start();
@@ -155,6 +157,7 @@ export function LoginScreen({ onEnter }: LoginScreenProps) {
     const readout = setInterval(() => {
       setWakeAvailable(radar.hasLivingAvatar(nameRef.current));
       setCounts(radar.counts());
+      setLeaderboard(radar.leaderboard);
     }, READOUT_INTERVAL_MS);
 
     return () => {
@@ -216,6 +219,20 @@ export function LoginScreen({ onEnter }: LoginScreenProps) {
             </div>
           </div>
 
+          <div id="leaderboard" className="ship-panel">
+            <div className="panel-title">DISCO SHARDS &middot; TOP 3</div>
+            <ol>
+              {leaderboard.map(([name, shards], index) => (
+                <li key={name}>
+                  <span className="rank">{index + 1}</span>
+                  <span className="leader-name">{name}</span>
+                  <span className="leader-shards">{shards}</span>
+                </li>
+              ))}
+            </ol>
+            {leaderboard.length === 0 && <div id="leaderboard-empty">NO SHARDS COLLECTED YET</div>}
+          </div>
+
           <div id="radar" className="ship-panel">
             <div className="panel-title">LIVE RADAR &middot; MAIN ROOM</div>
             <canvas id="radar-canvas" ref={radarCanvasRef} />
@@ -228,6 +245,7 @@ export function LoginScreen({ onEnter }: LoginScreenProps) {
             <p>
               Welcome to the Cyberstation, a multi-player, interactively creative, yet competitively destructive
               orbital cyberworld. Use the cyberblocks wisely, mind the gravity, and beware the robots: they will try to assimilate you.
+              Shatter the neon blocks drifting in the background to collect Disco shards.
             </p>
             <div id="controls">
               <canvas id="controls-demo" ref={demoCanvasRef} />
@@ -284,6 +302,7 @@ export function LoginScreen({ onEnter }: LoginScreenProps) {
             </button>
           )}
         </div>
+        <canvas id="ship-front-canvas" ref={frontCanvasRef} />
       </div>
     </div>
   );
