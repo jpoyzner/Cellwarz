@@ -137,7 +137,7 @@ test.describe('MainRoom deterministic workflows', () => {
     await expect.poll(async () => Math.abs((await cameraOffsetY()) - restingOffsetY), { timeout: 5000 }).toBeLessThan(2);
   });
 
-  test('the HUD shows the credits and diamonds counters, and no tool dashboard icons any more', async ({ page }) => {
+  test('the HUD shows the score and diamonds counters, and no tool dashboard icons any more', async ({ page }) => {
     const loginName = `hud-${Date.now()}`;
     await login(page, loginName);
     await waitForAvatar(page, loginName);

@@ -320,11 +320,8 @@ body {
 }
 
 #score::before {
-  color: #ff2ea6;
-  content: 'CREDITS ';
-  font-size: 12px;
-  letter-spacing: 0.2em;
-  text-shadow: 0 0 6px #ff2ea6;
+  content: '\1FAA9 ';
+  font-size: 20px;
   vertical-align: middle;
 }
 

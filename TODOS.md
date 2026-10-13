@@ -2,22 +2,21 @@
 
 ## INTEGRATION TO REAL SITE
 
-- use my DJ Recognize site to host cellwarz realtime multiplayers that can remember things if you sign up! Think about limiting chat to avoid hate, maybe just one emoji at a time as a speak bubble above, follows the avatar head perfectly.
+- need leaderboard for credits, and call them 
+
+- use my DJ Recognize site to host cellwarz realtime multiplayers that can remember things if you sign up!
 - add an "exit" transporter on login screen that takes you back to my website.
-- controls need to work on a phone and login screen updated to explain them
 - If persistence is ever needed (session/avatar state surviving a server restart), use a NoSQL store — no DB is in use today.
 - check for vulnerabilities, in case some dj asshole hacks into it.
 Show number of users, and show other users in a specific color.
-- speak with basic set of emojis (1 at a time, appearing in a speak bubble above the avatar, no country flags allowed). Maybe robots say SKULL emoji when they see you? Or other things they say to show how they think?...it will dissapear after 5 seconds
-- need to figure out mobile device controls
+- speak with basic set of emojis (1 at a time, appearing in a speak bubble above the avatar, no country flags allowed). Maybe robots say SKULL emoji when they see you? Or other things they say to show how they think?...it will dissapear after 5 seconds. Think about limiting chat to avoid hate, maybe just one emoji at a time as a speak bubble above, follows the avatar head perfectly.
+- need to figure out mobile device controls. controls need to work on a phone and login screen updated to explain them
 - will real users need passwords? yes. For now add a password box on the screen to protect you. if you forget it, too bad. If someone else logs into your avatar, all previous connections are dropped.
 
 ## Core Features
 
 - EXPLORE AUDIO.TS!!!!!!!!! IT USES A BASS NOTE SO WELL :) MAYBE IT IS TIME TO MAKE AI MUSIC WITH THIS!!!
 - Maybe make a room where people can collaborate on live music somehow!!! Maybe they play instruments synced together in the same room live!?! A realtime interactive DAW?
-
-- need leaderboard? For diamonds too? What do we use things for?
 
 - In main room: Near the top floating on a central platform is a DJ booth. Players can sign up and register a song/mix (first 1 hour of it max). that if they are first to sit at the DJ booth when no song is playing, they get to play it. (maybe have a max of 1 play per 4 hours or so?). The players can fight for this with blocks. Doors should be at the corners of the recatngle
 - When a song or DJ set is on, they all put on headphones, but you can switch back to regular game sounds. Make it so that they can for now put on headphones and listen to my songs? Little notes should be coming out of the headphones...

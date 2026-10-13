@@ -527,7 +527,7 @@ bottom-to-top wrap).
 5. Art is re-skinned on the client at load time: wall tiles become dark steel with a neon rim, every avatar's
    headband glows (cyan for you, magenta for other players, red for robots), and portals/pickups/projectiles get a
    neon glow. The whole frame gets a light bloom, plus a CRT scanline/vignette overlay (`#crt`). The HUD uses a
-   monospace neon style (score is labelled CREDITS and briefly digit-scrambles when it changes; the minimap is
+   monospace neon style (score is marked with a 🪩 disco ball emoji and briefly digit-scrambles when it changes; the minimap is
    labelled MAIN ROOM; the login screen is styled as a terminal).
 6. The original temple backdrop is kept as the default for non-MainRoom (e.g. future randomly generated) rooms.
 
@@ -652,7 +652,7 @@ Avatar/block pull and swallowing are unit-tested only; how the planet looks is m
 
 ## Score
 
-1. Each user has a score, shown in the top-right corner (`#score`, just the number, visually labelled CREDITS)
+1. Each user has a score, shown in the top-right corner (`#score`, just the number, visually marked with a 🪩 disco ball emoji)
    and starting at 0. A second score sits right under it (`#diamonds`, just the number, visually marked with a
    💎 emoji): the **blue diamonds** collected (see the rainbow block above).
 2. When *your* avatar breaks a background block (see "Space background"), the blocks burst outward, then fly
@@ -666,7 +666,7 @@ Avatar/block pull and swallowing are unit-tested only; how the planet looks is m
    avatar of that player, including after a warp, reattach or respawn. It disappears at your avatar, flies across the
    screen to the diamonds counter, and the counter goes up by one as it arrives (with a pickup blip). The server owns the count (`Session`), sends it as `diamonds`
    in the full-state payload and as a separate `{ diamonds }` one-shot message whenever it changes; it persists
-   across death/respawn and reattach like the credits.
+   across death/respawn and reattach like the score.
 
 **Covered by**: [e2e/space-background.spec.ts](e2e/space-background.spec.ts) (breaking a block adds 20 per block to
 the `#score` text), [src/game/__tests__/spaceBackground.test.ts](src/game/__tests__/spaceBackground.test.ts) (only

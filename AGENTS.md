@@ -290,7 +290,7 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   same `me/` art so each tint gets its own baked copy), and portals/pickups/projectiles get a `shadowBlur` glow chosen
   from the image path (`glowColorForPath`). [postFx.ts](src/game/postFx.ts) adds a downscaled bright-pass bloom to the
   whole frame and a short RGB-glitch burst on warp/death. A CSS `#crt` overlay (scanlines + vignette), a monospace
-  HUD (`CREDITS` score with a digit-scramble on change, `RADAR` minimap with a sweep bar) and the ship-room login
+  HUD (score marked with a 🪩 emoji via CSS `::before`, with a digit-scramble on change, `RADAR` minimap with a sweep bar) and the ship-room login
   screen are in [cellwarz.css](src/styles/cellwarz.css); [audio.ts](src/game/audio.ts) uses bitcrushed/filter-swept
   synth sounds plus a quiet synthwave ambient bed that starts on the first sound and is torn down by
   `AudioManager.dispose()` from `Renderer.stop()`. There is no gray "stale" screen any more: when the server stops
