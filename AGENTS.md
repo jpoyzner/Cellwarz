@@ -55,6 +55,18 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
 - **No chat**: player-to-player text chat was removed entirely (client input handling, `Cell.postMessage` /
   `MESSAGE_PARAM` on the server) — a different communication system will replace it later. Don't re-add it
   without an explicit request.
+- **Emoji bubbles**: number keys 0–9 (`server/ui.ts`, via `digitOfKey`/`NUMBER_EMOJIS` in [emoji.ts](server/emoji.ts), the
+  single place to change which emoji a digit shows; no flags/political ones) call `Avatar.showEmoji()`, which keeps one emoji
+  for `EMOJI_BUBBLE_FRAMES` (5s of sim time, ticked in `Avatar.process()`; both the start and the end set `needsRedraw`).
+  It rides the terse sprite entry's extra info as key `'5'` (like sleeping `'3'`/health `'4'`; full-state and redraw
+  frames), so a frame without it clears the bubble. `Renderer.emojis` (sprite id → emoji) is drawn by
+  [emojiBubble.ts](src/game/emojiBubble.ts) right on top of the head, with the name tag lifted above it. `Robot` uses the
+  same hook: `noticeNewPlayers()` (every `EIGHTH_STEP`) shows 💀 the first time it sees a player name (range
+  `SIGHT_RANGE`, line of sight via `canReach` from `blast.ts`), remembered per robot in `seenPlayers`. A dying player calls
+  `Avatar.noticePlayerDeath()` on every other avatar (a no-op except in `Robot`, which shows 💀 if within
+  `DEATH_NOTICE_RANGE` or in sight). `Robot.die()` scatters `DIAMONDS_PER_ROBOT` (50) diamonds (a planet swallowing a
+  robot, `onConsumed`, doesn't). Number keys toggle: pressing the digit whose emoji is already up calls `clearEmoji()`.
+  The login screen's `CONTROL_KEYS` lists "0-9 SAY AN EMOJI".
 - **Movement/jump feel** (`server/sprite/avatar.ts`): grid-discrete movement (still integer `CellData` units, no
   subpixel physics) plus three additive-only forgiveness mechanics layered on top of the original fixed-height
   jump: **variable jump height** (releasing the jump key cuts `yPower` down to `MIN_JUMP_ACTION_LENGTH`; holding

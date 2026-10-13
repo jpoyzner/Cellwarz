@@ -6,6 +6,7 @@ const AVATAR_NAME_KEY = '0';
 const CONSUME_SCALE_KEY = '2';
 const SLEEPING_KEY = '3';
 const HEALTH_KEY = '4';
+const EMOJI_KEY = '5';
 
 export type JsonSprite = [number] | [number, number, number] | [number, number, number, Record<string, unknown>];
 
@@ -33,6 +34,11 @@ export function getSprites(sprites: Sprite[], addExtraInfo: boolean): Record<str
       // Sleeping is sent in full-state payloads too (not just redraws) so a client joining mid-nap sees the Zs at once.
       if (sprite instanceof Avatar && sprite.isSleeping()) {
         extraInfo = { ...(extraInfo ?? {}), [SLEEPING_KEY]: 1 };
+      }
+
+      // An avatar's speech-bubble emoji rides along while it is up (also in full-state payloads, like sleeping).
+      if (sprite instanceof Avatar && sprite.getEmoji() !== undefined) {
+        extraInfo = { ...(extraInfo ?? {}), [EMOJI_KEY]: sprite.getEmoji() };
       }
 
       // A hurt avatar reports its remaining health percent (full health is left out), also in full-state payloads.

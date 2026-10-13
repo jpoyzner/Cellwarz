@@ -42,6 +42,7 @@ const CONTROL_KEYS = [
   { keys: ['\u2190', '\u2192'], action: 'RUN' },
   { keys: ['\u2191'], action: 'JUMP' },
   { keys: ['ENTER'], action: 'NINJA STAR' },
+  { keys: ['0-9'], action: 'SAY AN EMOJI' },
   { keys: ['ESC'], action: 'LEAVE' },
 ];
 
@@ -244,8 +245,8 @@ export function LoginScreen({ onEnter }: LoginScreenProps) {
           <div id="desc" className="ship-panel">
             <p>
               Welcome to the Cyberstation, a multi-player, interactively creative, yet competitively destructive
-              orbital cyberworld. Use the cyberblocks wisely, mind the gravity, and beware the robots: they will try to assimilate you.
-              Shatter the neon blocks drifting in the background to collect Disco shards.
+              orbital cyberworld. Shatter the tetrinoids to collect disco shards. Use the cyberblocks wisely. Mind the
+              gravity. And beware the robots: they will try to assimilate you.
             </p>
             <div id="controls">
               <canvas id="controls-demo" ref={demoCanvasRef} />
@@ -262,7 +263,6 @@ export function LoginScreen({ onEnter }: LoginScreenProps) {
                 ))}
               </ul>
             </div>
-            <p id="controls-note">ESC: leave, avatar sleeps.</p>
           </div>
 
           <div id="legend" className="ship-panel">

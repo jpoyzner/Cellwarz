@@ -25,6 +25,7 @@ import { SleepFaces } from './sleepFace';
 import { damageStage, HEALTH_KEY } from './damage';
 import { LOOK_DOWN_MAX_SCREEN_FRACTION, LookDown } from './lookDown';
 import { SleepZs, SLEEPING_KEY, sleepLean } from './sleepZs';
+import { BUBBLE_TOTAL_HEIGHT_PX, drawEmojiBubble, EMOJI_KEY } from './emojiBubble';
 import { SpaceBackground } from './spaceBackground';
 import type { TouchRect } from './spaceBackground';
 import { StationBackdrop } from './stationBackdrop';
@@ -160,6 +161,8 @@ export class Renderer {
   readonly sleeping = new Set<string>();
   /** Avatars below full health, with their remaining health percent: drawn with wounds (see `damage.ts`). */
   readonly health = new Map<string, number>();
+  /** Sprites (avatars and robots) with an emoji speech bubble up right now, by sprite id. */
+  readonly emojis = new Map<string, string>();
   private readonly sleepZs = new SleepZs();
   private readonly sleepFaces = new SleepFaces();
   private readonly smoothed = new Map<string, SmoothedPosition>();
@@ -375,10 +378,12 @@ export class Renderer {
     this.shrinks.clear();
     this.sleeping.clear();
     this.health.clear();
+    this.emojis.clear();
     for (const [spriteId, sprite] of Object.entries(data.sprites)) {
       const extraInfo = (sprite as IncomingSprite)[3] as Record<string, unknown> | undefined;
       if (extraInfo?.[SLEEPING_KEY]) this.sleeping.add(spriteId);
       if (typeof extraInfo?.[HEALTH_KEY] === 'number') this.health.set(spriteId, extraInfo[HEALTH_KEY]);
+      if (typeof extraInfo?.[EMOJI_KEY] === 'string') this.emojis.set(spriteId, extraInfo[EMOJI_KEY]);
     }
     // The server sends numeric sprite ids here but string ids (object keys) in redraw frames; normalize so the
     // strict === comparisons against sprite-map keys (local avatar, shard collection, minimap) always agree.
@@ -556,6 +561,7 @@ export class Renderer {
         this.shrinks.delete(spriteId);
         this.sleeping.delete(spriteId);
         this.health.delete(spriteId);
+        this.emojis.delete(spriteId);
         this.smoothed.delete(spriteId);
         this.lastY.delete(spriteId);
         this.verticalState.delete(spriteId);
@@ -579,6 +585,11 @@ export class Renderer {
       const health = extraInfo?.[HEALTH_KEY];
       if (typeof health === 'number') this.health.set(spriteId, health);
       else this.health.delete(spriteId);
+
+      // And an avatar frame without the emoji key means its speech bubble is gone.
+      const emoji = extraInfo?.[EMOJI_KEY];
+      if (typeof emoji === 'string') this.emojis.set(spriteId, emoji);
+      else this.emojis.delete(spriteId);
 
       if (extraInfo) {
         const shrink = extraInfo['2'] as number | undefined;
@@ -858,6 +869,7 @@ export class Renderer {
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
 
+    this.drawEmojiBubbles(drawOffsetX, drawOffsetY);
     this.drawAvatarsNames(drawOffsetX, drawOffsetY);
     this.postFx.apply(ctx, canvas, now);
     this.drawMinimap(now);
@@ -1056,6 +1068,20 @@ export class Renderer {
     if (shrink !== undefined) ctx.restore();
   }
 
+  /** Each speech bubble sits right on top of its sprite's head (avatars and robots alike). */
+  private drawEmojiBubbles(offsetX: number, offsetY: number): void {
+    const { ctx } = this.context;
+
+    for (const [spriteId, emoji] of this.emojis) {
+      const sprite = this.sprites[spriteId];
+      if (!sprite || this.shrinks.has(spriteId)) continue;
+
+      const rendered = this.smoothed.get(spriteId);
+      const width = this.context.images[sprite[0]]?.width || AVATAR_WIDTH_PX;
+      drawEmojiBubble(ctx, emoji, (rendered?.x ?? sprite[1]) + width / 2 - offsetX, (rendered?.y ?? sprite[2]) - offsetY);
+    }
+  }
+
   private drawAvatarsNames(offsetX: number, offsetY: number): void {
     const { ctx } = this.context;
     ctx.fillStyle = NAME_TAG_COLOR;
@@ -1074,7 +1100,8 @@ export class Renderer {
         const y = rendered?.y ?? sprite[2];
         const width = this.context.images[sprite[0]]?.width || AVATAR_WIDTH_PX;
         const tagX = x + width / 2 - offsetX;
-        const tagY = y - 8 - offsetY;
+        const bubbleLift = this.emojis.has(this.avatars[name]) ? BUBBLE_TOTAL_HEIGHT_PX : 0; // the name rides above its bubble.
+        const tagY = y - 8 - bubbleLift - offsetY;
         ctx.strokeText(name, tagX, tagY);
         ctx.fillText(name, tagX, tagY);
       } else {

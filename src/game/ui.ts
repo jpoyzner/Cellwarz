@@ -12,6 +12,8 @@ const MOVEMENT_KEYS = [37, 38, 39];
 const ESCAPE_KEY = 27;
 // Space (pick up / throw), Down (put down) and Enter (throw a ninja star): each press is one action.
 const ONE_SHOT_KEYS = [32, 40, 13];
+// Number row (48-57) and numpad (96-105): each shows an emoji bubble (the server maps the digit, see server/emoji.ts).
+const isNumberKey = (keyCode: number) => (keyCode >= 48 && keyCode <= 57) || (keyCode >= 96 && keyCode <= 105);
 
 /**
  * Mirrors js/ui.js input handling (chat/typing removed); swipe/tap replaces the old jquery-mobile gestures.
@@ -47,8 +49,8 @@ export function attachInputHandlers(
     if (ARROW_KEYS.includes(event.keyCode)) {
       event.preventDefault();
     }
-    // Holding Space (pick up, then throw), Down (put down) or Enter (ninja star) must not auto-repeat into a second action.
-    if (event.repeat && ONE_SHOT_KEYS.includes(event.keyCode)) return;
+    // Holding Space (pick up, then throw), Down (put down), Enter (ninja star) or a number (emoji) must not auto-repeat into a second action.
+    if (event.repeat && (ONE_SHOT_KEYS.includes(event.keyCode) || isNumberKey(event.keyCode))) return;
     sendKey(event.keyCode, true);
   };
 

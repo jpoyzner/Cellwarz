@@ -242,22 +242,21 @@ body {
   font-size: 9.5px;
   height: 204px;
   left: 626px;
-  line-height: 1.35;
+  line-height: 1.25;
   overflow: auto;
-  padding: 8px 12px;
+  padding: 5px 12px;
   top: 40px;
   width: 310px;
 }
 
 #desc p {
-  margin: 0 0 6px;
+  margin: 0 0 4px;
 }
 
 #controls {
   align-items: center;
   display: flex;
   gap: 8px;
-  margin-bottom: 4px;
 }
 
 #controls-demo {
@@ -299,13 +298,6 @@ body {
   color: #00f6ff;
   font: bold 8px ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   padding: 0 3px;
-}
-
-#controls-note {
-  color: #ffae1a;
-  font-size: 8.5px;
-  letter-spacing: 0.04em;
-  margin: 0;
 }
 
 /* A strip set into the floor grating, below the walking line, so it never covers the viewport. */

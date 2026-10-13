@@ -446,6 +446,51 @@ test.describe('MainRoom deterministic workflows', () => {
     }
   });
 
+  test('pressing a number key shows an emoji bubble over the avatar for everyone for 5 seconds', async ({ page, browser }) => {
+    test.setTimeout(40000);
+    const nameA = `emoji-a-${Date.now()}`;
+    const nameB = `emoji-b-${Date.now()}`;
+
+    await login(page, nameA);
+    await waitForAvatar(page, nameA);
+
+    const contextB = await browser.newContext();
+    const pageB = await contextB.newPage();
+
+    try {
+      await login(pageB, nameB);
+      await waitForAvatar(pageB, nameB);
+      await waitForAvatar(pageB, nameA);
+
+      const emojiOverA = (watcher: typeof page) =>
+        watcher.evaluate((name) => {
+          const renderer = window.__cellwarz!.renderer;
+          return renderer.emojis.get(renderer.avatars[name]) ?? null;
+        }, nameA);
+
+      await page.keyboard.press('1');
+      await expect.poll(() => emojiOverA(page)).toBe('👋');
+      await expect.poll(() => emojiOverA(pageB)).toBe('👋');
+
+      // Another number replaces it (and restarts the 5 seconds).
+      await page.keyboard.press('5');
+      await expect.poll(() => emojiOverA(pageB)).toBe('🔥');
+
+      // Pressing the same number again takes it down at once, for everyone.
+      await page.keyboard.press('5');
+      await expect.poll(() => emojiOverA(page), { timeout: 2000 }).toBeNull();
+      await expect.poll(() => emojiOverA(pageB), { timeout: 2000 }).toBeNull();
+
+      // Otherwise it goes away by itself after 5 seconds.
+      await page.keyboard.press('2');
+      await expect.poll(() => emojiOverA(pageB)).toBe('👍');
+      await expect.poll(() => emojiOverA(pageB), { timeout: 10000 }).toBeNull();
+      expect(await emojiOverA(page)).toBeNull();
+    } finally {
+      await contextB.close();
+    }
+  });
+
   // These run here (not in their own spec file) because every login shares the one room: a stray parallel avatar
   // running about at the spawn portal can shove the avatars of the deterministic tests above.
   test('a first-run prompt teaches running and jumping, trims itself as you learn, and never comes back', async ({ page }) => {

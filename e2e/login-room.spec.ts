@@ -14,7 +14,7 @@ test('the login screen is a ship interior with your avatar, a TELEPORT transport
   await expect(page.locator('#wakeup')).toHaveCount(0);
   await expect(page.locator('#radar-canvas')).toBeVisible();
   await expect(page.locator('#leaderboard')).toContainText('DISCO SHARDS');
-  await expect(page.locator('#desc')).toContainText('Disco shards');
+  await expect(page.locator('#desc')).toContainText('disco shards');
   await expect(page.locator('#loginName')).toBeVisible();
   expect(await page.locator('#enter, #random').count()).toBe(0); // the old buttons are gone
 
@@ -43,10 +43,11 @@ test('the login screen teaches the controls (a looping demo and key caps) and wh
 
   await expect(page.locator('#controls-demo')).toBeVisible();
   const keys = page.locator('#control-keys li');
-  await expect(keys).toHaveCount(6);
+  await expect(keys).toHaveCount(7);
   await expect(keys.first()).toContainText('SPACE');
   await expect(keys.first()).toContainText('GRAB / THROW');
   await expect(page.locator('#control-keys')).toContainText('NINJA STAR');
+  await expect(page.locator('#control-keys')).toContainText('SAY AN EMOJI');
 
   // The clip is drawn from the game's own art: once it has loaded the canvas is no longer blank.
   await expect

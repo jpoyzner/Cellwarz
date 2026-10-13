@@ -2,6 +2,7 @@ import type { Cell } from '../cell/cell';
 import type { DeathCause } from '../deathCause';
 import { EdgeOfCellDataException } from '../errors';
 import { Engine } from '../engine';
+import { EMOJI_BUBBLE_FRAMES } from '../emoji';
 import type { Frame } from '../frame';
 import { Physics } from '../physics';
 import type { Session } from '../session';
@@ -77,6 +78,8 @@ export class Avatar extends Sprite {
   private firstDraw: number;
   private handledMana: Mana | undefined;
   private sleeping = false;
+  private emoji: string | undefined;
+  private emojiFramesRemaining = 0;
   private liftedFrames = 0;
   private pressingDown = false;
   private health = MAX_HEALTH;
@@ -378,6 +381,39 @@ export class Avatar extends Sprite {
     return this.firstDraw > 0;
   }
 
+  /** The emoji in this avatar's speech bubble right now, if any. */
+  getEmoji(): string | undefined {
+    return this.emoji;
+  }
+
+  /** Puts `emoji` in a speech bubble over the head, replacing any current one and restarting its timer. */
+  showEmoji(emoji: string, frames: number = EMOJI_BUBBLE_FRAMES): void {
+    this.emoji = emoji;
+    this.emojiFramesRemaining = frames;
+    this.needsRedraw(true); // so clients hear about it even if nothing else changes this frame.
+  }
+
+  /** Takes the speech bubble down right away. */
+  clearEmoji(): void {
+    if (this.emoji === undefined) return;
+
+    this.emoji = undefined;
+    this.emojiFramesRemaining = 0;
+    this.needsRedraw(true);
+  }
+
+  /** Called on every other avatar in the room whenever a player (not a robot) is about to die; robots react to it. */
+  noticePlayerDeath(_victim: Avatar): void {}
+
+  override process(): void {
+    super.process();
+
+    if (this.emoji !== undefined && --this.emojiFramesRemaining <= 0) {
+      this.emoji = undefined;
+      this.needsRedraw(true); // the bubble's end is announced by a frame that no longer carries it.
+    }
+  }
+
   /** Remaining health in percent (100 = unhurt); at 0 the avatar is dead. */
   getHealth(): number {
     return this.health;
@@ -425,6 +461,12 @@ export class Avatar extends Sprite {
 
     if (knockbackXDirection !== Physics.NONE || knockbackYDirection !== Physics.NONE) {
       this.physics.move(this, knockbackXDirection, knockbackYDirection, DEATH_KNOCKBACK_DISTANCE, false);
+    }
+
+    if (!this.isRobot() && !this.removed()) {
+      for (const sprite of this.getCellData().getSprites()) {
+        if (sprite !== this && sprite instanceof Avatar && !sprite.removed()) sprite.noticePlayerDeath(this);
+      }
     }
 
     this.removePermanently();

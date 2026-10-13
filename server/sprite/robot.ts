@@ -1,7 +1,11 @@
 import type { Cell } from '../cell/cell';
 import { Engine } from '../engine';
 import { EdgeOfCellDataException } from '../errors';
+import { ROBOT_SPOTTED_EMOJI } from '../emoji';
+import type { DeathCause } from '../deathCause';
 import { Physics } from '../physics';
+import { canReach } from './blast';
+import { Diamond } from './diamond';
 import { Missile, ROCKET_GRAVITY } from './missile';
 import type { MissileLaunch } from './missile';
 import { Avatar, FLOAT_LEFT_ACTION, FLOAT_RIGHT_ACTION, JUMP_LEFT_ACTION, JUMP_RIGHT_ACTION, LAND_LEFT_ACTION, LAND_RIGHT_ACTION, RUN_LEFT_ACTION, RUN_RIGHT_ACTION, STAND_LEFT_ACTION, STAND_RIGHT_ACTION, START_FLOAT_INTERVAL, START_LAND_INTERVAL } from './avatar';
@@ -27,6 +31,17 @@ const MUZZLE_DROP = 2;
 const ROCKET_COOLDOWN_FRAMES = Engine.EVERY_SECOND * 4;
 const MISSED_TARGET_COOLDOWN_FRAMES = Engine.EVERY_SECOND;
 
+// A robot notices a player who is within this many cells (straight-line) with nothing solid between them.
+const SIGHT_RANGE = ROCKET_MAX_RANGE;
+// A player dying this close (straight-line, even through a wall) is noticed by every robot; farther away it takes line of sight.
+const DEATH_NOTICE_RANGE = 30;
+
+// A robot's destruction scatters this many diamonds (collectible like the rainbow block's), fanned out sideways.
+const DIAMONDS_PER_ROBOT = 50;
+const DIAMOND_SPREAD = 2;
+const DIAMOND_MIN_LIFT = 0.6;
+const DIAMOND_EXTRA_LIFT = 1.4;
+
 type RocketPhase = 'idle' | 'aiming';
 
 interface RocketShot {
@@ -42,6 +57,8 @@ export class Robot extends Avatar {
   private rocketPhase: RocketPhase = 'idle';
   private rocketPhaseFrames = 0;
   private rocketCooldownFrames = 0;
+  /** Names of the players this robot has already noticed (the skull is only for the first sighting). */
+  private readonly seenPlayers = new Set<string>();
 
   constructor(x: number, y: number, cellInit: boolean, cell: Cell) {
     super(`Cyborg${++count}`, x, y, cellInit, cell);
@@ -81,6 +98,8 @@ export class Robot extends Avatar {
 
     if (this.rocketCooldownFrames > 0) this.rocketCooldownFrames--;
 
+    if (this.engine.actionMatchesFrequency(Engine.EIGHTH_STEP)) this.noticeNewPlayers();
+
     if (this.updateRocketAttack()) {
       // Taking aim: stand still until the rocket is away.
     } else if (this.turnAroundPauseFrames > 0) {
@@ -98,6 +117,61 @@ export class Robot extends Avatar {
     }
 
     this.killTouchedPlayers();
+  }
+
+  /** A player this robot can see for the first time gets a skull over the robot's head (once per player name, per robot). */
+  private noticeNewPlayers(): void {
+    for (const sprite of this.getCellData().getSprites()) {
+      if (!(sprite instanceof Avatar) || sprite.isRobot() || sprite.removed() || this.seenPlayers.has(sprite.getName())) continue;
+      if (!this.canSee(sprite)) continue;
+
+      this.seenPlayers.add(sprite.getName());
+      this.showEmoji(ROBOT_SPOTTED_EMOJI);
+    }
+  }
+
+  /** Within sight range with nothing solid in the way. */
+  private canSee(target: Avatar): boolean {
+    return this.distanceTo(target) <= SIGHT_RANGE && canReach(this.getCellData(), this.getEyeX(), this.getEyeY(), target);
+  }
+
+  private distanceTo(target: Avatar): number {
+    return Math.hypot(target.getX() + target.getWidth() / 2 - this.getEyeX(), target.getY() + target.getHeight() / 2 - this.getEyeY());
+  }
+
+  private getEyeX(): number {
+    return this.getX() + this.getWidth() / 2;
+  }
+
+  private getEyeY(): number {
+    return this.getY() + 1;
+  }
+
+  /** Every robot that is close to a dying player (even through a wall) or can see it die shows a skull. */
+  override noticePlayerDeath(victim: Avatar): void {
+    if (this.distanceTo(victim) <= DEATH_NOTICE_RANGE || this.canSee(victim)) this.showEmoji(ROBOT_SPOTTED_EMOJI);
+  }
+
+  /** A destroyed robot bursts into diamonds, fanned out left and right and flung up at varying heights. */
+  override die(knockbackXDirection: number = Physics.NONE, knockbackYDirection: number = Physics.NONE, cause?: DeathCause): void {
+    if (!this.removed()) this.dropDiamonds();
+    super.die(knockbackXDirection, knockbackYDirection, cause);
+  }
+
+  // A planet swallowing a robot isn't a kill, so it leaves nothing behind.
+  override onConsumed(): void {
+    this.removePermanently();
+  }
+
+  private dropDiamonds(): void {
+    const x = Math.round(this.getX() + (this.getWidth() - Diamond.SIZE) / 2);
+    const y = Math.round(this.getY() + (this.getHeight() - Diamond.SIZE) / 2);
+
+    for (let i = 0; i < DIAMONDS_PER_ROBOT; i++) {
+      const spread = (i / (DIAMONDS_PER_ROBOT - 1)) * 2 - 1;
+      const vx = spread * DIAMOND_SPREAD + (Math.random() - 0.5) * 0.3;
+      new Diamond(x, y, vx, -DIAMOND_MIN_LIFT - Math.random() * DIAMOND_EXTRA_LIFT, this.cell);
+    }
   }
 
   /** Runs the aim-then-fire sequence; returns true while the robot is tied up with it. */

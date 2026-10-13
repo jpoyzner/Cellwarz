@@ -58,8 +58,8 @@ export function detonate(cell: Cell, cellData: CellData, centerX: number, center
   showExplosion(cell, cellData, centerX, centerY, options.small ?? false);
 }
 
-/** The blast reaches an avatar if it has a clear line to any of its head, middle or feet (a ledge can't shield all three). */
-function canReach(cellData: CellData, fromX: number, fromY: number, avatar: Avatar): boolean {
+/** The blast reaches an avatar if it has a clear line to any of its head, middle or feet (a ledge can't shield all three). Also what "can see" means for a robot. */
+export function canReach(cellData: CellData, fromX: number, fromY: number, avatar: Avatar): boolean {
   const x = avatar.getX() + avatar.getWidth() / 2;
   const top = avatar.getY();
   const height = avatar.getHeight();

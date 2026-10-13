@@ -3,6 +3,7 @@ import { Engine } from '../engine';
 import { Physics } from '../physics';
 import { Avatar } from '../sprite/avatar';
 import { CellBlock } from '../sprite/cellBlock';
+import { Diamond } from '../sprite/diamond';
 import { Robot } from '../sprite/robot';
 import { Session } from '../session';
 import type { World } from '../world';
@@ -180,6 +181,7 @@ describe('Robot', () => {
       const cellData = cell.getCellData();
       CellBlock.init(cellData);
       Avatar.init(cellData);
+      Diamond.init(cellData); // a destroyed robot scatters diamonds.
       for (let x = 6; x <= 50; x += 2) new CellBlock(x, 30, false, cell); // floor.
 
       const robot = new Robot(10, 22, false, cell);

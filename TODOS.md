@@ -2,18 +2,17 @@
 
 ## INTEGRATION TO REAL SITE
 
-- use my DJ Recognize site to host cellwarz realtime multiplayers that can remember things if you sign up!
+- make shotting rockets shift instead of enter
 
+- need to figure out mobile device controls. controls need to work on a phone and login screen updated to explain them
+
+- use my DJ Recognize site to host cellwarz realtime multiplayers that can remember things if you sign up! Need a way to invite/advertise there
 - add an "exit" transporter on login screen that takes you back to my website.
 
 - If persistence is ever needed (session/avatar state surviving a server restart), use a NoSQL store — no DB is in use today.
 
 - check for vulnerabilities, in case some dj asshole hacks into it.
 Show number of users, and show other users in a specific color.
-
-- speak with basic set of emojis (1 at a time, appearing in a speak bubble above the avatar, no country flags allowed). Maybe robots say SKULL emoji when they see you? Or other things they say to show how they think?...it will dissapear after 5 seconds. Think about limiting chat to avoid hate, maybe just one emoji at a time as a speak bubble above, follows the avatar head perfectly.
-
-- need to figure out mobile device controls. controls need to work on a phone and login screen updated to explain them
 
 - will real users need passwords? yes. For now add a password box on the screen to protect you. if you forget it, too bad. If someone else logs into your avatar, all previous connections are dropped.
 

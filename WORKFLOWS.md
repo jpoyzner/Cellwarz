@@ -21,7 +21,7 @@ at a random bare floor spot at least 60 grid cells from any real player, with a 
 
 1. Load the site (the page title says "Cyberstation"; the welcome blurb opens "Welcome to the Cyberstation"); the login screen (`#login`) is the inside of a huge ship/rocket: a small room (`#ship-canvas`) with
    your own avatar in it (cyan headband and belt until you pick colours), a viewport onto space, a callsign field
-   (`#loginName`), headband/belt colour pickers, a short briefing (`#desc`: welcome blurb — no mention of hit counts — which also says to shatter the drifting neon blocks to collect Disco shards, the controls clip and key caps,
+   (`#loginName`), headband/belt colour pickers, a short briefing (`#desc`: welcome blurb — no mention of hit counts — which also says to shatter the tetrinoids to collect disco shards, the controls clip and key caps,
    see "Learning to play"), a Disco shards leaderboard (see "Login room — leaderboard"), a block index (`#legend`, a strip set into the floor below the walking line) and a live radar (see "Login room — live
    radar"). The room is scaled to fit the window.
 2. Walk the avatar with the Left/Right arrows and jump with Up (the arrow keys work even while the callsign field has
@@ -99,9 +99,9 @@ client-side and cosmetic, except the death cause the server names.
 1. **Controls clip and key caps** (login screen, `#controls` inside `#desc`): a looping 3.6s canvas clip
    (`#controls-demo`) of the player's own avatar (it wears their chosen colours) picking a block up, carrying it
    overhead and throwing it in an arc, with a `[SPACE]` badge flashing at the grab and the throw, drawn from the game's
-   own art. (With "reduce motion" set it holds the carrying pose.) Beside it `#control-keys` lists the six controls as
-   key caps: SPACE grab / throw, ↓ put down, ← → run, ↑ jump, ENTER ninja star, ESC leave; a one-line note says that
-   5 rocket or star hits kill and that Escape puts your avatar to sleep.
+   own art. (With "reduce motion" set it holds the carrying pose.) Beside it `#control-keys` lists the seven controls as
+   key caps: SPACE grab / throw, ↓ put down, ← → run, ↑ jump, ENTER ninja star, 0-9 say an emoji (a speech bubble, see
+   "Emoji bubbles"), ESC leave.
 2. **Block index** (login screen, `#legend`): one entry per block kind the main room scatters, with its art and a
    two-line hint — yellow lifts you up, red has a 5s fuse then booms, blue slides forever, green is a shield bubble,
    orange glues blocks, rainbow is "throw it for 💎". (Purple blocks are left out while the room places none.)
@@ -437,6 +437,40 @@ health, alive, while the thrower stays at 100%). The wound/star/explosion pixels
 
 **Covered by**: [e2e/main-room-workflows.spec.ts](e2e/main-room-workflows.spec.ts) — two browser contexts log in
 to the single shared room and each asserts it can see the other's name and sprite.
+
+## Emoji bubbles (number keys) and the robot skull
+
+1. Pressing a number key (0–9, number row or numpad) while awake and in the game shows a speech bubble holding one
+   emoji **right over your avatar's head** (a little above it, tail pointing down at it; your name tag rides just above
+   the bubble) for **5 seconds**, for everyone in the room. Pressing another number replaces it and restarts the 5
+   seconds; **pressing the same number again takes it down instantly** (a third press shows it again); holding a key
+   doesn't repeat. A sleeping avatar shows none (it takes no input), and a dead player's bubble goes with their avatar.
+   The login screen's key caps list it ("0-9 SAY AN EMOJI").
+   The emojis (no flags, nothing political; the server owns the table, `NUMBER_EMOJIS` in
+   [server/emoji.ts](server/emoji.ts)): 1 👋 hello/goodbye, 2 👍 yes/OK, 3 😂 laughing, 4 😮 whoa, 5 🔥 nice one,
+   6 ❤️ love/thanks, 7 😈 taunt, 8 🤔 hmm/confused, 9 🆘 help, 0 😴 brb/zzz.
+2. **Robots show a skull 💀** over their head (same bubble, 5 seconds) when they:
+   - **see a given player for the first time**: the player is within 70 grid cells with a clear line to their head,
+     middle or feet (a wall in between hides them). Once per player name per robot (the same player coming back later
+     doesn't trigger it again, a different player does), never for other robots;
+   - **are close to a player who dies** (within 30 cells, even through a wall) **or can see them die** (within 70 cells
+     with a clear line) — every robot in the room that qualifies shows it, whoever or whatever killed the player;
+   - **assimilate or kill someone** (the victim is right beside them, so this is the same rule).
+   A robot dying doesn't set off anyone's skull. None of this changes the robot's behavior.
+3. **Killing a robot** (blast, ninja star or rocket) **scatters 50 diamonds** from where it stood, fanned out to both
+   sides and flung up to different heights, so they land spread along the floor; any real player can collect them like
+   the rainbow block's diamonds. A planet swallowing a robot isn't a kill and leaves nothing.
+4. Wire: the emoji rides in the sprite entry's extra info as key `'5'` (full-state and redraw frames) while the bubble
+   is up; a frame without it means it is gone. The client draws it ([src/game/emojiBubble.ts](src/game/emojiBubble.ts)).
+
+**Covered by**: [server/__tests__/emoji.test.ts](server/__tests__/emoji.test.ts) (table, key mapping, 5-second timer,
+replace, toggle off, sleeping, wire key, robot skulls for first sight / nearby and seen deaths / assimilation, 50
+diamonds on a robot kill),
+[src/game/__tests__/emojiBubble.test.ts](src/game/__tests__/emojiBubble.test.ts) (drawn centred above the head) and
+[e2e/main-room-workflows.spec.ts](e2e/main-room-workflows.spec.ts) (a second browser context sees the bubble, a second
+number replaces it, the same number clears it, it disappears after 5 seconds) and
+[e2e/login-room.spec.ts](e2e/login-room.spec.ts) (the key cap on the login screen). The robot skull and diamond
+drop are unit-tested only (robots are off in the e2e run); the bubble's look is manual-only.
 
 ## Debug recording: the "Back Box" (backtick)
 

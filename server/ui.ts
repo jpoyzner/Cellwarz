@@ -1,3 +1,4 @@
+import { digitOfKey, NUMBER_EMOJIS } from './emoji';
 import type { Avatar } from './sprite/avatar';
 
 // Pressing Escape while alive puts the avatar to sleep and leaves the player spectating (the client sends it).
@@ -38,6 +39,13 @@ export class UI {
         else avatar.pickUpMana();
       } else if (key === ENTER_KEY) {
         avatar.throwStar();
+      } else {
+        const digit = digitOfKey(key);
+        if (digit !== undefined) {
+          // Pressing the number whose emoji is already up takes the bubble down again at once.
+          if (avatar.getEmoji() === NUMBER_EMOJIS[digit]) avatar.clearEmoji();
+          else avatar.showEmoji(NUMBER_EMOJIS[digit]);
+        }
       }
     } else if (key === 37 || key === 39) {
       avatar.stopRunning();
