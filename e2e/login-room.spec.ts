@@ -66,11 +66,21 @@ test('the login screen teaches the controls (a looping demo and key caps) and wh
     .toBe(true);
 });
 
+test('the login screen is branded Cyberstation', async ({ page }) => {
+  await page.goto('/');
+  await expect(page).toHaveTitle('Cyberstation');
+  await expect(page.locator('#game-title')).toHaveCount(0);
+  await expect(page.locator('#desc')).toContainText('Welcome to the Cyberstation');
+  await expect(page.locator('#desc')).toContainText('assimilate');
+  await expect(page.locator('#desc')).not.toContainText('rocket/star');
+});
+
 test('a transporter will not fire without a callsign', async ({ page }) => {
   await page.goto('/');
   await page.locator('#teleport').click();
 
-  await expect(page.locator('#login-notice')).toContainText('CALLSIGN');
+  await expect(page.locator('#login-notice')).toContainText('NO TELEPORT');
+  await expect(page.locator('#loginName')).toHaveClass(/input-error/);
   await expect(page.locator('#login')).toBeVisible();
   await expect(page.locator('#canvas')).toHaveCount(0);
 });
@@ -133,7 +143,7 @@ test('the radar shows other players in the main room before you enter it', async
     await expect
       .poll(() => page.evaluate((n) => window.__cellwarzLogin!.radar.hasLivingAvatar(n), otherName), { timeout: 5000 })
       .toBe(true);
-    await expect(page.locator('#radar-readout')).toContainText(/[1-9]\d* PILOT/);
+    await expect(page.locator('#radar-readout')).toContainText(/[1-9]\d* AVATAR/);
 
     // Typing that player's callsign offers WAKE UP (it is "their" avatar), a made-up one does not.
     await page.locator('#loginName').fill(otherName);

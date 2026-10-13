@@ -17,6 +17,8 @@ Show number of users, and show other users in a specific color.
 - EXPLORE AUDIO.TS!!!!!!!!! IT USES A BASS NOTE SO WELL :) MAYBE IT IS TIME TO MAKE AI MUSIC WITH THIS!!!
 - Maybe make a room where people can collaborate on live music somehow!!! Maybe they play instruments synced together in the same room live!?! A realtime interactive DAW?
 
+- need leaderboard? For diamonds too? What do we use things for?
+
 - In main room: Near the top floating on a central platform is a DJ booth. Players can sign up and register a song/mix (first 1 hour of it max). that if they are first to sit at the DJ booth when no song is playing, they get to play it. (maybe have a max of 1 play per 4 hours or so?). The players can fight for this with blocks. Doors should be at the corners of the recatngle
 - When a song or DJ set is on, they all put on headphones, but you can switch back to regular game sounds. Make it so that they can for now put on headphones and listen to my songs? Little notes should be coming out of the headphones...
 

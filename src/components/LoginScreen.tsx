@@ -115,7 +115,7 @@ export function LoginScreen({ onEnter }: LoginScreenProps) {
     const room = new LoginRoom(canvas, {
       canTransport: () => nameRef.current.length !== 0,
       onBlocked: () => {
-        setNotice('ENTER A CALLSIGN FIRST');
+        setNotice('NO TELEPORT: TYPE A CALLSIGN FIRST!');
         nameInputRef.current?.focus();
       },
       onTransport: (pad: PadId) => {
@@ -198,6 +198,7 @@ export function LoginScreen({ onEnter }: LoginScreenProps) {
             </label>
             <input
               id="loginName"
+              className={notice ? 'input-error' : undefined}
               type="text"
               autoComplete="off"
               autoFocus={loginName.length === 0}
@@ -210,21 +211,23 @@ export function LoginScreen({ onEnter }: LoginScreenProps) {
             />
             <SwatchRow id="headband-colors" title="HEADBAND" value={headband} onPick={setHeadband} />
             <SwatchRow id="belt-colors" title="BELT" value={belt} onPick={setBelt} />
-            <div id="login-notice">{notice || 'WALK ONTO A TRANSPORTER (\u2190 \u2192 \u2191)'}</div>
+            <div id="login-notice" className={notice ? 'login-notice-error' : undefined} role={notice ? 'alert' : undefined}>
+              {notice || 'WALK ONTO A TRANSPORTER (\u2190 \u2192 \u2191)'}
+            </div>
           </div>
 
           <div id="radar" className="ship-panel">
             <div className="panel-title">LIVE RADAR &middot; MAIN ROOM</div>
             <canvas id="radar-canvas" ref={radarCanvasRef} />
             <div id="radar-readout">
-              {counts ? `${counts.pilots} PILOT${counts.pilots === 1 ? '' : 'S'} \u00B7 ${counts.robots} ROBOTS` : 'SCANNING...'}
+              {counts ? `${counts.pilots} AVATAR${counts.pilots === 1 ? '' : 'S'} \u00B7 ${counts.robots} ROBOTS` : 'SCANNING...'}
             </div>
           </div>
 
           <div id="desc" className="ship-panel">
             <p>
-              Welcome raver! Jack into a multi-player, interactively creative, yet competitively destructive orbital
-              grid as a ninja. Beware the robots: they reprogram you on contact and fire rockets.
+              Welcome to the Cyberstation, a multi-player, interactively creative, yet competitively destructive
+              orbital cyberworld. Use the cyberblocks wisely, mind the gravity, and beware the robots: they will try to assimilate you.
             </p>
             <div id="controls">
               <canvas id="controls-demo" ref={demoCanvasRef} />
@@ -241,7 +244,7 @@ export function LoginScreen({ onEnter }: LoginScreenProps) {
                 ))}
               </ul>
             </div>
-            <p id="controls-note">5 rocket/star hits kill. ESC: leave, avatar sleeps.</p>
+            <p id="controls-note">ESC: leave, avatar sleeps.</p>
           </div>
 
           <div id="legend" className="ship-panel">

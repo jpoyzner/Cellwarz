@@ -19,9 +19,9 @@ at a random bare floor spot at least 60 grid cells from any real player, with a 
 
 ## Login room (the ship)
 
-1. Load the site; the login screen (`#login`) is the inside of a huge ship/rocket: a small room (`#ship-canvas`) with
+1. Load the site (the page title says "Cyberstation"; the welcome blurb opens "Welcome to the Cyberstation"); the login screen (`#login`) is the inside of a huge ship/rocket: a small room (`#ship-canvas`) with
    your own avatar in it (cyan headband and belt until you pick colours), a viewport onto space, a callsign field
-   (`#loginName`), headband/belt colour pickers, a short briefing (`#desc`: welcome blurb, the controls clip and key caps,
+   (`#loginName`), headband/belt colour pickers, a short briefing (`#desc`: welcome blurb — no mention of hit counts — the controls clip and key caps,
    see "Learning to play"), a block index (`#legend`, a strip set into the floor below the walking line) and a live radar (see "Login room — live
    radar"). The room is scaled to fit the window.
 2. Walk the avatar with the Left/Right arrows and jump with Up (the arrow keys work even while the callsign field has
@@ -32,7 +32,8 @@ at a random bare floor spot at least 60 grid cells from any real player, with a 
 4. Standing on a pad for about half a second (or clicking its label) beams the avatar up (a short light-column effect),
    then the login screen is removed, `#canvas` becomes visible, and the avatar + room (walls, doors, mana,
    background) render within ~1 second of the WebSocket connecting. Without a callsign nothing fires: the notice
-   `#login-notice` says to enter one and the field is focused.
+   `#login-notice` turns into a flashing red "NO TELEPORT: TYPE A CALLSIGN FIRST!" banner, the field gets a red
+   outline (`.input-error`) and is focused; both clear once something is typed.
 5. The last callsign and colours are remembered (localStorage) and prefilled next time, including after Escape.
 
 **Covered by**: [e2e/login-room.spec.ts](e2e/login-room.spec.ts) (room, walking, jumping, callsign required, walking onto the
@@ -65,7 +66,7 @@ only for a callsign with a living avatar and wakes it where it sleeps)
 
 1. The login room shows the same radar as the game (`#radar`, canvas `#radar-canvas`, titled LIVE RADAR · MAIN ROOM): the
    room's walls, other players as magenta dots, robots as red dots and the amber planet, updating live, plus a readout
-   (`#radar-readout`) like "2 PILOTS · 3 ROBOTS". There is no avatar of yours on it yet.
+   (`#radar-readout`) like "2 AVATARS · 3 ROBOTS". There is no avatar of yours on it yet.
 2. It comes from a spectator-only connection (`{ connect, spectate: true }`: the server sends the full state and the
    room's frames, with no login, session or avatar, and never times it out); it is closed when you enter the game. The
    same data tells the room which callsigns have a living avatar (what makes WAKE UP appear).
