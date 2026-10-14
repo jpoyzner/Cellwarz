@@ -17,7 +17,7 @@ const DEATH_CARDS: Record<DeathCause, DeathCard> = {
   },
   star: {
     cause: 'KILLED BY: NINJA STAR',
-    tip: '5 STAR OR ROCKET HITS KILL \u00B7 ENTER THROWS ONE OF YOUR OWN',
+    tip: '5 STAR OR ROCKET HITS KILL \u00B7 SHIFT THROWS ONE OF YOUR OWN',
   },
   planet: {
     cause: 'KILLED BY: THE GAS GIANT',

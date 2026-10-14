@@ -9,6 +9,8 @@ export class CellData {
 
   private readonly world: World;
   private readonly sprites: Sprite[] = [];
+  // Sprites currently in the world; a deleted one still referenced elsewhere (a stuck group, a carrier) must never be moved back into the grid.
+  private readonly live = new Set<Sprite>();
   private readonly imagePaths: string[] = [];
   private spriteCount = 0;
 
@@ -30,6 +32,7 @@ export class CellData {
     }
 
     this.sprites.push(sprite);
+    this.live.add(sprite);
 
     try {
       this.writeDataForSprite(sprite, true);
@@ -39,6 +42,7 @@ export class CellData {
       if (e instanceof EdgeOfCellDataException) {
         const index = this.sprites.indexOf(sprite);
         if (index !== -1) this.sprites.splice(index, 1);
+        this.live.delete(sprite);
         return -1;
       }
       throw e;
@@ -48,6 +52,7 @@ export class CellData {
   remove(sprite: Sprite): void {
     const index = this.sprites.indexOf(sprite);
     if (index !== -1) this.sprites.splice(index, 1);
+    this.live.delete(sprite);
 
     try {
       this.writeDataForSprite(sprite, false);
@@ -57,6 +62,8 @@ export class CellData {
   }
 
   move(sprite: Sprite, xDirection: number, yDirection: number): void {
+    if (!this.live.has(sprite)) return;
+
     try {
       this.writeDataForSprite(sprite, false);
       const x = sprite.getX() + xDirection;
@@ -81,6 +88,8 @@ export class CellData {
   }
 
   moveTo(sprite: Sprite, x: number, y: number): void {
+    if (!this.live.has(sprite)) return;
+
     try {
       this.writeDataForSprite(sprite, false);
       sprite.setX(this.wrapsAtEdges ? this.wrapPosition(x, this.map.length, sprite.getWidth()) : x);

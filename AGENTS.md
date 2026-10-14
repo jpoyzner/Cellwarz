@@ -106,6 +106,9 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   body) makes `Physics.move` move all members as one or none, and `Physics.canInteract` ignores group mates.
   `Physics.move` is also guarded against re-entrancy (a `moving` set): a sprite already being moved up the call stack is
   just blocked — two overlapping sprites can each count as "on top" of the other, which used to recurse forever.
+  `CellData` keeps a `live` set: `move`/`moveTo` ignore a sprite that was already deleted. Without it a deleted block still
+  listed in a stuck group (e.g. a whole group swallowed by the planet before anyone pruned it) was written back into the
+  grid every time the group moved — an invisible solid 3x3 block (not in `sprites`, so never sent to clients).
   **Ghost-layer sprites**: visual/effect sprites (`ShieldBubble`, `Explosion`, `Diamond`) use
   `Physics.BACKGROUND_LAYER` (nothing treats it as an obstacle), `melts()` true, mass 0, and `isStable()` true so a mover
   doesn't drag them (a `Shield` re-creates/re-positions its bubble each frame; `Robot`/`Shield` override
@@ -124,7 +127,7 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
 - **Health & ninja stars**: `Avatar` (incl. `Robot`) has `health` (`MAX_HEALTH` 100). Rockets and ninja stars call `detonate()`
   with `damage: HIT_DAMAGE_PERCENT` (20), which makes it call `Avatar.takeDamage()` (small knockback, `needsRedraw`) instead of
   `die()`; the hit taking health to 0 is a normal `die()`. A red block's blast (no `damage` option) and robot touch still kill
-  outright. Enter (`server/ui.ts`) → `Avatar.throwStar()` spawns a [NinjaStar](server/sprite/ninjaStar.ts) (3x3, `EFFECTS_LAYER`,
+  outright. Shift (`server/ui.ts`) → `Avatar.throwStar()` spawns a [NinjaStar](server/sprite/ninjaStar.ts) (3x3, `EFFECTS_LAYER`,
   1.5 cells/frame with a slight droop (`STAR_GRAVITY` 0.006 cells/frame², ~15 cells over a full flight; a planet's pull adds to it), 72-frame life, never wraps, 20-frame cooldown, max 3 in flight): it explodes on any
   avatar except its thrower (robots included), `LEVEL_LAYER` sprite or `Mana`, via `detonate()` with `STAR_KILL_RADIUS` 6 /
   `STAR_SHOVE_RADIUS` 12 and `small: true` → [SmallExplosion](server/sprite/explosion.ts) (14 cells, own art

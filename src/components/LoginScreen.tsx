@@ -41,7 +41,7 @@ const CONTROL_KEYS = [
   { keys: ['\u2193'], action: 'PUT DOWN' },
   { keys: ['\u2190', '\u2192'], action: 'RUN' },
   { keys: ['\u2191'], action: 'JUMP' },
-  { keys: ['ENTER'], action: 'NINJA STAR' },
+  { keys: ['SHIFT'], action: 'NINJA STAR' },
   { keys: ['0-9'], action: 'SAY AN EMOJI' },
   { keys: ['ESC'], action: 'LEAVE' },
 ];

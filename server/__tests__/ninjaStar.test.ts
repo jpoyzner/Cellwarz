@@ -13,7 +13,7 @@ import { UI } from '../ui';
 import { createTestCell, layFloor, layWall, PlainBlock } from './testHelpers';
 
 const FLOOR_Y = 80;
-const ENTER_KEY = 13;
+const SHIFT_KEY = 16;
 
 function createScene() {
   const { cell, cellData } = createTestCell(160, 100);
@@ -40,12 +40,12 @@ const liveExplosions = (cell: ReturnType<typeof createScene>) =>
   cell.getCellData().getSprites().filter((sprite: Sprite): sprite is Explosion => sprite instanceof Explosion && !sprite.removed());
 
 describe('NinjaStar', () => {
-  it('is thrown with Enter, straight ahead from the front of the avatar', () => {
+  it('is thrown with Shift, straight ahead from the front of the avatar', () => {
     const cell = createScene();
     const avatar = new Avatar('thrower', 40, FLOOR_Y - Avatar.HEIGHT, false, cell);
     const ui = new UI(avatar);
 
-    ui.reactTo(ENTER_KEY, true);
+    ui.reactTo(SHIFT_KEY, true);
     const star = cell.getCellData().getSprites().find((sprite) => sprite instanceof NinjaStar)!;
     expect(star.getX()).toBe(40 + Avatar.WIDTH);
 
@@ -90,7 +90,7 @@ describe('NinjaStar', () => {
     const avatar = new Avatar('sleepy', 40, FLOOR_Y - Avatar.HEIGHT, false, cell);
     avatar.fallAsleep();
 
-    new UI(avatar).reactTo(ENTER_KEY, true);
+    new UI(avatar).reactTo(SHIFT_KEY, true);
 
     expect(cell.getCellData().getSprites().some((sprite) => sprite instanceof NinjaStar)).toBe(false);
   });

@@ -2,19 +2,18 @@
 
 ## INTEGRATION TO REAL SITE
 
-- make shotting rockets shift instead of enter
+- Add a password (labeled as "hash") field in the login screen near the call sign. if you leave it blank, it will say "(unprotected)". It is permanent once you login, if you forget it, too bad. If a hash/password has been set on this user before, then you will need it to enter the main room. When we deploy the game for mutiplayer usage, if someone else logs onto your avatar (using callsign and password/hash), all previous connections are dropped, meaning the last login becomes the active connection.
 
 - need to figure out mobile device controls. controls need to work on a phone and login screen updated to explain them
 
 - use my DJ Recognize site to host cellwarz realtime multiplayers that can remember things if you sign up! Need a way to invite/advertise there
 - add an "exit" transporter on login screen that takes you back to my website.
-
 - If persistence is ever needed (session/avatar state surviving a server restart), use a NoSQL store — no DB is in use today.
 
 - check for vulnerabilities, in case some dj asshole hacks into it.
 Show number of users, and show other users in a specific color.
 
-- will real users need passwords? yes. For now add a password box on the screen to protect you. if you forget it, too bad. If someone else logs into your avatar, all previous connections are dropped.
+
 
 ## Core Features
 

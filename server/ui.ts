@@ -5,7 +5,7 @@ import type { Avatar } from './sprite/avatar';
 export const ESCAPE_KEY = 27;
 
 const SPACE_KEY = 32;
-const ENTER_KEY = 13;
+const SHIFT_KEY = 16;
 
 export class UI {
   private avatar: Avatar | undefined;
@@ -37,7 +37,7 @@ export class UI {
       } else if (key === SPACE_KEY) {
         if (avatar.hasHandledMana()) avatar.throwMana();
         else avatar.pickUpMana();
-      } else if (key === ENTER_KEY) {
+      } else if (key === SHIFT_KEY) {
         avatar.throwStar();
       } else {
         const digit = digitOfKey(key);

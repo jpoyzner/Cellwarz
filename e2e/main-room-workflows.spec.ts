@@ -362,7 +362,7 @@ test.describe('MainRoom deterministic workflows', () => {
     }
   });
 
-  test('a thrown ninja star (Enter) hits another player for a fifth of their health instead of killing them', async ({ page, browser }) => {
+  test('a thrown ninja star (Shift) hits another player for a fifth of their health instead of killing them', async ({ page, browser }) => {
     test.setTimeout(60000);
     const thrower = `star-a-${Date.now()}`;
     const target = `star-b-${Date.now()}`;
@@ -388,7 +388,7 @@ test.describe('MainRoom deterministic workflows', () => {
       await page.keyboard.down('ArrowLeft');
       await page.waitForTimeout(60);
       await page.keyboard.up('ArrowLeft');
-      await page.keyboard.press('Enter');
+      await page.keyboard.press('Shift');
 
       await page.waitForFunction(() => {
         const renderer = window.__cellwarz?.renderer;

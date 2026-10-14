@@ -10,8 +10,8 @@ const TAP_MAX_DURATION_MS = 300;
 const MOVEMENT_KEYS = [37, 38, 39];
 // Mirrors server/ui.ts: tells the server the player pressed Escape while alive.
 const ESCAPE_KEY = 27;
-// Space (pick up / throw), Down (put down) and Enter (throw a ninja star): each press is one action.
-const ONE_SHOT_KEYS = [32, 40, 13];
+// Space (pick up / throw), Down (put down) and Shift (throw a ninja star): each press is one action.
+const ONE_SHOT_KEYS = [32, 40, 16];
 // Number row (48-57) and numpad (96-105): each shows an emoji bubble (the server maps the digit, see server/emoji.ts).
 const isNumberKey = (keyCode: number) => (keyCode >= 48 && keyCode <= 57) || (keyCode >= 96 && keyCode <= 105);
 
@@ -49,7 +49,7 @@ export function attachInputHandlers(
     if (ARROW_KEYS.includes(event.keyCode)) {
       event.preventDefault();
     }
-    // Holding Space (pick up, then throw), Down (put down), Enter (ninja star) or a number (emoji) must not auto-repeat into a second action.
+    // Holding Space (pick up, then throw), Down (put down), Shift (ninja star) or a number (emoji) must not auto-repeat into a second action.
     if (event.repeat && (ONE_SHOT_KEYS.includes(event.keyCode) || isNumberKey(event.keyCode))) return;
     sendKey(event.keyCode, true);
   };

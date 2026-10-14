@@ -100,7 +100,7 @@ client-side and cosmetic, except the death cause the server names.
    (`#controls-demo`) of the player's own avatar (it wears their chosen colours) picking a block up, carrying it
    overhead and throwing it in an arc, with a `[SPACE]` badge flashing at the grab and the throw, drawn from the game's
    own art. (With "reduce motion" set it holds the carrying pose.) Beside it `#control-keys` lists the seven controls as
-   key caps: SPACE grab / throw, ↓ put down, ← → run, ↑ jump, ENTER ninja star, 0-9 say an emoji (a speech bubble, see
+   key caps: SPACE grab / throw, ↓ put down, ← → run, ↑ jump, SHIFT ninja star, 0-9 say an emoji (a speech bubble, see
    "Emoji bubbles"), ESC leave.
 2. **Block index** (login screen, `#legend`): one entry per block kind the main room scatters, with its art and a
    two-line hint — yellow lifts you up, red has a 5s fuse then booms, blue slides forever, green is a shield bubble,
@@ -116,7 +116,7 @@ client-side and cosmetic, except the death cause the server names.
    Carrying beats grabbing beats moving when more than one applies.
 4. **Death card**: when you die your screen says what killed you and how to avoid it under "YOU DIED" (`#death-cause`
    and `#death-tip`): "KILLED BY: RED BLOCK BLAST" (a red block's 5s fuse; throw it away or stand in a green bubble),
-   "ROBOT ROCKET" and "NINJA STAR" (5 hits kill; break line of sight or stand in a green bubble / ENTER throws your own)
+   "ROBOT ROCKET" and "NINJA STAR" (5 hits kill; break line of sight or stand in a green bubble / SHIFT throws your own)
    and "THE GAS GIANT" (keep clear of its core). The server names the cause in the one-shot death message
    (`{ died: true, cause }`); a death with no named cause (a robot's touch, see "Death and respawn") shows nothing extra.
 
@@ -413,16 +413,16 @@ run switches robots off (they would kill test avatars at random).
 2. The avatar's art shows it: unhurt at 100%, then four increasingly wounded looks at 80%, 60%, 40% and 20% (burning
    orange wounds scorched into the body, more at each stage; eyes and headband/belt untouched). Everyone sees everyone's
    state (the server sends the remaining percent for any avatar below 100%).
-3. **Enter throws a ninja star** (not while asleep): a small spinning star leaves the front of the avatar in the
+3. **Shift throws a ninja star** (not while asleep): a small spinning star leaves the front of the avatar in the
    direction it faces and flies **fast on a slight downward curve** (a gentle drop, far less than a rocket's), ending
    after about a second and a half or at the room's edge (it never wraps). The star **burns**: a flickering fireball with
    flames licks around it and it leaves a trail of drifting sparks behind that fade out (purely visual, client-side). It explodes — a **smaller** fireball than a rocket's (half the size), kill radius 6 /
    shove radius 12 grid cells, with line of sight — on the first player or robot it touches (never its thrower) or
    anything solid (wall or block), costing 20% health to avatars within the blast and shoving nearby blocks. A green
    block's bubble swallows it. A throw has a short (~0.4s) cooldown, and at most 3 of an avatar's stars can be in flight.
-   Holding Enter doesn't auto-repeat.
+   Holding Shift doesn't auto-repeat.
 
-**Covered by**: [server/__tests__/ninjaStar.test.ts](server/__tests__/ninjaStar.test.ts) (Enter, direction, downward curve, sleeping,
+**Covered by**: [server/__tests__/ninjaStar.test.ts](server/__tests__/ninjaStar.test.ts) (Shift, direction, downward curve, sleeping,
 cooldown/cap, 20% damage instead of a kill, robots, walls and block shove, range/edge, shield bubble, the health wire key),
 [server/__tests__/avatar.test.ts](server/__tests__/avatar.test.ts) (five hits kill) and the rocket tests in
 [server/__tests__/specialBlocks.test.ts](server/__tests__/specialBlocks.test.ts); the wound looks by
