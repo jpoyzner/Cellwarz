@@ -344,6 +344,11 @@ export abstract class Sprite {
   /** Called after another sprite's move successfully shoved this one by (xDirection, yDirection). */
   onPushed(_xDirection: number, _yDirection: number): void {}
 
+  /** Extra live state (velocity, ...) for the Black Box's server-side sprite dump; nothing by default. */
+  getDebugState(): Record<string, unknown> | undefined {
+    return undefined;
+  }
+
   getCell(): Cell {
     return this.cell;
   }

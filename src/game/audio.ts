@@ -77,6 +77,11 @@ export class AudioManager {
     else if (this.ctx && !this.muted) this.startAmbient(this.ctx);
   }
 
+  /** Creates/resumes the audio context; must run inside a tap, or mobile browsers keep it silent. */
+  unlock(): void {
+    this.ensureContext();
+  }
+
   setMuted(muted: boolean): void {
     this.muted = muted;
     if (muted) this.stopAmbient();

@@ -42,7 +42,11 @@ export class HintSystem {
   private jumped = false;
   private hint: Hint | null = null;
 
-  constructor(private readonly storage: StorageLike | undefined = defaultStorage()) {
+  /** `touch` words the prompts for the on-screen buttons instead of the keyboard. */
+  constructor(
+    private readonly storage: StorageLike | undefined = defaultStorage(),
+    private readonly touch = false,
+  ) {
     this.done = new Set(this.load());
   }
 
@@ -70,9 +74,11 @@ export class HintSystem {
 
   private pick(context: HintContext): Hint | null {
     if (!context.alive) return null;
-    if (context.carryingBlock && !this.done.has('carry')) return { id: 'carry', text: 'SPACE: THROW \u00B7 \u2193: PUT DOWN' };
+    if (context.carryingBlock && !this.done.has('carry')) {
+      return { id: 'carry', text: this.touch ? 'THROW \u00B7 \u25BC PUT DOWN' : 'SPACE: THROW \u00B7 \u2193: PUT DOWN' };
+    }
     if (context.touchingBlock && !context.carryingBlock && !this.done.has('grab')) {
-      return { id: 'grab', text: 'SPACE: GRAB THE BLOCK' };
+      return { id: 'grab', text: this.touch ? 'TAP GRAB TO LIFT THE BLOCK' : 'SPACE: GRAB THE BLOCK' };
     }
     if (!this.done.has('move')) return { id: 'move', text: this.moveText() };
     return null;
@@ -80,6 +86,10 @@ export class HintSystem {
 
   // Only what is still left to learn.
   private moveText(): string {
+    if (this.touch) {
+      if (!this.ran && !this.jumped) return '\u25C0 \u25B6 RUN \u00B7 JUMP';
+      return this.ran ? 'TAP JUMP' : '\u25C0 \u25B6 RUN';
+    }
     if (!this.ran && !this.jumped) return '\u2190 \u2192 RUN \u00B7 \u2191 JUMP';
     return this.ran ? '\u2191 JUMP' : '\u2190 \u2192 RUN';
   }

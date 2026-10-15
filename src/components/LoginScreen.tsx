@@ -5,6 +5,7 @@ import { LoginRoom, PADS, ROOM_HEIGHT, ROOM_WIDTH } from '../game/loginRoom';
 import type { PadId } from '../game/loginRoom';
 import { ControlsDemo } from '../game/controlsDemo';
 import { RadarPreview } from '../game/radarPreview';
+import { isTouchDevice } from '../game/touchDevice';
 import type { LeaderboardEntry, RadarCounts } from '../game/radarPreview';
 
 declare global {
@@ -16,8 +17,13 @@ declare global {
 
 interface LoginScreenProps {
   /** `jump` = a fresh avatar at a random floor spot (Teleport); otherwise re-attach to the existing one (Wake up). */
-  onEnter: (loginName: string, jump: boolean, look: Look | null) => void;
+  onEnter: (loginName: string, hash: string, jump: boolean, look: Look | null) => void;
+  initialHash?: string;
+  /** Why the player landed back here, if it wasn't their choice. */
+  initialNotice?: string;
 }
+
+const MAX_HASH_LENGTH = 64;
 
 const MAX_SCALE = 2.5;
 const READOUT_INTERVAL_MS = 250;
@@ -44,6 +50,17 @@ const CONTROL_KEYS = [
   { keys: ['SHIFT'], action: 'NINJA STAR' },
   { keys: ['0-9'], action: 'SAY AN EMOJI' },
   { keys: ['ESC'], action: 'LEAVE' },
+];
+
+// The on-screen buttons of a phone (see TouchControls), in the same order as CONTROL_KEYS.
+const TOUCH_CONTROL_KEYS = [
+  { keys: ['GRAB'], action: 'GRAB / THROW' },
+  { keys: ['\u25BC'], action: 'PUT DOWN' },
+  { keys: ['\u25C0', '\u25B6'], action: 'RUN' },
+  { keys: ['JUMP'], action: 'JUMP' },
+  { keys: ['\u2605'], action: 'NINJA STAR' },
+  { keys: ['\u263A'], action: 'SAY AN EMOJI' },
+  { keys: ['\u2630'], action: 'LEAVE' },
 ];
 
 function fitScale(): number {
@@ -83,16 +100,18 @@ function SwatchRow({ id, title, value, onPick }: SwatchRowProps) {
   );
 }
 
-export function LoginScreen({ onEnter }: LoginScreenProps) {
+export function LoginScreen({ onEnter, initialHash = '', initialNotice = '' }: LoginScreenProps) {
   const [saved] = useState(loadSavedLogin);
   const [loginName, setLoginName] = useState(saved.name);
+  const [hash, setHash] = useState(initialHash);
   const [headband, setHeadband] = useState<string | null>(saved.headband);
   const [belt, setBelt] = useState<string | null>(saved.belt);
   const [wakeAvailable, setWakeAvailable] = useState(false);
   const [counts, setCounts] = useState<RadarCounts | null>(null);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
-  const [notice, setNotice] = useState('');
+  const [notice, setNotice] = useState(initialNotice);
   const [scale, setScale] = useState(fitScale);
+  const touch = useRef(isTouchDevice()).current;
 
   const shipCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const frontCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -104,6 +123,8 @@ export function LoginScreen({ onEnter }: LoginScreenProps) {
   // The room's callbacks outlive any one render, so they read the latest values through refs.
   const nameRef = useRef(loginName);
   nameRef.current = loginName;
+  const hashRef = useRef(hash);
+  hashRef.current = hash;
   const onEnterRef = useRef(onEnter);
   onEnterRef.current = onEnter;
   const colorsRef = useRef({ headband, belt });
@@ -124,7 +145,7 @@ export function LoginScreen({ onEnter }: LoginScreenProps) {
       onTransport: (pad: PadId) => {
         const { headband: chosenHeadband, belt: chosenBelt } = colorsRef.current;
         saveLogin({ name: nameRef.current, headband: chosenHeadband, belt: chosenBelt });
-        onEnterRef.current(nameRef.current, pad === 'teleport', resolveLook(chosenHeadband, chosenBelt));
+        onEnterRef.current(nameRef.current, hashRef.current, pad === 'teleport', resolveLook(chosenHeadband, chosenBelt));
       },
     }, frontCanvasRef.current ?? undefined);
     roomRef.current = room;
@@ -182,7 +203,6 @@ export function LoginScreen({ onEnter }: LoginScreenProps) {
     room.wakeAvailable = wakeAvailable;
     room.setLook(resolveLook(headband, belt));
     demoRef.current?.setLook(resolveLook(headband, belt));
-    if (loginName.length !== 0) setNotice('');
   }, [loginName, wakeAvailable, headband, belt]);
 
   useEffect(() => {
@@ -202,13 +222,35 @@ export function LoginScreen({ onEnter }: LoginScreenProps) {
             </label>
             <input
               id="loginName"
-              className={notice ? 'input-error' : undefined}
+              className={notice && loginName.length === 0 ? 'input-error' : undefined}
               type="text"
               autoComplete="off"
               autoFocus={loginName.length === 0}
               ref={nameInputRef}
               value={loginName}
-              onChange={(event) => setLoginName(event.target.value)}
+              onChange={(event) => {
+                setLoginName(event.target.value);
+                setNotice('');
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') event.currentTarget.blur();
+              }}
+            />
+            <label className="panel-title" htmlFor="loginHash">
+              HASH
+            </label>
+            <input
+              id="loginHash"
+              className={notice && loginName.length !== 0 ? 'input-error' : undefined}
+              type="text"
+              autoComplete="off"
+              placeholder="(unprotected)"
+              maxLength={MAX_HASH_LENGTH}
+              value={hash}
+              onChange={(event) => {
+                setHash(event.target.value);
+                setNotice('');
+              }}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') event.currentTarget.blur();
               }}
@@ -216,7 +258,7 @@ export function LoginScreen({ onEnter }: LoginScreenProps) {
             <SwatchRow id="headband-colors" title="HEADBAND" value={headband} onPick={setHeadband} />
             <SwatchRow id="belt-colors" title="BELT" value={belt} onPick={setBelt} />
             <div id="login-notice" className={notice ? 'login-notice-error' : undefined} role={notice ? 'alert' : undefined}>
-              {notice || 'WALK ONTO A TRANSPORTER (\u2190 \u2192 \u2191)'}
+              {notice || (touch ? 'TAP A TRANSPORTER BELOW' : 'WALK ONTO A TRANSPORTER (\u2190 \u2192 \u2191)')}
             </div>
           </div>
 
@@ -251,7 +293,7 @@ export function LoginScreen({ onEnter }: LoginScreenProps) {
             <div id="controls">
               <canvas id="controls-demo" ref={demoCanvasRef} />
               <ul id="control-keys">
-                {CONTROL_KEYS.map(({ keys, action }) => (
+                {(touch ? TOUCH_CONTROL_KEYS : CONTROL_KEYS).map(({ keys, action }) => (
                   <li key={action}>
                     <span className="keys">
                       {keys.map((key) => (

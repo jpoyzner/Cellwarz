@@ -396,7 +396,7 @@ body {
   vertical-align: middle;
 }
 
-#recording {
+#black-box {
   color: #ff3b3b;
   font: bold 14px ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   left: 16px;
@@ -407,12 +407,12 @@ body {
   top: 12px;
 }
 
-#recording::before {
-  animation: recording-blink 1s steps(2, start) infinite;
+#black-box::before {
+  animation: black-box-blink 1s steps(2, start) infinite;
   content: '\25CF ';
 }
 
-@keyframes recording-blink {
+@keyframes black-box-blink {
   to {
     visibility: hidden;
   }
@@ -549,4 +549,218 @@ body {
   right: 0;
   top: 0;
   width: 100%;
+}
+
+/* ---- Touch devices (phones, landscape only). Everything here hangs off .touch-device, set only on such devices, so the
+   desktop layout is untouched. ---- */
+.touch-device,
+.touch-device body {
+  overscroll-behavior: none;
+}
+
+.touch-device #canvas {
+  -webkit-touch-callout: none;
+  touch-action: none;
+}
+
+/* The game is landscape-only: held upright, a full-screen prompt covers everything. */
+#rotate-prompt {
+  align-items: center;
+  background: #03040a;
+  color: #00f6ff;
+  display: none;
+  flex-direction: column;
+  font: bold 20px ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  gap: 14px;
+  inset: 0;
+  justify-content: center;
+  letter-spacing: 0.2em;
+  position: fixed;
+  text-align: center;
+  text-shadow: 0 0 10px #00f6ff;
+  z-index: 1000;
+}
+
+#rotate-icon {
+  font-size: 64px;
+}
+
+#rotate-sub {
+  color: #ff2ea6;
+  font-size: 12px;
+  text-shadow: 0 0 8px #ff2ea6;
+}
+
+@media (orientation: portrait) {
+  #rotate-prompt {
+    display: flex;
+  }
+}
+
+#touch-controls {
+  inset: 0;
+  pointer-events: none;
+  position: fixed;
+  z-index: 5;
+}
+
+.touch-button,
+#touch-run {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  background: rgba(4, 10, 24, 0.45);
+  border: 2px solid rgba(0, 246, 255, 0.7);
+  box-shadow: 0 0 12px rgba(0, 246, 255, 0.3), inset 0 0 12px rgba(0, 246, 255, 0.12);
+  color: #00f6ff;
+  font: bold 13px ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  letter-spacing: 0.08em;
+  pointer-events: auto;
+  text-shadow: 0 0 8px #00f6ff;
+  touch-action: none;
+  user-select: none;
+}
+
+.touch-button {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  position: absolute;
+}
+
+.touch-held {
+  background: rgba(0, 246, 255, 0.35);
+  box-shadow: 0 0 18px rgba(0, 246, 255, 0.7), inset 0 0 14px rgba(0, 246, 255, 0.35);
+}
+
+#touch-run {
+  border-radius: 42px;
+  bottom: 14px;
+  display: flex;
+  height: 84px;
+  left: 14px;
+  overflow: hidden;
+  position: absolute;
+  width: 164px;
+}
+
+.touch-half {
+  align-items: center;
+  display: flex;
+  flex: 1;
+  font-size: 26px;
+  justify-content: center;
+}
+
+.touch-half + .touch-half {
+  border-left: 1px solid rgba(0, 246, 255, 0.35);
+}
+
+.touch-round {
+  border-radius: 50%;
+}
+
+#touch-jump {
+  bottom: 14px;
+  height: 88px;
+  right: 14px;
+  width: 88px;
+}
+
+#touch-action {
+  border-color: rgba(255, 46, 166, 0.8);
+  bottom: 14px;
+  color: #ff2ea6;
+  height: 76px;
+  right: 112px;
+  text-shadow: 0 0 8px #ff2ea6;
+  width: 76px;
+}
+
+#touch-star {
+  bottom: 112px;
+  font-size: 24px;
+  height: 56px;
+  right: 30px;
+  width: 56px;
+}
+
+#touch-down {
+  bottom: 100px;
+  font-size: 20px;
+  height: 56px;
+  right: 122px;
+  width: 56px;
+}
+
+.touch-small {
+  border-radius: 10px;
+  font-size: 22px;
+  height: 44px;
+  top: 8px;
+  width: 44px;
+}
+
+#touch-emoji {
+  left: calc(50% + 6px);
+}
+
+#touch-menu {
+  left: calc(50% - 50px);
+}
+
+#touch-emoji-backdrop {
+  inset: 0;
+  pointer-events: auto;
+  position: absolute;
+}
+
+#touch-emoji-picker {
+  background: rgba(4, 10, 24, 0.88);
+  border: 1px solid rgba(0, 246, 255, 0.7);
+  box-shadow: 0 0 14px rgba(0, 246, 255, 0.35);
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(5, 48px);
+  left: 50%;
+  padding: 8px;
+  pointer-events: auto;
+  position: absolute;
+  top: 58px;
+  transform: translateX(-50%);
+}
+
+.touch-emoji-choice {
+  border-radius: 10px;
+  font-size: 26px;
+  height: 48px;
+  position: static;
+  width: 48px;
+}
+
+.touch-device .minimap {
+  bottom: auto;
+  height: 98px;
+  left: 8px;
+  right: auto;
+  top: 8px;
+  width: 154px;
+}
+
+.touch-device .minimap.minimap-closed {
+  height: 28px;
+  width: 28px;
+}
+
+.touch-device #spectator {
+  top: 58px;
+}
+
+.touch-device #spectator-title {
+  font-size: 22px;
+}
+
+.touch-device #hint {
+  bottom: 10%;
+  font-size: 13px;
+  padding: 5px 12px;
 }

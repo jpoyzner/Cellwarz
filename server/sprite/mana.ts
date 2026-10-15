@@ -64,6 +64,16 @@ export abstract class Mana extends Sprite {
     }
   }
 
+  override getDebugState(): Record<string, unknown> {
+    return {
+      vx: this.body.vx,
+      vy: this.body.vy,
+      groupSize: this.body.members.length,
+      handled: this.handledFlag,
+      thrown: this.thrownFlag,
+    };
+  }
+
   /** Per-frame hook for a block's own behavior (runs even while it is being carried). */
   protected onFrame(): void {}
 

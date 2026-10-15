@@ -21,7 +21,7 @@ at a random bare floor spot at least 60 grid cells from any real player, with a 
 
 1. Load the site (the page title says "Cyberstation"; the welcome blurb opens "Welcome to the Cyberstation"); the login screen (`#login`) is the inside of a huge ship/rocket: a small room (`#ship-canvas`) with
    your own avatar in it (cyan headband and belt until you pick colours), a viewport onto space, a callsign field
-   (`#loginName`), headband/belt colour pickers, a short briefing (`#desc`: welcome blurb — no mention of hit counts — which also says to shatter the tetrinoids to collect disco shards, the controls clip and key caps,
+   (`#loginName`) with a hash (password) field (shown as typed) under it (`#loginHash`, see "Login — hash"), headband/belt colour pickers, a short briefing (`#desc`: welcome blurb — no mention of hit counts — which also says to shatter the tetrinoids to collect disco shards, the controls clip and key caps,
    see "Learning to play"), a Disco shards leaderboard (see "Login room — leaderboard"), a block index (`#legend`, a strip set into the floor below the walking line) and a live radar (see "Login room — live
    radar"). The room is scaled to fit the window.
 2. Walk the avatar with the Left/Right arrows and jump with Up (the arrow keys work even while the callsign field has
@@ -34,7 +34,8 @@ at a random bare floor spot at least 60 grid cells from any real player, with a 
    background) render within ~1 second of the WebSocket connecting. Without a callsign nothing fires: the notice
    `#login-notice` turns into a flashing red "NO TELEPORT: TYPE A CALLSIGN FIRST!" banner, the field gets a red
    outline (`.input-error`) and is focused; both clear once something is typed.
-5. The last callsign and colours are remembered (localStorage) and prefilled next time, including after Escape.
+5. The last callsign and colours are remembered (localStorage) and prefilled next time, including after Escape. The
+   hash is never written to storage (it is only kept in memory across Escape, within the page).
 
 **Covered by**: [e2e/login-room.spec.ts](e2e/login-room.spec.ts) (room, walking, jumping, callsign required, walking onto the
 pad), [e2e/login.spec.ts](e2e/login.spec.ts) (entering the game) and [src/game/__tests__/loginRoom.test.ts](src/game/__tests__/loginRoom.test.ts)
@@ -52,6 +53,22 @@ pad), [e2e/login.spec.ts](e2e/login.spec.ts) (entering the game) and [src/game/_
 **Covered by**: [server/__tests__/randomFloor.test.ts](server/__tests__/randomFloor.test.ts) (random floor placement),
 [server/__tests__/socketHubLogin.test.ts](server/__tests__/socketHubLogin.test.ts) (jump = fresh avatar) and every e2e
 spec that logs in through `#teleport` (they use the spawn portal via the env flag).
+
+## Login — hash (password) and takeover
+
+1. Under the callsign is a **HASH** field (plain text, not masked) (`#loginHash`); blank it reads "(unprotected)".
+2. The first non-blank hash a callsign is used with is permanent: the server keeps it (salted, in memory only) and every later
+   login for that callsign — TELEPORT or WAKE UP — must send the same one, or the server answers `{ connect: 'denied' }`
+   and hangs up before touching the avatar. The client returns to the login screen with a red "WRONG HASH: THAT CALLSIGN
+   IS PROTECTED" notice (the hash field is outlined red; typing clears it). There is no recovery for a forgotten hash.
+3. A callsign only ever used with a blank hash is unprotected: logins are accepted whatever hash they send, until the
+   first non-blank one claims it (from then on rule 2 applies).
+4. The last login wins: when a callsign logs in while another connection is driving it, the server sends the old one
+   `{ connect: 'displaced' }` and closes it; that client returns to the login screen with a "LOGGED IN FROM ELSEWHERE:
+   DISCONNECTED" notice. A dropped connection can no longer drive the avatar, and its closing doesn't put it to sleep.
+
+**Covered by**: [e2e/login-hash.spec.ts](e2e/login-hash.spec.ts), [server/__tests__/socketHubLogin.test.ts](server/__tests__/socketHubLogin.test.ts)
+and [server/__tests__/session.test.ts](server/__tests__/session.test.ts).
 
 ## Login — wake up (reattach)
 
@@ -157,6 +174,45 @@ finishing rocket/star hit counts) plus [server/__tests__/socketHubRobotBody.test
    the same position, awake (see "Login — wake up"), while TELEPORT gives a fresh avatar at a random floor spot.
 
 **Covered by**: [e2e/login.spec.ts](e2e/login.spec.ts)
+
+## Mobile controls (phones, landscape only)
+
+Everything here exists only on touch devices: a device whose main pointer is coarse (`(pointer: coarse)`), or any browser
+opened with `?touch=1` (`?touch=0` forces it off). Detection sets the `touch-device` class on `<html>` (every touch-only
+style hangs off it) and mounts the touch UI; on a desktop browser none of this exists and the keyboard game is unchanged.
+
+1. **Landscape only**: held upright, a full-screen `#rotate-prompt` ("ROTATE YOUR PHONE") covers the login screen and the
+   game; it goes away when the phone is turned.
+2. **First tap**: the first tap anywhere asks the browser for fullscreen and a landscape lock (once per page load; iOS
+   Safari has neither, so nothing happens there). The canvas and camera follow window resizes on touch devices. Every tap on
+   the controls also unlocks WebAudio (mobile browsers keep it silent until a tap).
+3. **Login screen**: the notice reads "TAP A TRANSPORTER BELOW" (tap TELEPORT / WAKE UP), and the key caps in `#control-keys`
+   list the on-screen buttons (GRAB, ▼, ◀ ▶, JUMP, ★, ☺, ☰) instead of keys.
+4. **In the game** (`#touch-controls`, drawn over the canvas; every button sends the keyboard's key codes, so the server is
+   unchanged, and several fingers work at once):
+   - **Run pad** (`#touch-run`, bottom left): hold the left half (`#touch-left`) or right half (`#touch-right`) to run; sliding
+     the thumb across switches direction without lifting; lifting stops.
+   - **Right thumb**: `#touch-jump` (hold for a full jump, release early for a short one — same as the Up key), `#touch-action`
+     (Space: grabs a block, reads GRAB, then THROW while you carry one, and WAKE while your avatar sleeps), `#touch-star`
+     (Shift: ninja star) and `#touch-down` (Down: put a block down / look down).
+   - **Top centre**: `#touch-emoji` opens a picker (`#touch-emoji-picker`) of the ten emoji (same as keys 1-9, 0); tapping one
+     shows it over your avatar and closes the picker (tapping outside also closes it). `#touch-menu` (☰) is Escape: the first
+     tap puts your avatar to sleep (spectating), the next leaves (see "Leaving the game").
+   - While your avatar is asleep only the run pad (pans the camera), WAKE and the menu show; while dead/assimilated, only the
+     run pad and the menu. The spectator text names the buttons instead of keys.
+   - The first-run prompts (see "Learning to play") read "◀ ▶ RUN · JUMP", "TAP GRAB TO LIFT THE BLOCK", "THROW · ▼ PUT DOWN".
+   - The minimap is smaller and moves to the top-left so the thumbs have the bottom corners.
+5. **Safety**: every held button is released when the window loses focus, the page is hidden, or the controls go away, so
+   no key can stay stuck down. A short vibration accompanies Action / Star presses and your death where the browser supports it.
+6. The old swipe-and-tap gestures are gone.
+
+**Covered by**: [e2e/mobile-controls.spec.ts](e2e/mobile-controls.spec.ts) (desktop has no touch UI and `?touch=` overrides;
+phone: login explains the buttons, rotate prompt, run / slide / lift on real multitouch events, run + jump with two fingers,
+emoji picker, menu → sleep → WAKE → leave, release on blur),
+[src/game/__tests__/touchKeys.test.ts](src/game/__tests__/touchKeys.test.ts) (several fingers → keys),
+[src/game/__tests__/touchDevice.test.ts](src/game/__tests__/touchDevice.test.ts) and
+[src/game/__tests__/hints.test.ts](src/game/__tests__/hints.test.ts) (touch wording). Fullscreen / orientation lock,
+vibration, audio unlock and how it feels under a real thumb are manual-only.
 
 ## Sleeping avatar (Escape / lost connection)
 
@@ -472,25 +528,27 @@ number replaces it, the same number clears it, it disappears after 5 seconds) an
 [e2e/login-room.spec.ts](e2e/login-room.spec.ts) (the key cap on the login screen). The robot skull and diamond
 drop are unit-tested only (robots are off in the e2e run); the bubble's look is manual-only.
 
-## Debug recording: the "Back Box" (backtick)
+## The Black Box (backtick)
 
-The **Back Box** (backtick + black box) is the in-game flight recorder: when something goes wrong, press `` ` ``, then
-"check the Black Box" (`recordings/latest.json`) afterwards.
+The **Black Box** is the in-game flight recorder: when something goes wrong, press `` ` ``, then "check the Black Box"
+(`black-box/latest.json`) afterwards.
 
-1. While in-game, press the backtick key (`` ` ``) to start a debug recording. A blinking red `#recording` label
-   ("REC 9.8s") appears top-left and counts down. The recording captures the world's sprite positions at the
-   start, every message the server then sends (redraw frames, planet, score...) and every key press, all
-   timestamped.
+1. While in-game, press the backtick key (`` ` ``) to start the Black Box. A blinking red `#black-box` label
+   ("BLACK BOX REC 9.8s") appears top-left and counts down. It captures the world's sprite positions (plus per-sprite
+   sleeping/health/emoji state, looks and the planet) at the start, every message the server then sends (redraw frames,
+   planet, score...) and every key press, all timestamped.
 2. Press backtick again to stop. Otherwise it stops by itself after 10 seconds, or when you leave with Escape.
-3. The finished recording is sent to the server, which writes it to `recordings/latest.json` (git-ignored,
-   `CELLWARZ_RECORDINGS_DIR` overrides the folder). Only the latest is kept: a new recording overwrites the old
-   file. The backtick key is never sent to the server as a game key. Use it right after an issue happens, then
-   point whoever fixes it at `recordings/latest.json`.
+3. The finished Black Box is sent to the server, which adds its own dump of **every** sprite in the room at the start and
+   end (real class, size, layer, mass, and velocity for coloured blocks — things the client never receives) and writes it
+   to `black-box/latest.json` (git-ignored, `CELLWARZ_BLACK_BOX_DIR` overrides the folder). Only the latest is kept: a new
+   one overwrites the old file. The backtick key is never sent to the server as a game key. Use it right after an issue
+   happens, then point whoever fixes it at `black-box/latest.json`.
 
-**Covered by**: [e2e/recording.spec.ts](e2e/recording.spec.ts) (toggle, HUD, captured keys/positions, the 10s
-auto-stop), [src/game/__tests__/recorder.test.ts](src/game/__tests__/recorder.test.ts) and
-[server/__tests__/recordingStore.test.ts](server/__tests__/recordingStore.test.ts) (single-file overwrite, size cap,
-login required).
+**Covered by**: [e2e/black-box.spec.ts](e2e/black-box.spec.ts) (toggle, HUD, captured keys/positions, snapshot fields, the
+10s auto-stop), [src/game/__tests__/blackBox.test.ts](src/game/__tests__/blackBox.test.ts),
+[server/__tests__/blackBoxStore.test.ts](server/__tests__/blackBoxStore.test.ts) (single-file overwrite, size cap,
+login required) and [server/__tests__/blackBoxDump.test.ts](server/__tests__/blackBoxDump.test.ts) (the server-side
+sprite dumps, saved start/end).
 
 ## Game feel: audio, particles, screen shake, netcode smoothing
 

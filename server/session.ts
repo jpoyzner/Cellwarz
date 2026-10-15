@@ -2,9 +2,19 @@ import type { Look } from './look';
 import type { DeathCause } from './deathCause';
 import type { Avatar } from './sprite/avatar';
 import type { Robot } from './sprite/robot';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { UI } from './ui';
 
 export const POINTS_PER_BLOCK = 20;
+
+/** A connection that can drive a session; it is told to go away when a newer login takes the session over. */
+export interface SessionOwner {
+  drop(): void;
+}
+
+function digestOf(salt: Buffer, password: string): Buffer {
+  return createHash('sha256').update(salt).update(password).digest();
+}
 
 export class Session {
   /** Bumped whenever any player's colours change, so connections know when to resend everyone's looks. */
@@ -17,13 +27,28 @@ export class Session {
   /** The robot this player's body was turned into by a robot's touch; their client keeps watching it. */
   private robotBody: Robot | undefined;
   /** The connection currently driving this session; only it can put the avatar to sleep by leaving. */
-  private owner: object | undefined;
+  private owner: SessionOwner | undefined;
+  /** The login hash (password), stored salted; set by the first non-blank hash the callsign logs in with, then permanent. */
+  private credential: { salt: Buffer; digest: Buffer } | undefined;
   private look: Look | undefined;
   private deathCause: DeathCause | undefined;
   constructor(avatar: Avatar) {
     this.avatar = avatar;
     avatar.setSession(this);
     this.ui = new UI(avatar);
+  }
+
+  /** The first non-blank hash a callsign is seen with locks it for good; a blank one (or a later one) changes nothing. */
+  protect(password: string): void {
+    if (password === '' || this.credential) return;
+    const salt = randomBytes(16);
+    this.credential = { salt, digest: digestOf(salt, password) };
+  }
+
+  /** Unprotected callsigns accept anything; protected ones need the exact hash they were created with. */
+  acceptsPassword(password: string): boolean {
+    if (!this.credential) return true;
+    return timingSafeEqual(this.credential.digest, digestOf(this.credential.salt, password));
   }
 
   getUI(): UI {
@@ -78,14 +103,16 @@ export class Session {
     this.robotBody = robot;
   }
 
-  /** A connection (re)took this session: whoever was asleep wakes up. */
-  attach(owner: object): void {
+  /** A connection (re)took this session: the last login wins (any previous connection is dropped) and a sleeper wakes up. */
+  attach(owner: SessionOwner): void {
+    const previous = this.owner;
     this.owner = owner;
+    if (previous && previous !== owner) previous.drop();
     this.avatar?.wakeUp();
   }
 
   /** The connection went away (Escape or a lost link): a still-living avatar falls asleep where it stands. */
-  detach(owner: object): void {
+  detach(owner: SessionOwner): void {
     if (this.owner !== owner) return; // a newer connection already took over (e.g. a quick reattach).
     this.owner = undefined;
     this.avatar?.fallAsleep();

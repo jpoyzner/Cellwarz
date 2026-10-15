@@ -128,7 +128,7 @@ export class Physics {
       const spritesAtSide = yDirection === Physics.UP ? spritesOnTop : this.getSpritesUnder(sprite, xDirection, extraReach);
       for (const spriteAtPosition of spritesAtSide) {
         if (this.canInteract(sprite, spriteAtPosition)) {
-          if (!push || sprite.getMass() < spriteAtPosition.getMass()) {
+          if (this.isBlockedBy(sprite, spriteAtPosition, push)) {
             return true;
           }
           pushedSprites.add(spriteAtPosition);
@@ -149,7 +149,7 @@ export class Physics {
           if (spritesAtPosition && spritesAtPosition.size > 0) {
             for (const spriteAtPosition of spritesAtPosition) {
               if (this.canInteract(sprite, spriteAtPosition)) {
-                if (!push || sprite.getMass() < spriteAtPosition.getMass()) {
+                if (this.isBlockedBy(sprite, spriteAtPosition, push)) {
                   return true;
                 }
                 pushedSprites.add(spriteAtPosition);
@@ -248,6 +248,11 @@ export class Physics {
 
   private isRigidMate(sprite: Sprite, other: Sprite): boolean {
     return sprite.getRigidGroup().includes(other);
+  }
+
+  /** Whether `target` stops `sprite` outright instead of being shoved: stable fixtures (portals, wall blocks) never budge. */
+  private isBlockedBy(sprite: Sprite, target: Sprite, push: boolean): boolean {
+    return !push || target.isStable() || sprite.getMass() < target.getMass();
   }
 
   private canInteract(sourceSprite: Sprite, targetSprite: Sprite): boolean {

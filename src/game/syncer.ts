@@ -1,5 +1,5 @@
 import type { Analyzer } from './analyzer';
-import type { Recorder, Recording } from './recorder';
+import type { BlackBox, BlackBoxRecording } from './blackBox';
 import type { Renderer } from './renderer';
 import type { Look } from './look';
 import type { ConnectPayload, LooksMap, PlanetState } from './types';
@@ -9,12 +9,17 @@ export class Syncer {
   private connection: WebSocket | undefined;
   /** The server stopped streaming this player's level because they were idle for too long. */
   onInactive: (() => void) | undefined;
-  /** Debug recorder (backtick key); when recording, every incoming message and outgoing key press is logged. */
-  recorder: Recorder | undefined;
+  /** The callsign is protected by a hash that wasn't given right; the server hangs up. */
+  onDenied: (() => void) | undefined;
+  /** A newer login for this callsign took the session over; the server hangs up. */
+  onDisplaced: (() => void) | undefined;
+  /** The Black Box (backtick key); while it records, every incoming message and outgoing key press is logged. */
+  blackBox: BlackBox | undefined;
 
   constructor(
     private readonly renderer: Renderer,
     private readonly loginName: string,
+    private readonly hash: string,
     private readonly jump: boolean,
     private readonly look: Look | null,
     private readonly analyzer?: Analyzer,
@@ -30,6 +35,7 @@ export class Syncer {
         JSON.stringify({
           connect: true,
           login: this.loginName,
+          hash: this.hash,
           jump: this.jump,
           headband: this.look?.headband,
           belt: this.look?.belt,
@@ -49,7 +55,7 @@ export class Syncer {
 
   /** Public so e2e can feed the client a server message directly (e.g. the inactivity one, which takes a minute to arrive). */
   handleMessage(data: Record<string, unknown>): void {
-    this.recorder?.logMessage(data);
+    this.blackBox?.logMessage(data);
 
     if (this.analyzer) {
       this.analyzer.connectionTime = Date.now();
@@ -58,6 +64,10 @@ export class Syncer {
     if (data.connect) {
       if (data.connect === 'inactive') {
         this.onInactive?.();
+      } else if (data.connect === 'denied') {
+        this.onDenied?.();
+      } else if (data.connect === 'displaced') {
+        this.onDisplaced?.();
       } else {
         this.renderer.applyFullState(data as unknown as ConnectPayload);
       }
@@ -79,7 +89,7 @@ export class Syncer {
   }
 
   sendKey(key: number, down: boolean): void {
-    this.recorder?.logKey(key, down);
+    this.blackBox?.logKey(key, down);
     this.connection?.send(JSON.stringify({ key, down }));
   }
 
@@ -87,9 +97,14 @@ export class Syncer {
     this.connection?.send(JSON.stringify({ scored: blocks }));
   }
 
-  /** Debug recordings go to the server, which keeps only the latest one on disk. */
-  sendRecording(recording: Recording): void {
-    this.connection?.send(JSON.stringify({ recording }));
+  /** Tells the server the Black Box just started, so it captures its own sprite dump for the same moment. */
+  sendBlackBoxStarted(): void {
+    this.connection?.send(JSON.stringify({ blackBoxStarted: true }));
+  }
+
+  /** The Black Box goes to the server, which adds its sprite dumps and keeps only the latest one on disk. */
+  sendBlackBox(blackBox: BlackBoxRecording): void {
+    this.connection?.send(JSON.stringify({ blackBox }));
   }
 
   close(): void {

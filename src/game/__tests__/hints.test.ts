@@ -115,4 +115,26 @@ describe('HintSystem', () => {
     none.update(idle);
     expect(none.current?.id).toBe('move');
   });
+
+  it('words the prompts for the on-screen buttons on a touch device', () => {
+    const hints = new HintSystem(new MemoryStorage(), true);
+    hints.update(idle);
+    expect(hints.current?.text).toBe('\u25C0 \u25B6 RUN \u00B7 JUMP');
+
+    hints.update({ alive: true, touchingBlock: true, carryingBlock: false });
+    expect(hints.current).toMatchObject({ id: 'grab', text: expect.stringContaining('GRAB') });
+    expect(hints.current?.text).not.toContain('SPACE');
+
+    hints.update({ alive: true, touchingBlock: false, carryingBlock: true });
+    expect(hints.current).toMatchObject({ id: 'carry', text: expect.stringContaining('THROW') });
+    expect(hints.current?.text).not.toContain('SPACE');
+  });
+
+  it('still trims the touch movement prompt as each half is learned', () => {
+    const hints = new HintSystem(new MemoryStorage(), true);
+    hints.update(idle);
+    hints.onKey(RIGHT, true);
+    hints.update(idle);
+    expect(hints.current?.text).toBe('TAP JUMP');
+  });
 });

@@ -5,6 +5,7 @@ import { describeDeath } from './deathCause';
 import type { DeathCard } from './deathCause';
 import { drawLamps } from './lamps';
 import { HintSystem } from './hints';
+import { isTouchDevice } from './touchDevice';
 import { VineField } from './vines';
 import type { Look } from './look';
 import { TvScreens } from './tvs';
@@ -182,18 +183,22 @@ export class Renderer {
   /** Camera peek below the avatar while Down is held (purely visual). */
   private readonly lookDown = new LookDown();
   /** First-run control prompts (see hints.ts); public so the React layer can show them and e2e can read them. */
-  readonly hints = new HintSystem();
+  readonly hints = new HintSystem(undefined, isTouchDevice());
   private lastHintCheck = 0;
   /** Called whenever the spectator mode changes, so the UI can show/hide its message. */
   onSpectatorChange: ((mode: SpectatorMode) => void) | undefined;
   /** Told what killed the local avatar (null when the server named no cause), the moment the death ping arrives. */
   onDeathCard: ((card: DeathCard | null) => void) | undefined;
 
+  /** Called when the local avatar picks a block up or lets go of it (the touch Action button changes its label). */
+  onCarryingChange: ((carrying: boolean) => void) | undefined;
+
+  private carryingBlock = false;
   private me: StoredSprite | undefined;
   private offsetX = 0;
   private offsetY = 0;
-  private readonly windowWidth = window.innerWidth;
-  private readonly windowHeight = window.innerHeight;
+  private windowWidth = window.innerWidth;
+  private windowHeight = window.innerHeight;
 
   private lastFrameTime = performance.now();
   private lastDtMs = 0;
@@ -299,6 +304,24 @@ export class Renderer {
     if (this.minimap) document.removeEventListener('visibilitychange', this.onVisibilityChange);
     this.audio.dispose();
     this.tvScreens.dispose();
+  }
+
+  /** The window changed size (rotation, leaving fullscreen): the camera and canvas follow it. */
+  resize(width: number, height: number): void {
+    this.windowWidth = width;
+    this.windowHeight = height;
+    this.context.canvas.width = width;
+    this.context.canvas.height = height;
+  }
+
+  /** Browsers keep audio suspended until a tap; touch controls call this on every one so sound can start. */
+  unlockAudio(): void {
+    this.audio.unlock();
+  }
+
+  /** Whether the local avatar has a block overhead right now. */
+  get carrying(): boolean {
+    return this.carryingBlock;
   }
 
   setMinimapOpen(open: boolean): void {
@@ -432,7 +455,7 @@ export class Renderer {
     this.hasConnectedOnce = true;
   }
 
-  /** Public game state at this instant, used as the starting point of a debug recording. */
+  /** Public game state at this instant, used as the starting point of a Black Box recording (everything a frame delta builds on). */
   snapshot(): Record<string, unknown> {
     return {
       sprites: this.sprites,
@@ -445,6 +468,15 @@ export class Renderer {
       worldHeight: this.worldHeight,
       score: this.score,
       diamonds: this.diamonds,
+      // Per-sprite extras that redraw frames never repeat, so the starting values can't be recovered from the events.
+      sleeping: [...this.sleeping],
+      health: Object.fromEntries(this.health),
+      emojis: Object.fromEntries(this.emojis),
+      shrinks: Object.fromEntries(this.shrinks),
+      looks: this.looks,
+      planet: this.planet
+        ? { id: this.planet.id, x: this.planet.x, y: this.planet.y, vx: this.planet.vx, vy: this.planet.vy, radius: this.planet.radius }
+        : null,
     };
   }
 
@@ -724,6 +756,7 @@ export class Renderer {
     const avatar = spriteId ? this.sprites[spriteId] : undefined;
     if (!avatar || this.spectator !== 'off' || this.shrinks.has(spriteId)) {
       this.hints.update({ alive: false, touchingBlock: false, carryingBlock: false });
+      this.setCarrying(false);
       return;
     }
 
@@ -746,6 +779,13 @@ export class Renderer {
       }
     }
     this.hints.update({ alive: true, touchingBlock, carryingBlock });
+    this.setCarrying(carryingBlock);
+  }
+
+  private setCarrying(carrying: boolean): void {
+    if (carrying === this.carryingBlock) return;
+    this.carryingBlock = carrying;
+    this.onCarryingChange?.(carrying);
   }
 
   private advanceRenderPositions(dtMs: number): void {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { POINTS_PER_BLOCK, Session } from '../session';
 import { getSprites } from '../jsonGenerator';
 import { ESCAPE_KEY } from '../ui';
@@ -38,6 +38,43 @@ describe('Session diamonds', () => {
   });
 });
 
+const owner = () => ({ drop: vi.fn() });
+
+describe('Session hash', () => {
+  function setup() {
+    const { cell, cellData } = createTestCell(50, 50);
+    Avatar.init(cellData);
+    return new Session(new Avatar('guarded', 10, 10, false, cell));
+  }
+
+  it('is unprotected until a non-blank hash is set: any hash (or none) is accepted', () => {
+    const session = setup();
+    session.protect('');
+
+    expect(session.acceptsPassword('')).toBe(true);
+    expect(session.acceptsPassword('anything')).toBe(true);
+  });
+
+  it('is locked by the first non-blank hash, which later ones cannot replace', () => {
+    const session = setup();
+    session.protect('');
+    session.protect('first');
+    session.protect('second');
+
+    expect(session.acceptsPassword('first')).toBe(true);
+    expect(session.acceptsPassword('second')).toBe(false);
+  });
+
+  it('only accepts the exact hash a protected session was created with', () => {
+    const session = setup();
+    session.protect('sesame');
+
+    expect(session.acceptsPassword('sesame')).toBe(true);
+    expect(session.acceptsPassword('Sesame')).toBe(false);
+    expect(session.acceptsPassword('')).toBe(false);
+  });
+});
+
 describe('Session sleeping', () => {
   function setup() {
     const { cell, cellData } = createTestCell(50, 50);
@@ -48,7 +85,7 @@ describe('Session sleeping', () => {
 
   it('puts a living avatar to sleep (and stops its run) when its connection leaves, and wakes it on reattach', () => {
     const { avatar, session } = setup();
-    const connection = {};
+    const connection = owner();
     session.attach(connection);
     avatar.runRight();
 
@@ -56,23 +93,37 @@ describe('Session sleeping', () => {
     expect(avatar.isSleeping()).toBe(true);
     expect(session.unplugged()).toBe(false); // asleep is not dead: Reattach! still finds it
 
-    session.attach({});
+    session.attach(owner());
     expect(avatar.isSleeping()).toBe(false);
   });
 
   it('ignores a stale connection leaving after a newer one has taken over', () => {
     const { avatar, session } = setup();
-    const oldConnection = {};
+    const oldConnection = owner();
     session.attach(oldConnection);
-    session.attach({});
+    session.attach(owner());
 
     session.detach(oldConnection);
     expect(avatar.isSleeping()).toBe(false);
   });
 
+  it('drops the previous connection when a newer one logs in (the last login wins), but not on a re-attach by the same one', () => {
+    const { session } = setup();
+    const first = owner();
+    const second = owner();
+
+    session.attach(first);
+    session.attach(first);
+    expect(first.drop).not.toHaveBeenCalled();
+
+    session.attach(second);
+    expect(first.drop).toHaveBeenCalledTimes(1);
+    expect(second.drop).not.toHaveBeenCalled();
+  });
+
   it('does nothing for a dead player (no avatar left to put to sleep)', () => {
     const { session } = setup();
-    const connection = {};
+    const connection = owner();
     session.attach(connection);
     session.unplug();
 

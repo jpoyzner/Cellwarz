@@ -7,6 +7,15 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
 > This repo was fully rewritten from that codebase to Node/TypeScript/React; the porting notes below describe
 > intentional behavior deltas from that original.
 
+## Jargon (Jeff's shorthand)
+
+- **"Black Box"** (a.k.a. "black box recording", "the recording") — the in-game flight recorder. When Jeff says
+  "check the Black Box", **read [black-box/latest.json](black-box/latest.json) immediately** (no searching needed; it's
+  git-ignored and only the latest one exists). It holds the client's starting snapshot and every server message/key
+  press for up to 10s, plus a `server` section with the server's own dump of **every** sprite (real class, size, layer,
+  mass, motion) at the start and end. Details: "Black Box" under Architecture below, and
+  [WORKFLOWS.md](WORKFLOWS.md#the-black-box-backtick).
+
 ## Architecture
 
 - **Server** (`server/`, entry point [server.ts](server.ts)): `World` constructs one `Physics` and one `Zion` at
@@ -52,6 +61,13 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   `game/analyzer.ts` (perf HUD) — these draw imperatively outside React's render cycle for performance, same
   design intent as the original Backbone views. `GameCanvas` also exposes `window.__cellwarz` (public game state
   only) as a test-only introspection hook for E2E tests (see [e2e/global.d.ts](e2e/global.d.ts)).
+- **Login hash & takeover**: the login screen has a plain-text (not masked) `HASH` field (`#loginHash`, "(unprotected)" placeholder). The
+  connect message carries `hash`; the first non-blank one a callsign is seen with fixes it via `Session.protect()` (salted sha256, in
+  memory; blank = still unprotected) and every later login for that callsign must pass `Session.acceptsPassword()` or
+  `SocketHub` answers `{ connect: 'denied' }` and closes before touching the avatar. `Session.attach(owner)` drops the
+  previous owner (`SessionOwner.drop()` → `{ connect: 'displaced' }` + close; the last login wins). The client
+  (`Syncer.onDenied`/`onDisplaced`) returns to the login screen with a notice; the hash is never put in localStorage.
+  There is no rate limiting on guesses yet.
 - **No chat**: player-to-player text chat was removed entirely (client input handling, `Cell.postMessage` /
   `MESSAGE_PARAM` on the server) — a different communication system will replace it later. Don't re-add it
   without an explicit request.
@@ -106,6 +122,9 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   body) makes `Physics.move` move all members as one or none, and `Physics.canInteract` ignores group mates.
   `Physics.move` is also guarded against re-entrancy (a `moving` set): a sprite already being moved up the call stack is
   just blocked — two overlapping sprites can each count as "on top" of the other, which used to recurse forever.
+  Stable sprites (`isStable()`: wall blocks, the stargates/spawn portal, ghost effects) are never shoved — a mover that touches
+  one is just blocked (`Physics.isBlockedBy`). Before this, a planet-pulled `Diamond` (ghost layer, mass 1) pushed the corner stargates
+  across the room over time.
   `CellData` keeps a `live` set: `move`/`moveTo` ignore a sprite that was already deleted. Without it a deleted block still
   listed in a stuck group (e.g. a whole group swallowed by the planet before anyone pruned it) was written back into the
   grid every time the group moved — an invisible solid 3x3 block (not in `sprites`, so never sent to clients).
@@ -168,16 +187,21 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   for backgrounded/unfocused tabs (this bit a Playwright test with two browser contexts during development;
   see the git history on `src/game/renderer.ts` for the fix), so anything logically load-bearing can't depend
   on it actually running.
-- **Debug recording, a.k.a. the "Back Box" (backtick)** — a flight recorder; "check the Black Box" means read
-  `recordings/latest.json` (`src/game/recorder.ts`, `server/recordingStore.ts`): `attachInputHandlers` turns the
-  backtick key into `onToggleRecording` (never sent to the server). `Recorder` (owned by `GameCanvas`, set on
-  `syncer.recorder`) snapshots `renderer.snapshot()` at start, then `Syncer.handleMessage`/`sendKey` log every incoming
-  message (deep-cloned: the renderer keeps parts of full-state payloads) and key press with timestamps; it auto-stops
-  at `MAX_RECORDING_MS` (10s), on a second press, or on leaving the game. The finished recording goes up the socket as
-  `{ recording }`; `SocketHub.handleRecording` (login required) writes it via `saveLatestRecording()` to the single
-  git-ignored `recordings/latest.json` (`CELLWARZ_RECORDINGS_DIR` overrides; 25MB cap), overwriting the previous one so
-  only the latest is kept. To analyze a bug report: read that file — `initial` is the starting state, `events` are
-  the `message`/`key` timeline.
+- **The Black Box (backtick)** — the in-game flight recorder; "check the Black Box" means read
+  `black-box/latest.json` (`src/game/blackBox.ts`, `server/blackBoxStore.ts`, `server/blackBoxDump.ts`):
+  `attachInputHandlers` turns the backtick key into `onToggleBlackBox` (never sent to the server). `BlackBox` (owned by
+  `GameCanvas`, set on `syncer.blackBox`) snapshots `renderer.snapshot()` at start (sprites plus the per-sprite
+  sleeping/health/emoji/shrink state, looks and planet — everything redraw frames build on) and sends `{ blackBoxStarted }`;
+  then `Syncer.handleMessage`/`sendKey` log every incoming message (deep-cloned: the renderer keeps parts of full-state
+  payloads) and key press with timestamps; it auto-stops at `MAX_BLACK_BOX_MS` (10s), on a second press, or on leaving the
+  game. The finished recording goes up the socket as `{ blackBox }`. Because the terse wire format has no sprite class,
+  mass or velocity, the **server** adds ground truth: `SocketHub.handleBlackBoxStarted` stores `dumpSprites(cell)` and
+  `handleBlackBox` (login required) attaches `server: { startSprites, endSprites }` (every sprite's id = cell index, class
+  name, x/y in grid units, size, layer, mass, removed, plus `Sprite.getDebugState()` — a generic hook `Mana` overrides with
+  vx/vy/group size) before `saveLatestBlackBox()` writes the single git-ignored `black-box/latest.json`
+  (`CELLWARZ_BLACK_BOX_DIR` overrides; 25MB cap), overwriting the previous one so only the latest is kept. To analyze a bug
+  report: read that file — `initial` is the client's starting state, `events` the `message`/`key` timeline, `server` the
+  authoritative sprite dumps. (When adding sprite state worth debugging, expose it through `getDebugState()`.)
 - **Login room** ([LoginScreen.tsx](src/components/LoginScreen.tsx), [loginRoom.ts](src/game/loginRoom.ts)): the login
   screen is a client-only 960x540 "inside a huge ship" scene (hull panels, ceiling lights, a viewport onto stars and a
   planet, hazard-striped floor) drawn on `#ship-canvas`, scaled to fit the window (canvas resolution follows the scale;
@@ -225,6 +249,23 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   [LoginScreen.tsx](src/components/LoginScreen.tsx) (`BLOCK_LEGEND`: keep it in step with the blocks MainRoom scatters and
   what they do). The death card ([deathCause.ts](src/game/deathCause.ts) `describeDeath`) turns the server's `cause` into
   `#death-cause`/`#death-tip` under "YOU DIED". Remaining ideas are in [TODOS.md](TODOS.md).
+- **Mobile controls (touch devices only, landscape only)**: [touchDevice.ts](src/game/touchDevice.ts) `isTouchDevice()` is
+  `(pointer: coarse)` (or `?touch=1`/`?touch=0`); [index.tsx](src/index.tsx) adds the `touch-device` class to `<html>` and every
+  touch-only rule in [cellwarz.css](src/styles/cellwarz.css) hangs off it (or off `#touch-controls`/`#rotate-prompt`, which only
+  render on touch), so the desktop layout is untouched — keep it that way. [TouchControls.tsx](src/components/TouchControls.tsx)
+  is a DOM gamepad over the canvas (plain `div`s, not `<button>`s — a focused button would fire on Space) that sends the
+  *same key codes as the keyboard* through `GameCanvas`'s shared `sendKey` (server message + `renderer.onLocalKey`), so the server
+  has no mobile code. [touchKeys.ts](src/game/touchKeys.ts)'s `TouchKeyState` maps pointer ids → keys (a key is down while any
+  finger holds it; `releaseAll()` on blur/pagehide/hidden/spectator change/unmount so nothing sticks); the run pad is one element whose
+  left/right half is re-evaluated on `pointermove` under pointer capture. The Action button's label comes from
+  `Renderer.onCarryingChange` (GRAB/THROW) and the spectator mode (WAKE). `pressEscape()` in [ui.ts](src/game/ui.ts) is shared
+  by the Escape key and the ☰ button; the old swipe/tap handlers are gone. `App` mounts `RotatePrompt` (portrait overlay,
+  pure CSS `@media (orientation: portrait)`) and asks for fullscreen + landscape lock on the first tap (`enterImmersiveMode`, once;
+  no-op on iOS). `Renderer.resize()` (wired only on touch) keeps canvas/camera in step with the window, and
+  `Renderer.unlockAudio()`/`AudioManager.unlock()` resume WebAudio on every tap. `HintSystem` takes a `touch` flag that re-words
+  its prompts. `TOUCH_CONTROL_KEYS` in `LoginScreen` mirrors `CONTROL_KEYS` for the login key caps. Known gaps: no
+  `viewport-fit=cover`/safe-area insets, no PWA manifest (iOS "Add to Home Screen"), the login panels are just scaled down, the
+  controls clip's badge still says `[SPACE]`, and the starfield isn't repopulated after a resize.
 - **Leaving the game (Escape)**: `ui.ts` handles Escape itself and sends key-up for the movement keys first. While the
   avatar is alive (`Renderer.canFallAsleep()`) the *first* Escape sends key 27 (`ESCAPE_KEY`, [server/ui.ts](server/ui.ts)
   → `Avatar.fallAsleep()`) and the player becomes a spectator of their sleeping avatar (`SpectatorMode` `'asleep'`: the

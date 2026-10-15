@@ -5,13 +5,21 @@ import { getSprites } from './jsonGenerator';
 import type { World } from './world';
 import { parseLook } from './look';
 import { Session } from './session';
+import type { SessionOwner } from './session';
 import type { Cell } from './cell/cell';
-import { saveLatestRecording } from './recordingStore';
+import { dumpSprites } from './blackBoxDump';
+import type { DumpedSprite } from './blackBoxDump';
+import { saveLatestBlackBox } from './blackBoxStore';
 import { topScores } from './leaderboard';
 
 const CONNECT_PARAM = 'connect';
 const INACTIVE_PARAM = 'inactive';
 const LOGIN_PARAM = 'login';
+const HASH_PARAM = 'hash';
+const DENIED_PARAM = 'denied';
+const DISPLACED_PARAM = 'displaced';
+// Sanity cap on a login hash; the client's field is capped far lower.
+const MAX_HASH_LENGTH = 128;
 const JUMP_PARAM = 'jump';
 const SPECTATE_PARAM = 'spectate';
 const HEADBAND_PARAM = 'headband';
@@ -25,7 +33,8 @@ const KEY_PARAM = 'key';
 const DOWN_PARAM = 'down';
 const DIED_PARAM = 'died';
 const SCORED_PARAM = 'scored';
-const RECORDING_PARAM = 'recording';
+const BLACK_BOX_PARAM = 'blackBox';
+const BLACK_BOX_STARTED_PARAM = 'blackBoxStarted';
 const SCORE_KEY = 'score';
 const DIAMONDS_KEY = 'diamonds';
 const PLANET_KEY = 'planet';
@@ -39,7 +48,7 @@ const TIMEOUT = 3000;
 // How often a connection checks whether the engine has stepped (frames go out within this of each step).
 const RENDER_POLL_MS = 4;
 
-export class SocketHub {
+export class SocketHub implements SessionOwner {
   private login: string | undefined;
   /** The room this connection last rendered, so a dead player's spectating keeps streaming it. */
   private cell: Cell | undefined;
@@ -48,6 +57,7 @@ export class SocketHub {
   /** The engine step whose changes this connection has sent up to (so each step's redraws go out exactly once). */
   private sentStep: { engine: Engine; step: number } | undefined;
   private diedNotified = false;
+  private blackBoxStartDump: DumpedSprite[] | undefined;
   private sentPlanetId: number | undefined;
   private sentPlanetAt = 0;
   private sentDiamonds = 0;
@@ -56,6 +66,8 @@ export class SocketHub {
   private leaderboardCheckedAt = 0;
   /** A login-screen connection that only watches the main room (for the radar); it has no avatar or session. */
   private spectating = false;
+  /** A newer login took this connection's session over (or it was refused); nothing it sends counts any more. */
+  private dropped = false;
 
   constructor(
     private readonly world: World,
@@ -75,14 +87,29 @@ export class SocketHub {
     });
   }
 
+  /** Called when a newer login takes this connection's session over: tell the client, then hang up. */
+  drop(): void {
+    this.cutOff(DISPLACED_PARAM);
+  }
+
+  private cutOff(reason: string): void {
+    this.dropped = true;
+    if (this.timer) clearInterval(this.timer);
+    this.send({ [CONNECT_PARAM]: reason });
+    this.socket.close();
+  }
+
   private onTextMessage(data: Record<string, unknown>): void {
+    if (this.dropped) return;
     if (CONNECT_PARAM in data) {
       if (data[SPECTATE_PARAM]) this.handleSpectate();
       else this.handleLogin(data);
     } else if (SCORED_PARAM in data) {
       this.handleScored(data);
-    } else if (RECORDING_PARAM in data) {
-      this.handleRecording(data);
+    } else if (BLACK_BOX_STARTED_PARAM in data) {
+      this.handleBlackBoxStarted();
+    } else if (BLACK_BOX_PARAM in data) {
+      this.handleBlackBox(data);
     } else {
       this.reactToKey(data);
     }
@@ -98,10 +125,29 @@ export class SocketHub {
     session.addBlocks(Math.min(blocks, MAX_BLOCKS_PER_REPORT));
   }
 
-  // A player's debug recording (backtick key); only the latest is kept on disk, see recordingStore.ts.
-  private handleRecording(data: Record<string, unknown>): void {
+  // The player's room as the server sees it: every sprite's real class, size, mass and motion, which the client's terse wire
+  // format doesn't carry.
+  private dumpBlackBoxSprites(): DumpedSprite[] | undefined {
+    const session = this.login ? this.world.getZion().getHardlines().get(this.login) : undefined;
+    const cell = (session?.getAvatar() ?? session?.getRobotBody())?.getCell() ?? this.cell;
+    return cell ? dumpSprites(cell) : undefined;
+  }
+
+  // The client pressed backtick: capture the server-side starting state to pair with the one it sends when it finishes.
+  private handleBlackBoxStarted(): void {
     if (!this.login) return;
-    saveLatestRecording(data[RECORDING_PARAM]).catch((e) => console.error(e));
+    this.blackBoxStartDump = this.dumpBlackBoxSprites();
+  }
+
+  // A player's Black Box (backtick key) plus the server-side sprite dumps from its start and end; only the latest is kept
+  // on disk, see blackBoxStore.ts.
+  private handleBlackBox(data: Record<string, unknown>): void {
+    if (!this.login) return;
+    const blackBox = data[BLACK_BOX_PARAM];
+    const server = { startSprites: this.blackBoxStartDump, endSprites: this.dumpBlackBoxSprites() };
+    this.blackBoxStartDump = undefined;
+    const withServerState = typeof blackBox === 'object' && blackBox !== null ? { ...blackBox, server } : blackBox;
+    saveLatestBlackBox(withServerState).catch((e) => console.error(e));
   }
 
   private handleSpectate(): void {
@@ -115,13 +161,21 @@ export class SocketHub {
   private handleLogin(data: Record<string, unknown>): void {
     this.spectating = false;
     let jump = false;
+    const zion = this.world.getZion();
+    const hardlines = zion.getHardlines();
+    const hash = typeof data[HASH_PARAM] === 'string' ? (data[HASH_PARAM] as string).slice(0, MAX_HASH_LENGTH) : '';
     if (this.login === undefined) {
-      this.login = data[LOGIN_PARAM] as string;
+      const login = data[LOGIN_PARAM] as string;
+      const existing = hardlines.get(login);
+      if (existing && !existing.acceptsPassword(hash)) {
+        this.cutOff(DENIED_PARAM);
+        return;
+      }
+      existing?.protect(hash); // the first hash an unprotected callsign is used with becomes its permanent one.
+      this.login = login;
       jump = Boolean(data[JUMP_PARAM]);
     }
 
-    const zion = this.world.getZion();
-    const hardlines = zion.getHardlines();
     const session = hardlines.get(this.login);
     let cell: Cell;
 
@@ -129,7 +183,9 @@ export class SocketHub {
       cell = zion.getRandomEngine().getCell();
       const avatar = cell.addAvatarAtRandomFloor(this.login);
       if (!avatar) return;
-      hardlines.set(this.login, new Session(avatar));
+      const created = new Session(avatar);
+      created.protect(hash);
+      hardlines.set(this.login, created);
     } else if (session.unplugged() || jump) {
       cell = zion.getRandomEngine().getCell();
       const avatar = cell.addAvatarAtRandomFloor(this.login);
@@ -186,6 +242,7 @@ export class SocketHub {
   }
 
   renderClient(): void {
+    if (this.dropped) return;
     if (this.spectating) {
       this.renderSpectator();
       return;

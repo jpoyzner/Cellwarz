@@ -16,8 +16,8 @@ export default defineConfig({
         CELLWARZ_RANDOM_BLOCKS: 'off',
         // Teleporting in uses the fixed spawn portals (not a random floor spot) so specs can rely on where avatars start.
         CELLWARZ_RANDOM_TELEPORT: 'off',
-        // Debug recordings made by the specs stay out of the real ./recordings folder.
-        CELLWARZ_RECORDINGS_DIR: 'test-results/recordings',
+        // Black Boxes made by the specs stay out of the real ./black-box folder.
+        CELLWARZ_BLACK_BOX_DIR: 'test-results/black-box',
       },
       reuseExistingServer: !process.env.CI,
     },

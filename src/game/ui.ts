@@ -3,9 +3,6 @@ import type { Renderer } from './renderer';
 type SendKey = (key: number, down: boolean) => void;
 
 const ARROW_KEYS = [37, 38, 39, 40];
-const SWIPE_THRESHOLD = 30;
-const TAP_THRESHOLD = 10;
-const TAP_MAX_DURATION_MS = 300;
 
 const MOVEMENT_KEYS = [37, 38, 39];
 // Mirrors server/ui.ts: tells the server the player pressed Escape while alive.
@@ -16,33 +13,40 @@ const ONE_SHOT_KEYS = [32, 40, 16];
 const isNumberKey = (keyCode: number) => (keyCode >= 48 && keyCode <= 57) || (keyCode >= 96 && keyCode <= 105);
 
 /**
- * Mirrors js/ui.js input handling (chat/typing removed); swipe/tap replaces the old jquery-mobile gestures.
- * Escape releases any held movement keys (so the avatar left behind doesn't keep running). While the avatar is alive
- * it tells the server to put it to sleep and the player spectates it; otherwise (dead, asleep, inactive) it calls
- * `onExit` to go back to the login screen. Backtick calls `onToggleRecording`.
+ * Escape (the touch menu button does the same): releases any held movement keys (so the avatar left behind doesn't keep
+ * running). While the avatar is alive it tells the server to put it to sleep and the player spectates it; otherwise
+ * (dead, asleep, inactive) it calls `onExit` to go back to the login screen.
+ */
+export function pressEscape(sendKey: SendKey, renderer: Renderer, onExit?: () => void): void {
+  for (const key of MOVEMENT_KEYS) sendKey(key, false);
+  if (renderer.canFallAsleep()) {
+    // First Escape: the avatar goes to sleep where it stands and the player spectates; the next one leaves.
+    sendKey(ESCAPE_KEY, true);
+  } else {
+    onExit?.();
+  }
+}
+
+/**
+ * Mirrors js/ui.js input handling (chat/typing removed); touch devices use the on-screen buttons instead
+ * (see TouchControls). Backtick calls `onToggleBlackBox`.
  */
 export function attachInputHandlers(
   sendKey: SendKey,
   renderer: Renderer,
   onExit?: () => void,
-  onToggleRecording?: () => void,
+  onToggleBlackBox?: () => void,
 ): () => void {
   const handleKeyDown = (event: KeyboardEvent) => {
-    // Backtick toggles the debug recorder; it's a client-side tool, never sent to the server.
+    // Backtick toggles the Black Box recorder; it's a client-side tool, never sent to the server.
     if (event.key === '`') {
       event.preventDefault();
-      if (!event.repeat) onToggleRecording?.();
+      if (!event.repeat) onToggleBlackBox?.();
       return;
     }
 
     if (event.key === 'Escape') {
-      for (const key of MOVEMENT_KEYS) sendKey(key, false);
-      if (renderer.canFallAsleep()) {
-        // First Escape: the avatar goes to sleep where it stands and the player spectates; the next one leaves.
-        sendKey(ESCAPE_KEY, true);
-      } else {
-        onExit?.();
-      }
+      pressEscape(sendKey, renderer, onExit);
       return;
     }
 
@@ -59,46 +63,11 @@ export function attachInputHandlers(
     sendKey(event.keyCode, false);
   };
 
-  let touchStartX = 0;
-  let touchStartY = 0;
-  let touchStartTime = 0;
-
-  const handleTouchStart = (event: TouchEvent) => {
-    const touch = event.touches[0];
-    touchStartX = touch.clientX;
-    touchStartY = touch.clientY;
-    touchStartTime = Date.now();
-  };
-
-  const handleTouchEnd = (event: TouchEvent) => {
-    const touch = event.changedTouches[0];
-    const dx = touch.clientX - touchStartX;
-    const dy = touch.clientY - touchStartY;
-    const duration = Date.now() - touchStartTime;
-
-    if (Math.abs(dx) > SWIPE_THRESHOLD && Math.abs(dx) > Math.abs(dy)) {
-      sendKey(dx < 0 ? 37 : 39, true);
-    } else if (Math.abs(dx) < TAP_THRESHOLD && Math.abs(dy) < TAP_THRESHOLD && duration < TAP_MAX_DURATION_MS) {
-      const { me, offsetY } = renderer.getPlayerOffset();
-      if (me && touch.clientY < me[2] - offsetY) {
-        sendKey(38, true);
-        sendKey(38, false);
-      } else {
-        sendKey(37, false);
-        sendKey(39, false);
-      }
-    }
-  };
-
   document.body.addEventListener('keydown', handleKeyDown);
   document.body.addEventListener('keyup', handleKeyUp);
-  window.addEventListener('touchstart', handleTouchStart);
-  window.addEventListener('touchend', handleTouchEnd);
 
   return () => {
     document.body.removeEventListener('keydown', handleKeyDown);
     document.body.removeEventListener('keyup', handleKeyUp);
-    window.removeEventListener('touchstart', handleTouchStart);
-    window.removeEventListener('touchend', handleTouchEnd);
   };
 }

@@ -2,18 +2,11 @@
 
 ## INTEGRATION TO REAL SITE
 
-- Add a password (labeled as "hash") field in the login screen near the call sign. if you leave it blank, it will say "(unprotected)". It is permanent once you login, if you forget it, too bad. If a hash/password has been set on this user before, then you will need it to enter the main room. When we deploy the game for mutiplayer usage, if someone else logs onto your avatar (using callsign and password/hash), all previous connections are dropped, meaning the last login becomes the active connection.
-
-- need to figure out mobile device controls. controls need to work on a phone and login screen updated to explain them
-
 - use my DJ Recognize site to host cellwarz realtime multiplayers that can remember things if you sign up! Need a way to invite/advertise there
 - add an "exit" transporter on login screen that takes you back to my website.
 - If persistence is ever needed (session/avatar state surviving a server restart), use a NoSQL store — no DB is in use today.
 
 - check for vulnerabilities, in case some dj asshole hacks into it.
-Show number of users, and show other users in a specific color.
-
-
 
 ## Core Features
 
@@ -25,9 +18,11 @@ Show number of users, and show other users in a specific color.
 
 - compare to commander keen graphics and art concepts!
 
+- JUST ASK IT TO MAKE SOME LEVELS WHERE IT USES EVERYTHING AS A CHALLENGE.
+- IF THIS WORKS WELL, WE CAN MAKE THESE RADOM-GENERATED?
 - A "side-quest" mode that players will be able to take that takes them to randomaly generated rooms where they fight NPCs and build around challenges using blocks. There should be a danger sign, and it should be located at the ends of floors 2 & 3. They will enter this mode from the main multiplayer mode somehow (we will define this later).
 
-- Need to decide whether players will have their own room or just a big bag of inventory for picking up and hoarding blocks.
+- Need to decide whether players will have their own room or just a big bag of inventory for picking up and hoarding blocks. Maybe they can buy or hoard mana for diamonds (25 for each mana?)
 
 - Show the live radar on djrecognize.com
 
@@ -37,7 +32,8 @@ Show number of users, and show other users in a specific color.
 
 - co-op games, humans playing against the robots
 
-- Cyberpunk pass follow-up: a hazard room element (electrified floor blocks / laser grids reusing the engine-fire kill + knockback) and in-game renames (mana → data shards, launcher → pulse rifle) were deferred; only the client-side look/sound was done.
+- Cyberpunk pass follow-up: a hazard room element (electrified floor blocks / laser grids reusing the engine-fire kill + knockback)
 
 - Have events where people submit songs and people vote? Basically to reproduce groove outpost, but maybe this can be done over all time instead of around specific events
+
 - if it gets popular, host real DJs for special hours or have a marathon with us playing in there, invtie Michael Liu.

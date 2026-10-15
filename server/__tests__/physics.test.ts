@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { Physics } from '../physics';
 import { Avatar } from '../sprite/avatar';
 import { CellBlock } from '../sprite/cellBlock';
+import { Diamond } from '../sprite/diamond';
+import { Portal } from '../sprite/portal';
 import { createTestCell } from './testHelpers';
 
 function createTestScene(width: number, height: number) {
@@ -64,5 +66,21 @@ describe('Physics', () => {
 
     physics.move(avatar, Physics.NONE, Physics.DOWN, 1);
     expect(avatar.getY()).toBe(0);
+  });
+
+  // A diamond (same ghost layer, mass 1, pulled by a planet) used to shove stargates out of their corners.
+  it('never shoves a stable portal out of place', () => {
+    const { cell, physics } = createTestScene(50, 50);
+    Portal.init(cell.getCellData());
+    Diamond.init(cell.getCellData());
+    const portal = new Portal(20, 20, false, cell);
+    const diamond = new Diamond(17, 22, 0, 0, cell);
+
+    const moved = physics.move(diamond, Physics.RIGHT, Physics.NONE, 10);
+
+    expect(moved).toBe(false);
+    expect(portal.getX()).toBe(20);
+    expect(portal.getY()).toBe(20);
+    expect(diamond.getX()).toBeLessThan(20);
   });
 });

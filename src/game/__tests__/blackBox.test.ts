@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MAX_RECORDING_MS, Recorder } from '../recorder';
-import type { Recording } from '../recorder';
+import { BlackBox, MAX_BLACK_BOX_MS } from '../blackBox';
+import type { BlackBoxRecording } from '../blackBox';
 
-describe('Recorder', () => {
+describe('BlackBox', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.stubGlobal('window', { innerWidth: 800, innerHeight: 600 });
@@ -16,16 +16,28 @@ describe('Recorder', () => {
 
   function setup() {
     const state = { sprites: { '1': [0, 10, 20] } as Record<string, number[]> };
-    const finished: Recording[] = [];
+    const finished: BlackBoxRecording[] = [];
     const changes: Array<number | null> = [];
-    const recorder = new Recorder({
+    const started = vi.fn();
+    const recorder = new BlackBox({
       login: 'tester',
       snapshot: () => state,
+      onStarted: started,
       onFinished: (recording) => finished.push(recording),
       onChange: (remaining) => changes.push(remaining),
     });
-    return { recorder, state, finished, changes };
+    return { recorder, state, finished, changes, started };
   }
+
+  it('tells the server when it starts, once per recording', () => {
+    const { recorder, started } = setup();
+    recorder.start();
+    recorder.start();
+    expect(started).toHaveBeenCalledTimes(1);
+    recorder.stop('manual');
+    recorder.start();
+    expect(started).toHaveBeenCalledTimes(2);
+  });
 
   it('logs nothing until started', () => {
     const { recorder, finished } = setup();
@@ -74,15 +86,15 @@ describe('Recorder', () => {
   it('stops by itself after 10 seconds', () => {
     const { recorder, finished, changes } = setup();
     recorder.start();
-    vi.advanceTimersByTime(MAX_RECORDING_MS - 200);
+    vi.advanceTimersByTime(MAX_BLACK_BOX_MS - 200);
     expect(recorder.isRecording).toBe(true);
 
     vi.advanceTimersByTime(500);
     expect(recorder.isRecording).toBe(false);
     expect(finished).toHaveLength(1);
     expect(finished[0].stoppedBy).toBe('timeout');
-    expect(finished[0].durationMs).toBeLessThanOrEqual(MAX_RECORDING_MS);
-    expect(changes[0]).toBe(MAX_RECORDING_MS);
+    expect(finished[0].durationMs).toBeLessThanOrEqual(MAX_BLACK_BOX_MS);
+    expect(changes[0]).toBe(MAX_BLACK_BOX_MS);
     expect(changes.at(-1)).toBeNull();
 
     recorder.logKey(37, true);

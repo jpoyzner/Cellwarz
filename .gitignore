@@ -8,5 +8,5 @@ playwright-report/
 # graphify (fully regenerable via `/graphify . --update`)
 graphify-out/
 
-# debug recordings (backtick key in-game; only the latest is kept)
-recordings/
+# the Black Box (backtick key in-game; only the latest is kept)
+black-box/

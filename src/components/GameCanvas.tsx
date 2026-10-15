@@ -3,28 +3,34 @@ import { Analyzer } from '../game/analyzer';
 import type { DeathCard } from '../game/deathCause';
 import type { Hint } from '../game/hints';
 import type { Look } from '../game/look';
-import { Recorder } from '../game/recorder';
+import { BlackBox } from '../game/blackBox';
 import { Renderer } from '../game/renderer';
 import type { SpectatorMode } from '../game/renderer';
 import { Syncer } from '../game/syncer';
-import { attachInputHandlers } from '../game/ui';
+import { isTouchDevice, vibrate } from '../game/touchDevice';
+import { attachInputHandlers, pressEscape } from '../game/ui';
+import { TouchControls } from './TouchControls';
 
 declare global {
   interface Window {
     /** Test-only introspection hook (public game state, no secrets) — see e2e/*.spec.ts. */
-    __cellwarz?: { renderer: Renderer; syncer: Syncer; recorder: Recorder };
+    __cellwarz?: { renderer: Renderer; syncer: Syncer; blackBox: BlackBox };
   }
 }
 
+const HASH_DENIED_NOTICE = 'WRONG HASH: THAT CALLSIGN IS PROTECTED';
+const DISPLACED_NOTICE = 'LOGGED IN FROM ELSEWHERE: DISCONNECTED';
+
 interface GameCanvasProps {
   loginName: string;
+  hash: string;
   jump: boolean;
   look: Look | null;
-  /** Called when the player presses Escape to leave the game. */
-  onExit: () => void;
+  /** Called when the player leaves the game (Escape, idling, a wrong hash or being logged in from elsewhere); `notice` says why if it wasn't their choice. */
+  onExit: (notice?: string) => void;
 }
 
-export function GameCanvas({ loginName, jump, look, onExit }: GameCanvasProps) {
+export function GameCanvas({ loginName, hash, jump, look, onExit }: GameCanvasProps) {
   // Read through a ref so a new callback identity from the parent never tears down the running game.
   const onExitRef = useRef(onExit);
   onExitRef.current = onExit;
@@ -35,12 +41,17 @@ export function GameCanvas({ loginName, jump, look, onExit }: GameCanvasProps) {
   const diamondsRef = useRef<HTMLDivElement | null>(null);
   const minimapCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const rendererRef = useRef<Renderer | null>(null);
+  // The keyboard/touch key pipeline of the running game (set by the effect below), so the touch buttons share it.
+  const sendKeyRef = useRef<(key: number, down: boolean) => void>(() => undefined);
+  const onMenuRef = useRef<() => void>(() => undefined);
+  const touch = useRef(isTouchDevice()).current;
+  const [carrying, setCarrying] = useState(false);
   const [minimapOpen, setMinimapOpen] = useState(true);
   const [spectator, setSpectator] = useState<SpectatorMode>('off');
   const [hint, setHint] = useState<Hint | null>(null);
   const [deathCard, setDeathCard] = useState<DeathCard | null>(null);
-  // Milliseconds left in the debug recording (backtick key), or null when not recording.
-  const [recordingMsLeft, setRecordingMsLeft] = useState<number | null>(null);
+  // Milliseconds left in the Black Box recording (backtick key), or null when it isn't recording.
+  const [blackBoxMsLeft, setBlackBoxMsLeft] = useState<number | null>(null);
 
   useEffect(() => {
     rendererRef.current?.setMinimapOpen(minimapOpen);
@@ -71,51 +82,61 @@ export function GameCanvas({ loginName, jump, look, onExit }: GameCanvasProps) {
     });
     rendererRef.current = renderer;
 
-    const syncer = new Syncer(renderer, loginName, jump, look, analyzer);
+    const syncer = new Syncer(renderer, loginName, hash, jump, look, analyzer);
     syncer.connect();
     // An idle player is sent back to the login screen (same as pressing Escape) instead of watching a frozen level.
     syncer.onInactive = () => onExitRef.current();
+    syncer.onDenied = () => onExitRef.current(HASH_DENIED_NOTICE);
+    syncer.onDisplaced = () => onExitRef.current(DISPLACED_NOTICE);
     renderer.onSpectatorChange = (mode) => {
       setSpectator(mode);
       if (mode === 'off') setDeathCard(null);
+      if (mode === 'free' && touch) vibrate([60, 40, 140]);
     };
+    renderer.onCarryingChange = setCarrying;
+    setCarrying(false);
     setHint(null);
     setDeathCard(null);
     renderer.onDeathCard = setDeathCard;
     renderer.hints.onChange = setHint;
     renderer.onBlocksCollected = (blocks) => syncer.sendBlocksCollected(blocks);
 
-    const recorder = new Recorder({
+    const blackBox = new BlackBox({
       login: loginName,
       snapshot: () => renderer.snapshot(),
-      onFinished: (recording) => syncer.sendRecording(recording),
-      onChange: setRecordingMsLeft,
+      onStarted: () => syncer.sendBlackBoxStarted(),
+      onFinished: (recording) => syncer.sendBlackBox(recording),
+      onChange: setBlackBoxMsLeft,
     });
-    syncer.recorder = recorder;
+    syncer.blackBox = blackBox;
 
-    const detachInput = attachInputHandlers(
-      (key, down) => {
-        syncer.sendKey(key, down);
-        renderer.onLocalKey(key, down);
-      },
-      renderer,
-      () => onExitRef.current(),
-      () => recorder.toggle(),
-    );
+    const sendKey = (key: number, down: boolean) => {
+      syncer.sendKey(key, down);
+      renderer.onLocalKey(key, down);
+    };
+    const detachInput = attachInputHandlers(sendKey, renderer, () => onExitRef.current(), () => blackBox.toggle());
+    sendKeyRef.current = sendKey;
+    onMenuRef.current = () => pressEscape(sendKey, renderer, () => onExitRef.current());
 
-    window.__cellwarz = { renderer, syncer, recorder };
+    // Rotating the phone or leaving fullscreen resizes the window; the canvas and camera follow (touch devices only).
+    const onResize = () => renderer.resize(window.innerWidth, window.innerHeight);
+    if (touch) window.addEventListener('resize', onResize);
+
+    window.__cellwarz = { renderer, syncer, blackBox };
 
     return () => {
-      // Ship an in-progress recording before the socket closes (Escape's key-ups are already in it).
-      recorder.stop('exit');
+      // Ship an in-progress Black Box before the socket closes (Escape's key-ups are already in it).
+      blackBox.stop('exit');
       detachInput();
+      window.removeEventListener('resize', onResize);
+      sendKeyRef.current = () => undefined;
       syncer.close();
       renderer.stop();
       rendererRef.current = null;
       analyzer.stop();
       delete window.__cellwarz;
     };
-  }, [loginName, jump, look]);
+  }, [loginName, hash, jump, look, touch]);
 
   return (
     <>
@@ -124,8 +145,8 @@ export function GameCanvas({ loginName, jump, look, onExit }: GameCanvasProps) {
       <div id="crt" />
       <div id="score" ref={scoreRef} />
       <div id="diamonds" ref={diamondsRef} />
-      {recordingMsLeft !== null && (
-        <div id="recording">REC {(recordingMsLeft / 1000).toFixed(1)}s &middot; ` TO STOP</div>
+      {blackBoxMsLeft !== null && (
+        <div id="black-box">BLACK BOX REC {(blackBoxMsLeft / 1000).toFixed(1)}s &middot; ` TO STOP</div>
       )}
       {spectator !== 'off' && (
         <div id="spectator">
@@ -133,11 +154,17 @@ export function GameCanvas({ loginName, jump, look, onExit }: GameCanvasProps) {
             {spectator === 'following' ? 'YOU WERE ASSIMILATED' : spectator === 'asleep' ? 'YOUR AVATAR IS ASLEEP' : 'YOU DIED'}
           </div>
           <div id="spectator-hint">
-            {spectator === 'following'
-              ? 'SPECTATING YOUR ROBOT BODY \u00B7 ARROW KEYS: FREE CAMERA \u00B7 ESC: LEAVE'
-              : spectator === 'asleep'
-                ? 'SPECTATING \u00B7 ARROW KEYS: MOVE CAMERA \u00B7 SPACE: WAKE UP \u00B7 ESC: LEAVE'
-                : 'SPECTATING \u00B7 ARROW KEYS: MOVE CAMERA \u00B7 ESC: LEAVE'}
+            {touch
+              ? spectator === 'following'
+                ? 'SPECTATING YOUR ROBOT BODY \u00B7 \u25C0 \u25B6: FREE CAMERA \u00B7 \u2630: LEAVE'
+                : spectator === 'asleep'
+                  ? 'SPECTATING \u00B7 \u25C0 \u25B6: MOVE CAMERA \u00B7 WAKE: WAKE UP \u00B7 \u2630: LEAVE'
+                  : 'SPECTATING \u00B7 \u25C0 \u25B6: MOVE CAMERA \u00B7 \u2630: LEAVE'
+              : spectator === 'following'
+                ? 'SPECTATING YOUR ROBOT BODY \u00B7 ARROW KEYS: FREE CAMERA \u00B7 ESC: LEAVE'
+                : spectator === 'asleep'
+                  ? 'SPECTATING \u00B7 ARROW KEYS: MOVE CAMERA \u00B7 SPACE: WAKE UP \u00B7 ESC: LEAVE'
+                  : 'SPECTATING \u00B7 ARROW KEYS: MOVE CAMERA \u00B7 ESC: LEAVE'}
           </div>
           {spectator === 'free' && deathCard && (
             <div id="death-card">
@@ -151,6 +178,15 @@ export function GameCanvas({ loginName, jump, look, onExit }: GameCanvasProps) {
         <div id="hint" data-hint={hint.id}>
           {hint.text}
         </div>
+      )}
+      {touch && (
+        <TouchControls
+          sendKey={(key, down) => sendKeyRef.current(key, down)}
+          spectator={spectator}
+          carrying={carrying}
+          onMenu={() => onMenuRef.current()}
+          onTap={() => rendererRef.current?.unlockAudio()}
+        />
       )}
       {/* Not a <button>: a focused button would also fire on Space, which is the in-game block pickup/throw key. */}
       <div id="minimap" className={minimapOpen ? 'minimap' : 'minimap minimap-closed'}>

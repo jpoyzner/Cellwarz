@@ -42,14 +42,18 @@ describe('SocketHub login room connections', () => {
 
     function connect() {
       const sent: Array<Record<string, unknown>> = [];
+      const closed = { count: 0 };
       const socket = Object.assign(new EventEmitter(), {
         OPEN: 1,
         readyState: 1,
         send: (message: string) => sent.push(JSON.parse(message)),
+        close: () => {
+          closed.count++;
+        },
       }) as unknown as WebSocket;
       const hub = new SocketHub(world, socket);
       hubs.push(hub);
-      return { hub, sent, message: (data: Record<string, unknown>) => socket.emit('message', JSON.stringify(data)) };
+      return { hub, sent, closed, message: (data: Record<string, unknown>) => socket.emit('message', JSON.stringify(data)) };
     }
 
     return { room, hardlines, connect };
@@ -155,5 +159,64 @@ describe('SocketHub login room connections', () => {
     connect().message({ connect: true, login: 'sleeper', jump: true });
     expect(hardlines.get('sleeper')!.getAvatar()).not.toBe(original);
     expect(original.removed()).toBe(true);
+  });
+
+  it('protects a callsign with the hash it was created with: a login without it (or with another) is refused outright', () => {
+    const { hardlines, connect } = setup();
+    connect().message({ connect: true, login: 'vault', hash: 'sesame', jump: true });
+    const original = hardlines.get('vault')!.getAvatar()!;
+
+    for (const attempt of [{}, { hash: '' }, { hash: 'open' }, { hash: 42 }]) {
+      const intruder = connect();
+      intruder.message({ connect: true, login: 'vault', jump: true, ...attempt });
+
+      expect(intruder.sent).toEqual([{ connect: 'denied' }]);
+      expect(intruder.closed.count).toBe(1);
+      expect(hardlines.get('vault')!.getAvatar()).toBe(original); // not even a teleport got through
+      expect(original.removed()).toBe(false);
+    }
+
+    const owner = connect();
+    owner.message({ connect: true, login: 'vault', hash: 'sesame', jump: false });
+    expect(owner.sent.some((payload) => payload.connect === '0')).toBe(true);
+    expect(hardlines.get('vault')!.getAvatar()).toBe(original);
+  });
+
+  it('lets a callsign used blank stay open until the first non-blank hash claims it for good', () => {
+    const { hardlines, connect } = setup();
+    connect().message({ connect: true, login: 'open', jump: true });
+    connect().message({ connect: true, login: 'open', jump: false });
+    expect(hardlines.get('open')!.acceptsPassword('')).toBe(true);
+
+    const claimer = connect();
+    claimer.message({ connect: true, login: 'open', hash: 'first', jump: false });
+    expect(claimer.sent.some((payload) => payload.connect === '0')).toBe(true);
+
+    const intruder = connect();
+    intruder.message({ connect: true, login: 'open', hash: 'second', jump: true });
+    expect(intruder.sent).toEqual([{ connect: 'denied' }]);
+    expect(hardlines.get('open')!.acceptsPassword('first')).toBe(true);
+  });
+
+  it('drops the previous connection when the same callsign logs in again: the last login is the active one', () => {
+    const { hardlines, connect } = setup();
+    const first = connect();
+    first.message({ connect: true, login: 'twin', jump: true });
+    const second = connect();
+    second.sent.length = 0;
+
+    second.message({ connect: true, login: 'twin', jump: false });
+
+    expect(first.sent.at(-1)).toEqual({ connect: 'displaced' });
+    expect(first.closed.count).toBe(1);
+    expect(second.closed.count).toBe(0);
+
+    // The dropped connection can no longer drive the avatar, and its eventual close doesn't put the avatar to sleep.
+    first.sent.length = 0;
+    first.message({ key: 39, down: true });
+    first.hub.renderClient();
+    expect(first.sent).toEqual([]);
+    first.hub['socket'].emit('close');
+    expect(hardlines.get('twin')!.getAvatar()!.isSleeping()).toBe(false);
   });
 });
