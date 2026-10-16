@@ -10,8 +10,8 @@ const SHIFT_KEY = 16;
 export class UI {
   private avatar: Avatar | undefined;
 
-  constructor(avatar: Avatar) {
-    this.plugin(avatar);
+  constructor(avatar?: Avatar) {
+    this.avatar = avatar;
   }
 
   reactTo(key: number, down: boolean): void {

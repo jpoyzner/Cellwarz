@@ -8,8 +8,9 @@ import type { Avatar } from './avatar';
 
 const IDLE_ACTION = 'idle';
 
-/** Animated "stargate" warp door, a little bigger than an avatar; walking through it relocates the
- * avatar to a random other room's entrance (see warpRandomly). Always active (no open/closed states). */
+/** A "stargate" transporter, a little bigger than an avatar: an avatar standing in it that presses Up is beamed up
+ * (see Avatar.beamUpFromPortal) and relocated to a random room's entrance (see warpRandomly), so it can be walked past.
+ * Always active (no open/closed states). The client draws it as the same glowing pad the login screen uses. */
 export class Portal extends Sprite {
   static readonly WIDTH = 8;
   static readonly HEIGHT = 8;

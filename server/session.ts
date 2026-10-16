@@ -1,8 +1,10 @@
 import type { Look } from './look';
+import { parseLook } from './look';
 import type { DeathCause } from './deathCause';
 import type { Avatar } from './sprite/avatar';
 import type { Robot } from './sprite/robot';
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import type { StoredUser } from './userStore';
 import { UI } from './ui';
 
 export const POINTS_PER_BLOCK = 20;
@@ -12,9 +14,22 @@ export interface SessionOwner {
   drop(): void;
 }
 
+/** The only credential format so far; stored with each user so a stronger one can be introduced later. */
+export const CREDENTIAL_KDF = 'scrypt1';
+
+/** Memory-hard, so a stolen database can't cheaply be ground back into hashes. */
 function digestOf(salt: Buffer, password: string): Buffer {
+  return scryptSync(password, salt, 32, { N: 16384, r: 8, p: 1 });
+}
+
+/** A cheap fingerprint of a password already proven right, so a reconnect with the same one skips the slow scrypt. */
+function quickDigestOf(salt: Buffer, password: string): Buffer {
   return createHash('sha256').update(salt).update(password).digest();
 }
+
+// Blocks a player may report shattering: a burst, then a sustained rate no human collecting shards can beat.
+export const BLOCK_BURST = 60;
+export const BLOCKS_PER_SECOND = 10;
 
 export class Session {
   /** Bumped whenever any player's colours change, so connections know when to resend everyone's looks. */
@@ -30,12 +45,49 @@ export class Session {
   private owner: SessionOwner | undefined;
   /** The login hash (password), stored salted; set by the first non-blank hash the callsign logs in with, then permanent. */
   private credential: { salt: Buffer; digest: Buffer } | undefined;
+  /** Set once the callsign's hash has been proven right in this process (not saved): see quickDigestOf. */
+  private verifiedQuick: Buffer | undefined;
   private look: Look | undefined;
   private deathCause: DeathCause | undefined;
-  constructor(avatar: Avatar) {
+  private onChange: (() => void) | undefined;
+  private blockAllowance = BLOCK_BURST;
+  private blockAllowanceAt = Date.now();
+
+  /** `avatar` is undefined for a player restored from the database who has no body in the room yet. */
+  constructor(avatar?: Avatar) {
     this.avatar = avatar;
-    avatar.setSession(this);
+    avatar?.setSession(this);
     this.ui = new UI(avatar);
+  }
+
+  /** A saved player coming back after a restart: their account is whole, but they have no avatar until they log in. */
+  static fromStored(user: StoredUser): Session {
+    const session = new Session();
+    session.score = user.score;
+    session.diamonds = user.diamonds;
+    if (user.salt && user.digest && user.kdf === CREDENTIAL_KDF) {
+      session.credential = { salt: Buffer.from(user.salt), digest: Buffer.from(user.digest) };
+    }
+    session.look = parseLook(user.headband, user.belt);
+    return session;
+  }
+
+  toStored(login: string): StoredUser {
+    return {
+      login,
+      salt: this.credential?.salt ?? null,
+      digest: this.credential?.digest ?? null,
+      kdf: this.credential ? CREDENTIAL_KDF : null,
+      score: this.score,
+      diamonds: this.diamonds,
+      headband: this.look?.headband ?? null,
+      belt: this.look?.belt ?? null,
+    };
+  }
+
+  /** Told whenever something worth saving changes (credential, score, diamonds, colours). */
+  setChangeListener(listener: (() => void) | undefined): void {
+    this.onChange = listener;
   }
 
   /** The first non-blank hash a callsign is seen with locks it for good; a blank one (or a later one) changes nothing. */
@@ -43,12 +95,19 @@ export class Session {
     if (password === '' || this.credential) return;
     const salt = randomBytes(16);
     this.credential = { salt, digest: digestOf(salt, password) };
+    this.verifiedQuick = quickDigestOf(salt, password);
+    this.onChange?.();
   }
 
   /** Unprotected callsigns accept anything; protected ones need the exact hash they were created with. */
   acceptsPassword(password: string): boolean {
     if (!this.credential) return true;
-    return timingSafeEqual(this.credential.digest, digestOf(this.credential.salt, password));
+    const quick = quickDigestOf(this.credential.salt, password);
+    if (this.verifiedQuick && timingSafeEqual(this.verifiedQuick, quick)) return true;
+
+    const accepted = timingSafeEqual(this.credential.digest, digestOf(this.credential.salt, password));
+    if (accepted) this.verifiedQuick = quick;
+    return accepted;
   }
 
   getUI(): UI {
@@ -63,6 +122,7 @@ export class Session {
     if (look?.headband === this.look?.headband && look?.belt === this.look?.belt) return;
     this.look = look;
     Session.looksRevision++;
+    this.onChange?.();
   }
 
   getScore(): number {
@@ -71,6 +131,22 @@ export class Session {
 
   addBlocks(blocks: number): void {
     this.score += blocks * POINTS_PER_BLOCK;
+    this.onChange?.();
+  }
+
+  /**
+   * A client's report of `blocks` shattered: only what the player's allowance covers counts (it refills over time), so a
+   * modified client can't mint points faster than a person could earn them. Returns how many were counted.
+   */
+  claimBlocks(blocks: number, now = Date.now()): number {
+    this.blockAllowance = Math.min(BLOCK_BURST, this.blockAllowance + ((now - this.blockAllowanceAt) / 1000) * BLOCKS_PER_SECOND);
+    this.blockAllowanceAt = now;
+    const counted = Math.min(Math.floor(blocks), Math.floor(this.blockAllowance));
+    if (counted <= 0) return 0;
+
+    this.blockAllowance -= counted;
+    this.addBlocks(counted);
+    return counted;
   }
 
   getDiamonds(): number {
@@ -79,6 +155,7 @@ export class Session {
 
   addDiamonds(diamonds: number): void {
     this.diamonds += diamonds;
+    this.onChange?.();
   }
 
   getAvatar(): Avatar | undefined {
@@ -101,6 +178,11 @@ export class Session {
 
   setRobotBody(robot: Robot): void {
     this.robotBody = robot;
+  }
+
+  /** Whether a connection is currently driving this player (counts toward the room's capacity). */
+  isConnected(): boolean {
+    return this.owner !== undefined;
   }
 
   /** A connection (re)took this session: the last login wins (any previous connection is dropped) and a sleeper wakes up. */

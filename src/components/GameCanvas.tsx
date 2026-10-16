@@ -20,6 +20,11 @@ declare global {
 
 const HASH_DENIED_NOTICE = 'WRONG HASH: THAT CALLSIGN IS PROTECTED';
 const DISPLACED_NOTICE = 'LOGGED IN FROM ELSEWHERE: DISCONNECTED';
+const FULL_NOTICE = 'STATION IS AT CAPACITY: TRY AGAIN SOON';
+const THROTTLED_NOTICE = 'TOO MANY WRONG HASHES: WAIT A FEW MINUTES';
+const INVALID_NOTICE = "INVALID CALLSIGN: LETTERS, NUMBERS AND - _ . ' ONLY, 32 MAX";
+const RESERVED_NOTICE = 'THAT CALLSIGN IS RESERVED: PICK ANOTHER';
+const CONNECTION_LOST_NOTICE = 'CONNECTION LOST: THE STATION IS UNREACHABLE';
 
 interface GameCanvasProps {
   loginName: string;
@@ -52,6 +57,8 @@ export function GameCanvas({ loginName, hash, jump, look, onExit }: GameCanvasPr
   const [deathCard, setDeathCard] = useState<DeathCard | null>(null);
   // Milliseconds left in the Black Box recording (backtick key), or null when it isn't recording.
   const [blackBoxMsLeft, setBlackBoxMsLeft] = useState<number | null>(null);
+  // True while the link to the server is down and being retried.
+  const [reconnecting, setReconnecting] = useState(false);
 
   useEffect(() => {
     rendererRef.current?.setMinimapOpen(minimapOpen);
@@ -88,6 +95,11 @@ export function GameCanvas({ loginName, hash, jump, look, onExit }: GameCanvasPr
     syncer.onInactive = () => onExitRef.current();
     syncer.onDenied = () => onExitRef.current(HASH_DENIED_NOTICE);
     syncer.onDisplaced = () => onExitRef.current(DISPLACED_NOTICE);
+    syncer.onFull = () => onExitRef.current(FULL_NOTICE);
+    syncer.onThrottled = () => onExitRef.current(THROTTLED_NOTICE);
+    syncer.onInvalid = (reserved) => onExitRef.current(reserved ? RESERVED_NOTICE : INVALID_NOTICE);
+    syncer.onGaveUp = () => onExitRef.current(CONNECTION_LOST_NOTICE);
+    syncer.onConnectionChange = (connected) => setReconnecting(!connected);
     renderer.onSpectatorChange = (mode) => {
       setSpectator(mode);
       if (mode === 'off') setDeathCard(null);
@@ -114,7 +126,10 @@ export function GameCanvas({ loginName, hash, jump, look, onExit }: GameCanvasPr
       syncer.sendKey(key, down);
       renderer.onLocalKey(key, down);
     };
-    const detachInput = attachInputHandlers(sendKey, renderer, () => onExitRef.current(), () => blackBox.toggle());
+    const detachInput = attachInputHandlers(sendKey, renderer, () => onExitRef.current(), () => {
+      // Recording is a local-development tool: the server only says so in its payload when it accepts recordings.
+      if (syncer.blackBoxEnabled) blackBox.toggle();
+    });
     sendKeyRef.current = sendKey;
     onMenuRef.current = () => pressEscape(sendKey, renderer, () => onExitRef.current());
 
@@ -145,6 +160,7 @@ export function GameCanvas({ loginName, hash, jump, look, onExit }: GameCanvasPr
       <div id="crt" />
       <div id="score" ref={scoreRef} />
       <div id="diamonds" ref={diamondsRef} />
+      {reconnecting && <div id="reconnecting">LINK LOST &middot; RECONNECTING TO THE STATION...</div>}
       {blackBoxMsLeft !== null && (
         <div id="black-box">BLACK BOX REC {(blackBoxMsLeft / 1000).toFixed(1)}s &middot; ` TO STOP</div>
       )}

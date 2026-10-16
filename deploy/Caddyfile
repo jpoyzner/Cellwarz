@@ -1,0 +1,13 @@
+# Caddy terminates TLS (certificates are fetched and renewed automatically) and forwards to the game server.
+# WebSockets pass through unchanged. See DEPLOY.md.
+
+cyberstation.djrecognize.com {
+	encode zstd gzip
+	reverse_proxy cyberstation:8080
+}
+
+# Staging copy (docker compose --profile beta up -d): one level below djrecognize.com so Cloudflare's free certificate covers it.
+cyberstation-beta.djrecognize.com {
+	encode zstd gzip
+	reverse_proxy cyberstation-beta:8080
+}

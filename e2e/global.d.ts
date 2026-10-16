@@ -31,6 +31,7 @@ declare global {
         spectatorMode: 'off' | 'following' | 'free' | 'asleep';
         getPlayerOffset: () => { offsetX: number; offsetY: number; me: [number, number, number] | undefined };
         applyFullState: (data: Record<string, unknown>) => void;
+        snapshot: () => Record<string, unknown>;
         onLocalAvatarDeath: () => void;
         vines?: { config: { rootX: number; faceY: number; minX: number; maxX: number }; tinted: unknown[]; hanging: unknown[] };
         tvs: Array<{ x: number; y: number; width: number; height: number; chainTopY: number }>;

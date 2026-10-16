@@ -66,6 +66,10 @@ const MIN_HOLD_BEFORE_RELEASE_MS = 100;
 const COYOTE_TIME_FRAMES = 6;
 const JUMP_BUFFER_FRAMES = 6;
 
+// Using a transporter (Up while standing on a stargate) holds the avatar in place for this long, ~0.65s at 48 FPS like the
+// login room's beam-up, before it is warped.
+export const BEAM_FRAMES = 31;
+
 export class Avatar extends Sprite {
   static readonly WIDTH = 6;
   static readonly HEIGHT = 8;
@@ -78,12 +82,15 @@ export class Avatar extends Sprite {
   private firstDraw: number;
   private handledMana: Mana | undefined;
   private sleeping = false;
+  private sleepingSince = 0;
   private emoji: string | undefined;
   private emojiFramesRemaining = 0;
   private liftedFrames = 0;
   private pressingDown = false;
   private health = MAX_HEALTH;
   private starCooldownFrames = 0;
+  private beamFramesRemaining = 0;
+  private beamPortal: Portal | undefined;
   private readonly stars = new Set<NinjaStar>();
 
   protected facingRight = true;
@@ -133,6 +140,11 @@ export class Avatar extends Sprite {
   }
 
   protected override doAction(): void {
+    if (this.beamFramesRemaining > 0) {
+      this.advanceBeam();
+      return;
+    }
+
     const lifted = this.liftedFrames > 0;
     if (lifted) this.liftedFrames--;
     if (this.starCooldownFrames > 0) this.starCooldownFrames--;
@@ -193,11 +205,6 @@ export class Avatar extends Sprite {
           this.adjustHandledMana();
         }
 
-        for (const sprite of this.physics.getSpritesAtSamePosition(this)) {
-          if (sprite instanceof Portal) {
-            sprite.warpRandomly(this);
-          }
-        }
       }
     } else if (this.slidePower !== Physics.NONE) {
       if (this.moveCarrying(this.slidePower, Physics.NONE, RUN_STEP_DISTANCE)) {
@@ -328,9 +335,11 @@ export class Avatar extends Sprite {
   }
 
   attemptJump(): void {
-    if (this.yPower !== Physics.NONE) {
+    if (this.beamFramesRemaining > 0 || this.yPower !== Physics.NONE) {
       return;
     }
+
+    if (this.beamUpFromPortal()) return;
 
     if (this.physics.touchSprite(this, Physics.NONE, Physics.DOWN, false) || this.coyoteFramesRemaining > 0) {
       this.startJump();
@@ -338,6 +347,41 @@ export class Avatar extends Sprite {
       // Not grounded and outside the coyote window: remember the press and consume it the instant we land.
       this.jumpBufferedFrames = JUMP_BUFFER_FRAMES;
     }
+  }
+
+  /** Up while standing in a stargate uses it instead of jumping: the avatar is beamed up (held in place) and then warped. */
+  private beamUpFromPortal(): boolean {
+    if (!this.physics.touchSprite(this, Physics.NONE, Physics.DOWN, false)) return false;
+
+    for (const sprite of this.physics.getSpritesAtSamePosition(this)) {
+      if (sprite instanceof Portal && !sprite.removed()) {
+        this.beamPortal = sprite;
+        this.beamFramesRemaining = BEAM_FRAMES;
+        this.needsRedraw(true);
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  private advanceBeam(): void {
+    this.beamFramesRemaining--;
+    this.needsRedraw(true); // the beam's progress is sent every frame so clients can animate it.
+    if (this.beamFramesRemaining > 0) return;
+
+    const portal = this.beamPortal;
+    this.beamPortal = undefined;
+    if (portal && !portal.removed()) portal.warpRandomly(this);
+  }
+
+  isBeaming(): boolean {
+    return this.beamFramesRemaining > 0;
+  }
+
+  /** How far through a transporter beam-up this avatar is (0 → 1), or undefined when it is not beaming. */
+  getBeamProgress(): number | undefined {
+    return this.beamFramesRemaining > 0 ? 1 - this.beamFramesRemaining / BEAM_FRAMES : undefined;
   }
 
   /** Releasing the jump key early cuts the ascent short (variable jump height); holding it keeps the full arc. */
@@ -363,17 +407,26 @@ export class Avatar extends Sprite {
     return this.sleeping;
   }
 
+  /** When this avatar fell asleep (ms since the epoch); 0 while it is awake. */
+  getSleepingSince(): number {
+    return this.sleepingSince;
+  }
+
   fallAsleep(): void {
+    if (!this.sleeping) this.sleepingSince = Date.now();
     this.sleeping = true;
     this.xPower = Physics.NONE; // no slide either: a sleeper just stands (or finishes falling) where it is.
     this.slidePower = Physics.NONE;
     this.pressingDown = false;
+    this.beamFramesRemaining = 0;
+    this.beamPortal = undefined;
     this.setFrame(0); // frozen on the first frame of whatever it is doing (a stand, once it is on the ground).
     this.needsRedraw(true); // so clients hear about it even if nothing else changes this frame.
   }
 
   wakeUp(): void {
     this.sleeping = false;
+    this.sleepingSince = 0;
     this.needsRedraw(true);
   }
 

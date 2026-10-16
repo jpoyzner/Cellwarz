@@ -1,6 +1,6 @@
 # Workflows
 
-Source of truth for Cellwarz's browser regression tests (`e2e/`). Each workflow below lists the user-facing
+Source of truth for Cyberstation's browser regression tests (`e2e/`). Each workflow below lists the user-facing
 behavior, how to trigger it, and whether it's covered by an automated Playwright test or requires manual
 verification. The two stargate warp portal positions, the one spawn portal position, and one yellow, one green and
 one red block are all fixed and deterministic since [MainRoom](server/cell/mainRoom.ts) replaced the old randomized
@@ -8,7 +8,10 @@ room layout, and every login currently lands in the same single room (see [TODOS
 closed most of the prior randomness-driven browser-test gaps below. The room's *other* blocks stay randomly
 placed, and they move (blocks are light: avatars shove them, robots shove them, purple blocks pull them), so the
 Playwright run starts the server with `CELLWARZ_RANDOM_BLOCKS=off CELLWARZ_ROBOTS=off` (alongside
-`CELLWARZ_PLANET_PULL=off` and `CELLWARZ_RANDOM_TELEPORT=off`, which makes teleporting in use the spawn portal): only the fixed blocks stay. The bottom floor is a free-running track: no wall blocks stand on it
+`CELLWARZ_PLANET_PULL=off` and `CELLWARZ_RANDOM_TELEPORT=off`, which makes teleporting in use the spawn portal, and
+lifted per-visitor limits — every spec connects from one machine): only the fixed blocks stay. These test-only switches
+must never be set on the real site; a production server refuses to start with any of them (see "Going live" below).
+To run the suite beside a dev server already on the default ports, set `CELLWARZ_API_PORT` and `CELLWARZ_WEB_PORT`. The bottom floor is a free-running track: no wall blocks stand on it
 and no stepping stone hangs low enough above it to stop an avatar, so walking into a fixed block shoves it (the e2e
 specs hop over or onto them instead). Robots patrol back and forth, standing still for one
 second before turning around when blocked, killing any player they touch and shooting arcing rockets at players
@@ -26,20 +29,26 @@ at a random bare floor spot at least 60 grid cells from any real player, with a 
    radar"). The room is scaled to fit the window.
 2. Walk the avatar with the Left/Right arrows and jump with Up (the arrow keys work even while the callsign field has
    focus; the room is client-only, nothing is sent to the server for it). A name tag shows the callsign over it.
-3. There are two transporters on the floor, each with a button label over it (also clickable): **TELEPORT**
-   (`#teleport`, always there) and **WAKE UP** (`#wakeup`, only present while the callsign typed has a living —
-   awake or asleep — avatar in the main room; typing another name removes it, a dead player never sees it).
-4. Standing on a pad for about half a second (or clicking its label) beams the avatar up (a short light-column effect),
-   then the login screen is removed, `#canvas` becomes visible, and the avatar + room (walls, doors, mana,
-   background) render within ~1 second of the WebSocket connecting. Without a callsign nothing fires: the notice
-   `#login-notice` turns into a flashing red "NO TELEPORT: TYPE A CALLSIGN FIRST!" banner, the field gets a red
-   outline (`.input-error`) and is focused; both clear once something is typed.
-5. The last callsign and colours are remembered (localStorage) and prefilled next time, including after Escape. The
+3. There are three transporters on the floor, each with a button label over it (also clickable): **TELEPORT**
+   (`#teleport`, always there), **HOME** (`#home`, always there, in the middle) and **WAKE UP** (`#wakeup`, only
+   present while the callsign typed has a living — awake or asleep — avatar in the main room; typing another name
+   removes it, a dead player never sees it). The avatar starts between WAKE UP and HOME, on no pad.
+4. A transporter is used by **standing on it and pressing Up** (or clicking/tapping its label): walking onto or across a
+   pad does nothing, so you can walk past one. The Up press is used up by the pad (the avatar does not also jump), and
+   only a fresh press counts (holding Up while running across a pad doesn't). Using one beams the avatar up (a short
+   light-column effect); for TELEPORT/WAKE UP the login screen is then removed, `#canvas` becomes visible, and the
+   avatar + room (walls, doors, mana, background) render within ~1 second of the WebSocket connecting. Without a
+   callsign they don't fire: the notice `#login-notice` turns into a flashing red "NO TELEPORT: TYPE A CALLSIGN FIRST!"
+   banner, the field gets a red outline (`.input-error`) and is focused; both clear once something is typed.
+5. **HOME** needs no callsign: after the beam the browser goes to the DJ Recognize website (`https://djrecognize.com`;
+   `PUBLIC_HOME_URL` at build time overrides it). Callsigns are at most 32 characters (the field stops there) and a
+   stray space around one is trimmed before it is sent.
+6. The last callsign and colours are remembered (localStorage) and prefilled next time, including after Escape. The
    hash is never written to storage (it is only kept in memory across Escape, within the page).
 
-**Covered by**: [e2e/login-room.spec.ts](e2e/login-room.spec.ts) (room, walking, jumping, callsign required, walking onto the
-pad), [e2e/login.spec.ts](e2e/login.spec.ts) (entering the game) and [src/game/__tests__/loginRoom.test.ts](src/game/__tests__/loginRoom.test.ts)
-(avatar movement and pad detection). The ship's look itself (hull, viewport, lights, beam) is manual-only.
+**Covered by**: [e2e/login-room.spec.ts](e2e/login-room.spec.ts) (room, walking, jumping, callsign required, walking across
+pads does nothing, Up on a pad fires it and Up elsewhere jumps, HOME navigates), [e2e/login.spec.ts](e2e/login.spec.ts) (entering the game)
+and [src/game/__tests__/loginRoom.test.ts](src/game/__tests__/loginRoom.test.ts) (avatar movement, pad detection, the Up-press rules). The ship's look itself (hull, viewport, lights, beam) is manual-only.
 
 ## Login — teleport
 
@@ -57,7 +66,8 @@ spec that logs in through `#teleport` (they use the spawn portal via the env fla
 ## Login — hash (password) and takeover
 
 1. Under the callsign is a **HASH** field (plain text, not masked) (`#loginHash`); blank it reads "(unprotected)".
-2. The first non-blank hash a callsign is used with is permanent: the server keeps it (salted, in memory only) and every later
+2. The first non-blank hash a callsign is used with is permanent: the server keeps it (salted and run through scrypt —
+   never the hash itself — in the player database, so it survives restarts) and every later
    login for that callsign — TELEPORT or WAKE UP — must send the same one, or the server answers `{ connect: 'denied' }`
    and hangs up before touching the avatar. The client returns to the login screen with a red "WRONG HASH: THAT CALLSIGN
    IS PROTECTED" notice (the hash field is outlined red; typing clears it). There is no recovery for a forgotten hash.
@@ -67,8 +77,31 @@ spec that logs in through `#teleport` (they use the spawn portal via the env fla
    `{ connect: 'displaced' }` and closes it; that client returns to the login screen with a "LOGGED IN FROM ELSEWHERE:
    DISCONNECTED" notice. A dropped connection can no longer drive the avatar, and its closing doesn't put it to sleep.
 
-**Covered by**: [e2e/login-hash.spec.ts](e2e/login-hash.spec.ts), [server/__tests__/socketHubLogin.test.ts](server/__tests__/socketHubLogin.test.ts)
-and [server/__tests__/session.test.ts](server/__tests__/session.test.ts).
+5. Guessing is throttled: after 5 wrong hashes for one callsign (or 20 across callsigns) from one network address within
+   ten minutes, that address is answered `{ connect: 'throttled' }` ("TOO MANY WRONG HASHES: WAIT A FEW MINUTES") until
+   the oldest failure ages out — even for the right hash. A right hash clears that address's count for the callsign.
+
+**Covered by**: [e2e/login-hash.spec.ts](e2e/login-hash.spec.ts), [server/__tests__/socketHubLogin.test.ts](server/__tests__/socketHubLogin.test.ts),
+[server/__tests__/session.test.ts](server/__tests__/session.test.ts), [server/__tests__/persistence.test.ts](server/__tests__/persistence.test.ts)
+(the stored credential accepts only the right hash and never holds it), and [server/__tests__/loginThrottle.test.ts](server/__tests__/loginThrottle.test.ts) /
+[server/__tests__/hardening.test.ts](server/__tests__/hardening.test.ts) (throttling).
+
+## Login — turned away (callsign rules and capacity)
+
+1. **Callsign rules**: 1–32 letters or numbers (any language) with single spaces, dots, dashes, underscores or
+   apostrophes between them; nothing else. The server never trims or edits it. Anything else is answered
+   `{ connect: 'invalid' }` and the client returns to the login screen with "INVALID CALLSIGN: ...".
+2. **Reserved names** (default: admin, administrator, moderator, system, server, cyberstation, robot, djrecognize —
+   compared ignoring case and punctuation, so "DJ_Recognize" counts) get `{ connect: 'reserved' }` ("THAT CALLSIGN IS RESERVED").
+   A callsign already on the books is exempt. `CELLWARZ_RESERVED_NAMES` replaces the list (empty = none reserved).
+3. **Capacity**: at most `CELLWARZ_MAX_PLAYERS` (default 60) players can be connected at once. A newcomer is answered
+   `{ connect: 'full' }` and the login screen says "STATION IS AT CAPACITY: TRY AGAIN SOON". A player who is already
+   connected can still log in again (it displaces the old connection), and sleeping avatars with no connection don't count.
+4. In every case the server hangs up without creating an account or an avatar.
+
+**Covered by**: [e2e/launch.spec.ts](e2e/launch.spec.ts) (a real reserved/malformed callsign, the 32-character field, and each
+server answer shown as a notice), [server/__tests__/callsign.test.ts](server/__tests__/callsign.test.ts) and
+[server/__tests__/hardening.test.ts](server/__tests__/hardening.test.ts) (the real capacity and refusal rules).
 
 ## Login — wake up (reattach)
 
@@ -222,11 +255,14 @@ vibration, audio unlock and how it feels under a real thumb are manual-only.
    It takes no input until its player wakes it (Space while spectating it) or reattaches.
 3. When the player reattaches (WAKE UP) the avatar wakes up: the lean and the Zs stop. (A dead player has no
    avatar left, so nothing sleeps.)
-4. A sleeping avatar stays in the room indefinitely (it shows the game is being played); the only things that remove it
-   are a death or the planet swallowing it (see "Gas giant planet").
+4. A sleeping avatar whose player has no connection stays in the room for `CELLWARZ_SLEEPER_EVICT_MINUTES` (default 30);
+   then it is removed (the account, score and colours stay, and TELEPORT brings a fresh avatar). One whose player is still
+   connected (spectating after Escape) is never removed. A death or the planet swallowing it (see "Gas giant planet")
+   removes it at once.
 
 **Covered by**: [e2e/login.spec.ts](e2e/login.spec.ts) (second browser context watches the sleeper) and
-[server/__tests__/session.test.ts](server/__tests__/session.test.ts) / [src/game/__tests__/sleepZs.test.ts](src/game/__tests__/sleepZs.test.ts).
+[server/__tests__/session.test.ts](server/__tests__/session.test.ts) / [src/game/__tests__/sleepZs.test.ts](src/game/__tests__/sleepZs.test.ts);
+the eviction in [server/__tests__/hardening.test.ts](server/__tests__/hardening.test.ts).
 
 ## Inactivity
 
@@ -359,19 +395,25 @@ touching the yellow block makes it rise, and touching the red block makes it exp
 the avatar beside it while a second browser context far away watches (the red block disappears from its view, the
 bystander survives). The visual look of each colour and the explosion is manual-only.
 
-## Portal warp
+## Portal warp (stargates)
 
-1. Walk into a Portal sprite — an animated "stargate" ring (a little bigger than an avatar) sitting on a
-   platform in one of [MainRoom](server/cell/mainRoom.ts)'s two top corners — while running.
-2. The avatar is relocated to the room's spawn portal (see "Spawn portal" below); the client receives a full
-   state refresh.
+The corner stargates are the same transporters as the login screen's pads: they are drawn with the pad look (a glowing
+plate, a cone of light with motes rising and a pulsing ring, in cyan) instead of the old spinning ring art.
 
-**Covered by**: [server/__tests__/portal.test.ts](server/__tests__/portal.test.ts) at the engine level (the
-relocate-and-refresh mechanic itself). The ring's constant client-side spin (one turn per 4s, see
-[src/game/stargateSpin.ts](src/game/stargateSpin.ts)) is unit-tested for its angle math only; how it looks is
-manual-only. Reaching a corner stargate requires climbing MainRoom's center
+1. Stand in a Portal sprite (a "stargate", a little bigger than an avatar, sitting on a platform in one of
+   [MainRoom](server/cell/mainRoom.ts)'s two top corners) and press **Up**. Walking into or past it does nothing.
+2. The avatar is held in place for ~0.65s (31 frames) while it stretches into a white column of light and fades — the
+   server sends the progress as sprite extra key `6` every frame; the name tag, emoji bubble and local movement prediction
+   are hidden meanwhile. Pressing Escape (falling asleep) cancels the beam.
+3. Then the avatar is relocated to the room's spawn portal (see "Spawn portal" below); the client receives a full
+   state refresh. Robots no longer warp (they never pressed Up).
+
+**Covered by**: [server/__tests__/portal.test.ts](server/__tests__/portal.test.ts) at the engine level (walking in does
+nothing, Up beams then warps, Esc cancels, the beam progress on the wire, plain jumps elsewhere) and
+[e2e/launch.spec.ts](e2e/launch.spec.ts) (the client tracks and releases the beam progress it is sent). Reaching a
+corner stargate requires climbing MainRoom's center
 stepping-stone shaft, which is deliberately organic/skill-based platforming (jumping while drifting between
-horizontally-offset columns) — not reliably scriptable, so the full walk-up-and-touch-it flow is manual-only,
+horizontally-offset columns) — not reliably scriptable, so the full walk-up-and-press-Up flow and how the pad and beam look are manual-only,
 the same tradeoff already made for burn-from-engine-fire death below.
 
 ## Spawn portal
@@ -533,6 +575,9 @@ drop are unit-tested only (robots are off in the e2e run); the bubble's look is 
 The **Black Box** is the in-game flight recorder: when something goes wrong, press `` ` ``, then "check the Black Box"
 (`black-box/latest.json`) afterwards.
 
+0. **Local development only**: the server accepts recordings only when it is not in production (or `CELLWARZ_BLACK_BOX=on`);
+   it says so in its full-state payload (`blackBox`) and the backtick key does nothing when it is false, so on the real site
+   there is no recorder and the server ignores any recording message and writes nothing.
 1. While in-game, press the backtick key (`` ` ``) to start the Black Box. A blinking red `#black-box` label
    ("BLACK BOX REC 9.8s") appears top-left and counts down. It captures the world's sprite positions (plus per-sprite
    sleeping/health/emoji state, looks and the planet) at the start, every message the server then sends (redraw frames,
@@ -548,7 +593,7 @@ The **Black Box** is the in-game flight recorder: when something goes wrong, pre
 10s auto-stop), [src/game/__tests__/blackBox.test.ts](src/game/__tests__/blackBox.test.ts),
 [server/__tests__/blackBoxStore.test.ts](server/__tests__/blackBoxStore.test.ts) (single-file overwrite, size cap,
 login required) and [server/__tests__/blackBoxDump.test.ts](server/__tests__/blackBoxDump.test.ts) (the server-side
-sprite dumps, saved start/end).
+sprite dumps, saved start/end), and [server/__tests__/hardening.test.ts](server/__tests__/hardening.test.ts) (refused when disabled).
 
 ## Game feel: audio, particles, screen shake, netcode smoothing
 
@@ -767,9 +812,10 @@ Avatar/block pull and swallowing are unit-tested only; how the planet looks is m
    across the screen to the score and disappear on arrival, adding 20 points per block (a tetromino is 4 blocks,
    so 80). Blocks broken by other players fly apart without scoring for you.
 3. The client reports collected blocks to the server (`scored` message), which keeps the authoritative total on
-   the user's `Session`; it persists across death/respawn and reattach (the full-state payload carries `score`).
-   Scores are in-memory only, like all game state. The top three show on the login screen (see "Login room —
-   leaderboard").
+   the user's `Session`; it persists across death/respawn, reattach and server restarts (see "Persistence across restarts";
+   the full-state payload carries `score`). The server counts only what a player could really have earned: a burst
+   allowance of 60 blocks that refills at 10 per second (`Session.claimBlocks`), so a modified client can't mint points.
+   The top three show on the login screen (see "Login room — leaderboard").
 4. The old debug frame-stats text in the top-left corner has been removed.
 5. **Diamonds**: the first real player (not a robot) whose body touches a diamond collects it — this works for any
    avatar of that player, including after a warp, reattach or respawn. It disappears at your avatar, flies across the
@@ -780,7 +826,9 @@ Avatar/block pull and swallowing are unit-tested only; how the planet looks is m
 **Covered by**: [e2e/space-background.spec.ts](e2e/space-background.spec.ts) (breaking a block adds 20 per block to
 the `#score` text), [src/game/__tests__/spaceBackground.test.ts](src/game/__tests__/spaceBackground.test.ts) (only
 the local avatar's blocks fly to the target and are counted) and
-[server/__tests__/session.test.ts](server/__tests__/session.test.ts) (20 points per block, kept across re-plug).
+[server/__tests__/session.test.ts](server/__tests__/session.test.ts) (20 points per block, kept across re-plug),
+[server/__tests__/persistence.test.ts](server/__tests__/persistence.test.ts) (the allowance) and
+[server/__tests__/hardening.test.ts](server/__tests__/hardening.test.ts) (score spam through the socket).
 Diamonds: [server/__tests__/specialBlocks.test.ts](server/__tests__/specialBlocks.test.ts) (fall, bounce, collected by
 players but not robots),
 [server/__tests__/socketHubDiamonds.test.ts](server/__tests__/socketHubDiamonds.test.ts) (the `{ diamonds }` message
@@ -789,6 +837,65 @@ and full-state total), [server/__tests__/session.test.ts](server/__tests__/sessi
 HUD counter, including the fly-then-count behavior (replaying the server's messages), in
 [e2e/main-room-workflows.spec.ts](e2e/main-room-workflows.spec.ts). Actually picking a diamond up in the room is
 unit-tested only (the e2e room has no random blocks to break).
+
+## Persistence across restarts
+
+Set `CELLWARZ_DATA_DIR` (the Docker image uses `/data`) to save the game; without it (local dev, the Playwright run)
+nothing survives the process.
+
+1. **Players** (callsign, salted scrypt credential, Disco shards, diamonds, headband/belt colours) are written to a SQLite
+   database (`cyberstation.db`) within a few seconds of any change, and on shutdown.
+2. **The room** is snapshotted every `CELLWARZ_SNAPSHOT_INTERVAL_SECONDS` (default 10) and on shutdown to
+   `room-snapshot.json` (atomically; the previous one is kept as `room-snapshot.prev.json`). It holds where every block,
+   robot, diamond and player's avatar was — not velocities, fuses or in-flight rockets (a restored block is at rest and a
+   restored room's other state, like the planet, starts fresh).
+3. After a restart every player's avatar is back where it was, **asleep** (their connection is gone) with its WAKE UP pad
+   available; the clients reconnect on their own (see "Reconnecting") and wake it. Scores and hashes are intact.
+4. A snapshot that is missing, corrupt, from another layout/size, or from another `SNAPSHOT_VERSION` (bumped whenever the layout or
+   the saved fields change) is ignored: the previous one is tried, then a fresh room is built. Accounts are unaffected.
+   A crash saves the accounts only (the room might be in a bad state) and the last good snapshot comes back.
+
+**Covered by**: [server/__tests__/persistence.test.ts](server/__tests__/persistence.test.ts) (accounts and the whole room
+across a "restart", atomic writes, every fallback, snapshot validation) and `npm run test:restart`
+([scripts/restart-smoke.mjs](scripts/restart-smoke.mjs): the real server, stopped and started again on the same folder).
+
+## Reconnecting
+
+1. When the connection drops (server restart or deploy, lost signal) the game shows a magenta "LINK LOST · RECONNECTING TO
+   THE STATION..." banner (`#reconnecting`) and retries with growing, jittered delays (0.5s up to 10s). A connection that
+   goes silent for 10 seconds counts as dropped too. Key presses are dropped while it is down.
+2. When it is back the client logs in again **without** teleporting (it re-attaches to its avatar, which wakes up) and the
+   banner goes away. After 2 minutes of failures the player is sent back to the login screen: "CONNECTION LOST".
+3. Being turned away (wrong hash, displaced, full, throttled, invalid), or leaving on purpose, is never retried.
+4. The server pings every 30s and drops sockets that stop answering, which puts their avatar to sleep.
+
+**Covered by**: [src/game/__tests__/syncer.test.ts](src/game/__tests__/syncer.test.ts) (retry timing, re-attach, silence,
+give-up, no retry after a refusal) and [e2e/launch.spec.ts](e2e/launch.spec.ts) (a real dropped socket re-attaches to the
+same avatar; a simulated outage shows the banner and play resumes).
+
+## Going live (the real site)
+
+What the deployed server (see [DEPLOY.md](DEPLOY.md)) guarantees, all configured by environment variables
+([.env.example](.env.example), [server/config.ts](server/config.ts)):
+
+1. **Transport**: Caddy serves HTTPS/WSS only; the game server sends a strict Content-Security-Policy, HSTS and no-sniff headers
+   in production. A game socket opened from another website's page is refused with 403 (the page's own origin passes; a
+   localhost page passes only outside production). Messages are capped at 16 KB (30 MB only where Black Box is on), each
+   connection may send a burst of 120 then 80 messages a second (a flooder is hung up on), and at most 8 sockets per address
+   / 240 in total are allowed (HTTP 429 beyond).
+2. **Capacity**: 60 players by default, see "Login — turned away". `/healthz` reports players, sockets, simulation step time
+   against its 20.8 ms budget and event-loop delay; `/api/status` gives `{ name, players, capacity, full }` for the DJ Recognize
+   site (CORS limited to `CELLWARZ_STATUS_ORIGIN`). `npm run loadtest` drives bots against a server.
+3. **Static assets**: art is cached for an hour, videos for a day, hashed bundles forever (and `index.html` never), so
+   Cloudflare can cache them; the built `dist/` no longer duplicates the videos.
+4. **Test-only switches** (`CELLWARZ_PLANET_PULL`, `_ROBOTS`, `_RANDOM_BLOCKS`, `_RANDOM_TELEPORT`) are off by default (the
+   real game); a production server refuses to start with any of them set unless `CELLWARZ_ALLOW_TEST_FLAGS=on`.
+5. SIGTERM/SIGINT save everything, hang up on the clients (who reconnect) and exit; the Docker image's health check calls `/healthz`.
+
+**Covered by**: [server/__tests__/connectionGuard.test.ts](server/__tests__/connectionGuard.test.ts) (origin, addresses, socket
+counts, config), [server/__tests__/hardening.test.ts](server/__tests__/hardening.test.ts) (flooding, garbage), and
+[e2e/launch.spec.ts](e2e/launch.spec.ts) (`/healthz`, `/api/status`, headers, the cross-origin refusal). The HTTPS proxy, headers
+under a real CSP, caching and the Docker image are checked by hand when deploying ([DEPLOY.md](DEPLOY.md)).
 
 ## Removed workflows
 

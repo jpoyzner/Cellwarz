@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { login, waitForAvatar, waitUntilGrounded } from './gameHelpers';
 
-test('the login screen is a ship interior with your avatar, a TELEPORT transporter and a live radar — and no WAKE UP yet', async ({ page }) => {
+test('the login screen is a ship interior with your avatar, TELEPORT and HOME transporters and a live radar — and no WAKE UP yet', async ({ page }) => {
   const consoleErrors: string[] = [];
   page.on('console', (msg) => {
     if (msg.type() === 'error') consoleErrors.push(msg.text());
@@ -11,7 +11,9 @@ test('the login screen is a ship interior with your avatar, a TELEPORT transport
   await expect(page.locator('#login')).toBeVisible();
   await expect(page.locator('#ship-canvas')).toBeVisible();
   await expect(page.locator('#teleport')).toHaveText('TELEPORT');
+  await expect(page.locator('#home')).toHaveText('HOME');
   await expect(page.locator('#wakeup')).toHaveCount(0);
+  await expect(page.locator('#login-notice')).toContainText('PRESS');
   await expect(page.locator('#radar-canvas')).toBeVisible();
   await expect(page.locator('#leaderboard')).toContainText('DISCO SHARDS');
   await expect(page.locator('#desc')).toContainText('disco shards');
@@ -88,20 +90,73 @@ test('a transporter will not fire without a callsign', async ({ page }) => {
   await expect(page.locator('#canvas')).toHaveCount(0);
 });
 
-test('walking the avatar onto the TELEPORT pad beams you into the main room', async ({ page }) => {
+test('a transporter fires only on an Up press while standing on it: walking onto or across a pad does nothing', async ({ page }) => {
   const name = `walker-${Date.now()}`;
   await page.goto('/');
+  await page.waitForFunction(() => !!window.__cellwarzLogin);
   await page.locator('#loginName').fill(name);
 
+  // Run right across the HOME and TELEPORT pads to the wall and let the avatar rest on the TELEPORT pad.
   await page.keyboard.down('ArrowRight');
-  try {
-    await expect(page.locator('#canvas')).toBeVisible({ timeout: 10000 });
-  } finally {
-    await page.keyboard.up('ArrowRight');
-  }
+  await expect.poll(() => page.evaluate(() => window.__cellwarzLogin!.room.avatar.x)).toBeGreaterThan(850);
+  await page.keyboard.up('ArrowRight');
+  await page.keyboard.down('ArrowLeft');
+  await expect.poll(() => page.evaluate(() => window.__cellwarzLogin!.room.avatar.x)).toBeLessThan(760);
+  await page.keyboard.up('ArrowLeft');
+  await page.waitForTimeout(1000);
+  await expect(page.locator('#login')).toBeVisible();
+  expect(await page.evaluate(() => window.__cellwarzLogin!.room.isBeaming)).toBe(false);
 
+  // Standing still on it for a good while changes nothing either...
+  await page.evaluate(() => {
+    window.__cellwarzLogin!.room.avatar.x = 745;
+  });
+  await page.waitForTimeout(1200);
+  await expect(page.locator('#login')).toBeVisible();
+
+  // ...until Up is pressed: the avatar is beamed into the main room (and does not jump on the way).
+  await page.keyboard.press('ArrowUp');
+  await expect(page.locator('#canvas')).toBeVisible({ timeout: 10000 });
   await expect(page.locator('#login')).toHaveCount(0);
   await waitForAvatar(page, name);
+});
+
+test('Up away from a pad jumps; Up on a pad uses it instead of jumping', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForFunction(() => !!window.__cellwarzLogin);
+
+  await page.keyboard.down('ArrowUp');
+  await expect.poll(() => page.evaluate(() => window.__cellwarzLogin!.room.avatar.onGround)).toBe(false);
+  await page.keyboard.up('ArrowUp');
+  await expect.poll(() => page.evaluate(() => window.__cellwarzLogin!.room.avatar.onGround)).toBe(true);
+
+  // No callsign yet, so the pad refuses — and the press is not wasted on a jump.
+  await page.evaluate(() => {
+    window.__cellwarzLogin!.room.avatar.x = 745;
+  });
+  await page.keyboard.press('ArrowUp');
+  await expect(page.locator('#login-notice')).toContainText('NO TELEPORT');
+  expect(await page.evaluate(() => window.__cellwarzLogin!.room.avatar.onGround)).toBe(true);
+  expect(await page.evaluate(() => window.__cellwarzLogin!.room.isBeaming)).toBe(false);
+});
+
+test('the HOME pad takes you back to the DJ Recognize website, with no callsign needed', async ({ page }) => {
+  await page.route('https://djrecognize.com/**', (route) => route.fulfill({ contentType: 'text/html', body: '<title>DJ Recognize</title>' }));
+  await page.goto('/');
+  await page.waitForFunction(() => !!window.__cellwarzLogin);
+
+  // Standing on the HOME pad and pressing Up beams you out...
+  await page.evaluate(() => {
+    window.__cellwarzLogin!.room.avatar.x = 480;
+  });
+  await page.keyboard.press('ArrowUp');
+  await page.waitForURL('https://djrecognize.com/**');
+  await expect(page).toHaveTitle('DJ Recognize');
+
+  // ...and so does clicking its label (the touch way).
+  await page.goto('/');
+  await page.locator('#home').click();
+  await page.waitForURL('https://djrecognize.com/**');
 });
 
 test('WAKE UP appears only for a callsign with a living avatar, and wakes that avatar where it sleeps', async ({ page }) => {

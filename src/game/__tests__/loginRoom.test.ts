@@ -1,16 +1,16 @@
-import { describe, expect, it } from 'vitest';
-import { FLOOR_Y, PADS, padAt, ROOM_WIDTH, RoomAvatar } from '../loginRoom';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { BEAM_MS, FLOOR_Y, LoginRoom, PADS, padAt, ROOM_WIDTH, RoomAvatar, START_X } from '../loginRoom';
 
 const STILL = { left: false, right: false, jump: false };
 
 describe('RoomAvatar', () => {
-  it('starts standing mid-room and runs left and right, facing the way it runs', () => {
+  it('starts standing between the pads and runs left and right, facing the way it runs', () => {
     const avatar = new RoomAvatar();
-    expect(avatar.x).toBe(ROOM_WIDTH / 2);
+    expect(avatar.x).toBe(START_X);
     expect(avatar.onGround).toBe(true);
 
     avatar.step(0.1, { ...STILL, right: true });
-    expect(avatar.x).toBeGreaterThan(ROOM_WIDTH / 2);
+    expect(avatar.x).toBeGreaterThan(START_X);
     expect(avatar.facingRight).toBe(true);
     expect(avatar.moving).toBe(true);
 
@@ -65,11 +65,84 @@ describe('padAt', () => {
     expect(padAt(PADS.teleport.centerX, true, true)).toBe('teleport');
     expect(padAt(PADS.wakeup.centerX, true, true)).toBe('wakeup');
     expect(padAt(PADS.teleport.centerX, false, true)).toBeUndefined();
-    expect(padAt(ROOM_WIDTH / 2, true, true)).toBeUndefined();
+    expect(padAt(PADS.home.centerX, true, false)).toBe('home');
+    expect(padAt(START_X, true, true)).toBeUndefined();
+  });
+
+  it('keeps the three pads clear of each other', () => {
+    const centers = Object.values(PADS).map((pad) => pad.centerX).sort((a, b) => a - b);
+    for (let i = 1; i < centers.length; i++) expect(centers[i] - centers[i - 1]).toBeGreaterThanOrEqual(2 * PADS.home.halfWidth);
   });
 
   it('has no wake-up pad until the player has a living avatar', () => {
     expect(padAt(PADS.wakeup.centerX, true, false)).toBeUndefined();
     expect(padAt(PADS.teleport.centerX, true, false)).toBe('teleport');
+  });
+});
+
+describe('LoginRoom transporters', () => {
+  function makeRoom(canTransport = true) {
+    const used: string[] = [];
+    const blocked: string[] = [];
+    const canvas = { width: 0, height: 0, getContext: () => null } as unknown as HTMLCanvasElement;
+    vi.stubGlobal('Image', class {});
+    vi.stubGlobal('performance', { now: () => 0 });
+    const room = new LoginRoom(canvas, {
+      canTransport: () => canTransport,
+      onBlocked: (pad) => blocked.push(pad),
+      onTransport: (pad) => used.push(pad),
+    });
+    return { room, used, blocked };
+  }
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('uses a pad only on a fresh Up press while standing on it, never by walking onto it', () => {
+    vi.useFakeTimers();
+    const { room, used } = makeRoom();
+    room.avatar.x = PADS.teleport.centerX;
+
+    room.setKey('jump', true, true); // an auto-repeat of a held key (e.g. bunny-hopping across the pad) is not a press
+    expect(room.isBeaming).toBe(false);
+    room.setKey('jump', false);
+
+    room.setKey('jump', true);
+    expect(room.isBeaming).toBe(true);
+    vi.advanceTimersByTime(BEAM_MS);
+    expect(used).toEqual(['teleport']);
+  });
+
+  it('jumps normally when Up is pressed away from every pad, and the pad press is not also a jump', () => {
+    vi.useFakeTimers();
+    const { room } = makeRoom();
+    room.avatar.x = START_X;
+    room.setKey('jump', true);
+    expect(room.isBeaming).toBe(false);
+    room.avatar.step(0.016, { left: false, right: false, jump: true });
+    expect(room.avatar.onGround).toBe(false);
+
+    const onPad = makeRoom().room;
+    onPad.avatar.x = PADS.home.centerX;
+    onPad.setKey('jump', true);
+    onPad.avatar.step(0.016, { left: false, right: false, jump: false });
+    expect(onPad.avatar.onGround).toBe(true);
+  });
+
+  it('tells the player when a pad needs a callsign, but HOME needs none', () => {
+    vi.useFakeTimers();
+    const { room, blocked, used } = makeRoom(false);
+    room.avatar.x = PADS.teleport.centerX;
+    room.setKey('jump', true);
+    expect(blocked).toEqual(['teleport']);
+    expect(room.isBeaming).toBe(false);
+    room.setKey('jump', false);
+
+    room.avatar.x = PADS.home.centerX;
+    room.setKey('jump', true);
+    vi.advanceTimersByTime(BEAM_MS);
+    expect(used).toEqual(['home']);
   });
 });

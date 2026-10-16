@@ -418,6 +418,23 @@ body {
   }
 }
 
+#reconnecting {
+  background: rgba(4, 10, 24, 0.82);
+  border: 1px solid #ff2ea6;
+  box-shadow: 0 0 18px rgba(255, 46, 166, 0.6);
+  color: #ff2ea6;
+  font: bold 16px ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  left: 50%;
+  letter-spacing: 0.14em;
+  padding: 10px 18px;
+  pointer-events: none;
+  position: fixed;
+  text-shadow: 0 0 8px #ff2ea6;
+  top: 40%;
+  transform: translateX(-50%);
+  z-index: 30;
+}
+
 #spectator {
   color: #00f6ff;
   font: bold 14px ui-monospace, 'SF Mono', Menlo, Consolas, monospace;

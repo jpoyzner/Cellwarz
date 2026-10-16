@@ -18,7 +18,8 @@ import type { ActorTint, BakedSprite } from './neonSprites';
 import { ParticleSystem } from './particles';
 import { drawRocketLight, isRocketPath, rocketFacesLeft } from './rocketLight';
 import { drawStarFire, isStarPath } from './starFire';
-import { isStargatePath, stargateAngle } from './stargateSpin';
+import { isStargatePath } from './stargateSpin';
+import { drawBeamColumn, drawPadGlow, drawPadPlate } from './transporterPad';
 import { PlanetView } from './planet';
 import { PostFx } from './postFx';
 import { LocalPredictor } from './prediction';
@@ -27,6 +28,7 @@ import { damageStage, HEALTH_KEY } from './damage';
 import { LOOK_DOWN_MAX_SCREEN_FRACTION, LookDown } from './lookDown';
 import { SleepZs, SLEEPING_KEY, sleepLean } from './sleepZs';
 import { BUBBLE_TOTAL_HEIGHT_PX, drawEmojiBubble, EMOJI_KEY } from './emojiBubble';
+import { BEAM_KEY } from './beam';
 import { SpaceBackground } from './spaceBackground';
 import type { TouchRect } from './spaceBackground';
 import { StationBackdrop } from './stationBackdrop';
@@ -100,6 +102,11 @@ const POINTS_PER_BLOCK = 20;
 const SCORE_SCRAMBLE_TICKS = 6;
 const SCORE_SCRAMBLE_INTERVAL_MS = 40;
 const SPRITE_GLOW_BLUR_PX = 12;
+// A stargate's pad (the login screen's pad look, at the stargate's smaller size) and the column an avatar beams up in.
+const STARGATE_COLOR = '#00f6ff';
+const PAD_SCALE = 0.45;
+const BEAM_HEIGHT_PX = 180;
+const BEAM_HALF_WIDTH_PX = 22;
 const DIAMOND_SIZE_PX = 16;
 // A collected diamond vanishes while overlapping the avatar, so anything gone from farther than this wasn't collected by us.
 const DIAMOND_COLLECT_RANGE_PX = 120;
@@ -158,6 +165,8 @@ export class Renderer {
 
   /** Sprites a planet is swallowing, by id → how much of their size is left (1 → 0); the server owns the progress. */
   private readonly shrinks = new Map<string, number>();
+  /** Avatars being beamed up through a stargate, by id → how far along the beam is (0 → 1); the server owns the progress. */
+  private readonly beams = new Map<string, number>();
   /** Avatars whose player pressed Escape or lost their connection while alive: drawn asleep, with Zs above the head. */
   readonly sleeping = new Set<string>();
   /** Avatars below full health, with their remaining health percent: drawn with wounds (see `damage.ts`). */
@@ -399,12 +408,14 @@ export class Renderer {
 
     this.sprites = data.sprites;
     this.shrinks.clear();
+    this.beams.clear();
     this.sleeping.clear();
     this.health.clear();
     this.emojis.clear();
     for (const [spriteId, sprite] of Object.entries(data.sprites)) {
       const extraInfo = (sprite as IncomingSprite)[3] as Record<string, unknown> | undefined;
       if (extraInfo?.[SLEEPING_KEY]) this.sleeping.add(spriteId);
+      if (typeof extraInfo?.[BEAM_KEY] === 'number') this.beams.set(spriteId, extraInfo[BEAM_KEY]);
       if (typeof extraInfo?.[HEALTH_KEY] === 'number') this.health.set(spriteId, extraInfo[HEALTH_KEY]);
       if (typeof extraInfo?.[EMOJI_KEY] === 'string') this.emojis.set(spriteId, extraInfo[EMOJI_KEY]);
     }
@@ -473,6 +484,7 @@ export class Renderer {
       health: Object.fromEntries(this.health),
       emojis: Object.fromEntries(this.emojis),
       shrinks: Object.fromEntries(this.shrinks),
+      beams: Object.fromEntries(this.beams),
       looks: this.looks,
       planet: this.planet
         ? { id: this.planet.id, x: this.planet.x, y: this.planet.y, vx: this.planet.vx, vy: this.planet.vy, radius: this.planet.radius }
@@ -591,6 +603,7 @@ export class Renderer {
         if (removed && this.minimap?.kindOf(removed[0]) === 'wall') this.minimap.invalidateWalls();
         delete this.sprites[spriteId];
         this.shrinks.delete(spriteId);
+        this.beams.delete(spriteId);
         this.sleeping.delete(spriteId);
         this.health.delete(spriteId);
         this.emojis.delete(spriteId);
@@ -617,6 +630,11 @@ export class Renderer {
       const health = extraInfo?.[HEALTH_KEY];
       if (typeof health === 'number') this.health.set(spriteId, health);
       else this.health.delete(spriteId);
+
+      // A frame without the beam key means the avatar is not (or no longer) being beamed up.
+      const beam = extraInfo?.[BEAM_KEY];
+      if (typeof beam === 'number') this.beams.set(spriteId, beam);
+      else this.beams.delete(spriteId);
 
       // And an avatar frame without the emoji key means its speech bubble is gone.
       const emoji = extraInfo?.[EMOJI_KEY];
@@ -754,7 +772,7 @@ export class Renderer {
 
     const spriteId = this.avatars[this.context.loginName];
     const avatar = spriteId ? this.sprites[spriteId] : undefined;
-    if (!avatar || this.spectator !== 'off' || this.shrinks.has(spriteId)) {
+    if (!avatar || this.spectator !== 'off' || this.vanishing(spriteId)) {
       this.hints.update({ alive: false, touchingBlock: false, carryingBlock: false });
       this.setCarrying(false);
       return;
@@ -797,7 +815,7 @@ export class Renderer {
       const targetY = sprite[2];
 
       // Once a planet is swallowing the local avatar the server alone steers it; don't predict its keypresses.
-      if (spriteId === this.localSpriteId && !this.shrinks.has(spriteId) && !this.sleeping.has(spriteId)) {
+      if (spriteId === this.localSpriteId && !this.vanishing(spriteId) && !this.sleeping.has(spriteId)) {
         targetX = this.predictor.getBlendedX(targetX, dtMs);
       }
 
@@ -1027,6 +1045,21 @@ export class Renderer {
     this.vines?.draw(ctx, offsetX, offsetY, canvas.width, canvas.height, performance.now());
   }
 
+  /** A sprite on its way out (swallowed by a planet, or beamed up): no name tag, emoji bubble or local prediction. */
+  private vanishing(spriteId: string): boolean {
+    return this.shrinks.has(spriteId) || this.beams.has(spriteId);
+  }
+
+  /** A stargate, drawn as the same glowing transporter pad the login screen has. */
+  private drawStargatePad(x: number, y: number, width: number, height: number): void {
+    if (width <= 0 || height <= 0) return; // the art hasn't finished loading.
+
+    const { ctx } = this.context;
+    const shape = { centerX: x + width / 2, floorY: y + height, halfWidth: width / 2, coneHeight: height * 1.6, color: STARGATE_COLOR };
+    drawPadPlate(ctx, shape, true, PAD_SCALE);
+    drawPadGlow(ctx, shape, performance.now() / 1000, PAD_SCALE);
+  }
+
   private drawSprite(spriteId: string, offsetX: number, offsetY: number, playerSpriteIds: Set<string>, looksBySprite: Map<string, Look>): void {
     const { ctx } = this.context;
     const sprite = this.sprites[spriteId];
@@ -1037,6 +1070,23 @@ export class Renderer {
     const rendered = this.smoothed.get(spriteId);
     const x = (rendered?.x ?? sprite[1]) - offsetX;
     const y = (rendered?.y ?? sprite[2]) - offsetY;
+
+    if (this.stargateImages.has(index)) {
+      this.drawStargatePad(x, y, image.width, image.height);
+      return;
+    }
+
+    const beam = this.beams.get(spriteId);
+    if (beam !== undefined) {
+      // Stretches up into the beam and fades, like the avatar on a login-screen pad.
+      const feetX = x + image.width / 2;
+      const feetY = y + image.height;
+      ctx.save();
+      ctx.translate(feetX, feetY);
+      ctx.scale(1 - 0.85 * beam, 1 + 1.6 * beam);
+      ctx.globalAlpha = 1 - beam;
+      ctx.translate(-feetX, -feetY);
+    }
 
     const shrink = this.shrinks.get(spriteId);
     if (shrink !== undefined) {
@@ -1070,16 +1120,6 @@ export class Renderer {
       baked = this.neon.actor(index, image, tint, looksBySprite.get(spriteId), damageStage(this.health.get(spriteId) ?? 100));
     }
 
-    const spinning = this.stargateImages.has(index);
-    if (spinning) {
-      const centerX = x + image.width / 2;
-      const centerY = y + image.height / 2;
-      ctx.save();
-      ctx.translate(centerX, centerY);
-      ctx.rotate(stargateAngle(performance.now()));
-      ctx.translate(-centerX, -centerY);
-    }
-
     if (baked) {
       ctx.drawImage(baked.source, x - baked.pad, y - baked.pad);
     } else {
@@ -1091,8 +1131,6 @@ export class Renderer {
       ctx.drawImage(image, x, y);
       if (glow) ctx.shadowBlur = 0;
     }
-
-    if (spinning) ctx.restore();
 
     const path = this.imagePaths[index];
     if (path && isRocketPath(path)) {
@@ -1106,6 +1144,10 @@ export class Renderer {
       ctx.restore();
     }
     if (shrink !== undefined) ctx.restore();
+    if (beam !== undefined) {
+      ctx.restore();
+      drawBeamColumn(ctx, x + image.width / 2, y + image.height, BEAM_HEIGHT_PX, BEAM_HALF_WIDTH_PX, STARGATE_COLOR, beam);
+    }
   }
 
   /** Each speech bubble sits right on top of its sprite's head (avatars and robots alike). */
@@ -1114,7 +1156,7 @@ export class Renderer {
 
     for (const [spriteId, emoji] of this.emojis) {
       const sprite = this.sprites[spriteId];
-      if (!sprite || this.shrinks.has(spriteId)) continue;
+      if (!sprite || this.vanishing(spriteId)) continue;
 
       const rendered = this.smoothed.get(spriteId);
       const width = this.context.images[sprite[0]]?.width || AVATAR_WIDTH_PX;
@@ -1133,7 +1175,7 @@ export class Renderer {
 
     for (const name of Object.keys(this.avatars)) {
       const sprite = this.sprites[this.avatars[name]];
-      if (sprite && this.shrinks.has(this.avatars[name])) continue;
+      if (sprite && this.vanishing(this.avatars[name])) continue;
       if (sprite) {
         const rendered = this.smoothed.get(this.avatars[name]);
         const x = rendered?.x ?? sprite[1];

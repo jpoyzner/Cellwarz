@@ -1,20 +1,28 @@
 // The login "room": a small ship interior (client-only, nothing here touches the server) where the player walks their
-// avatar between two transporters. Walking onto the TELEPORT pad drops a fresh avatar at a random floor spot in the
-// main room; the WAKE UP pad (only present while the typed callsign has a living avatar there) re-attaches to it.
+// avatar between three transporters. Standing on a pad and pressing Up uses it (so a pad can be walked past): TELEPORT
+// drops a fresh avatar at a random floor spot in the main room; WAKE UP (only present while the typed callsign has a
+// living avatar there) re-attaches to it; HOME leaves for the DJ Recognize website.
 
 import { NeonSprites } from './neonSprites';
 import type { Look } from './look';
+import { drawBeamColumn, drawPadGlow, drawPadPlate, hexAlpha } from './transporterPad';
+
+export { hexAlpha };
 
 export const ROOM_WIDTH = 960;
 export const ROOM_HEIGHT = 540;
 export const FLOOR_Y = 470;
 
-export type PadId = 'wakeup' | 'teleport';
+export type PadId = 'wakeup' | 'teleport' | 'home';
 
 export const PADS: Record<PadId, { centerX: number; halfWidth: number; color: string; label: string }> = {
   wakeup: { centerX: 215, halfWidth: 75, color: '#ffae1a', label: 'WAKE UP' },
   teleport: { centerX: 745, halfWidth: 75, color: '#00f6ff', label: 'TELEPORT' },
+  home: { centerX: 480, halfWidth: 75, color: '#ff2ea6', label: 'HOME' },
 };
+
+/** The avatar starts between the WAKE UP and HOME pads, standing on none of them. */
+export const START_X = 347;
 
 const AVATAR_SCALE = 2;
 const SPRITE_WIDTH = 48;
@@ -23,8 +31,6 @@ const RUN_SPEED = 230;
 const JUMP_SPEED = 560;
 const GRAVITY = 1700;
 const WALL_MARGIN = 48;
-// Standing on a pad this long (seconds) fires it, so just crossing a pad doesn't.
-const PAD_DWELL_S = 0.45;
 export const BEAM_MS = 650;
 const MAX_FRAME_S = 0.05;
 
@@ -37,7 +43,7 @@ export interface RoomInput {
 /** The walking avatar's physics: running, jumping and gravity on a flat floor between two walls. */
 export class RoomAvatar {
   /** Horizontal centre and feet height, in room pixels. */
-  x = ROOM_WIDTH / 2;
+  x = START_X;
   y = FLOOR_Y;
   vy = 0;
   facingRight = true;
@@ -117,8 +123,8 @@ export class LoginRoom {
   private lastTime = 0;
   private clock = 0;
   private scale = 1;
-  private padTime = 0;
-  private blockedNotified = false;
+  /** An Up press that used (or tried to use) a pad is not also a jump; it stays consumed until the key is released. */
+  private jumpConsumed = false;
   private beaming: { pad: PadId; startedAt: number } | undefined;
   private beamTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -142,8 +148,32 @@ export class LoginRoom {
     this.neon.clear();
   }
 
-  setKey(key: keyof RoomInput, down: boolean): void {
-    this.input[key] = down;
+  /**
+   * A key changed. Pressing Up while standing on a pad uses it instead of jumping; only a fresh press counts, so running
+   * across a pad while holding Up (auto-repeat) doesn't fire it.
+   */
+  setKey(key: keyof RoomInput, down: boolean, repeat = false): void {
+    if (key !== 'jump') {
+      this.input[key] = down;
+      return;
+    }
+
+    if (!down) {
+      this.jumpConsumed = false;
+      this.input.jump = false;
+      return;
+    }
+
+    if (this.jumpConsumed) return;
+    const pad = repeat || this.beaming ? undefined : padAt(this.avatar.x, this.avatar.onGround, this.wakeAvailable);
+    if (pad) {
+      this.jumpConsumed = true;
+      this.input.jump = false;
+      this.useTransporter(pad);
+      return;
+    }
+
+    this.input.jump = true;
   }
 
   /** Canvas pixels per room pixel (the stage is scaled to fit the window). */
@@ -177,11 +207,12 @@ export class LoginRoom {
     if (this.beamTimer) clearTimeout(this.beamTimer);
   }
 
-  /** Uses a transporter (walked onto, or clicked): beams the avatar up, then hands over to the game. */
+  /** Uses a transporter (Up pressed on it, or clicked): beams the avatar up, then hands over to the game. */
   useTransporter(pad: PadId): void {
     if (this.beaming) return;
     if (pad === 'wakeup' && !this.wakeAvailable) return;
-    if (!this.callbacks.canTransport()) {
+    // Leaving for the website needs no callsign.
+    if (pad !== 'home' && !this.callbacks.canTransport()) {
       this.callbacks.onBlocked(pad);
       return;
     }
@@ -198,24 +229,6 @@ export class LoginRoom {
     this.particles = this.particles
       .map((p) => ({ ...p, y: p.y + p.vy * dt, life: p.life - dt }))
       .filter((p) => p.life > 0);
-
-    if (this.beaming) return;
-
-    const pad = padAt(this.avatar.x, this.avatar.onGround, this.wakeAvailable);
-    if (!pad) {
-      this.padTime = 0;
-      this.blockedNotified = false;
-      return;
-    }
-
-    this.padTime += dt;
-    if (this.padTime < PAD_DWELL_S) return;
-    if (this.callbacks.canTransport()) {
-      this.useTransporter(pad);
-    } else if (!this.blockedNotified) {
-      this.blockedNotified = true;
-      this.callbacks.onBlocked(pad);
-    }
   }
 
   private currentFrameName(): string {
@@ -397,40 +410,11 @@ export class LoginRoom {
 
   private drawPad(ctx: CanvasRenderingContext2D, id: PadId): void {
     const { centerX, halfWidth, color } = PADS[id];
-    const active = id === 'teleport' || this.wakeAvailable;
+    const active = id !== 'wakeup' || this.wakeAvailable;
+    const shape = { centerX, floorY: FLOOR_Y, halfWidth, coneHeight: 190, color };
 
-    ctx.fillStyle = '#141c36';
-    ctx.fillRect(centerX - halfWidth, FLOOR_Y - 6, halfWidth * 2, 8);
-    ctx.fillStyle = active ? color : '#2a3350';
-    ctx.fillRect(centerX - halfWidth, FLOOR_Y - 6, halfWidth * 2, 2);
-
-    if (!active) return;
-
-    // A soft cone of light rising from the pad, with motes drifting up it.
-    const cone = ctx.createLinearGradient(0, FLOOR_Y, 0, FLOOR_Y - 190);
-    cone.addColorStop(0, hexAlpha(color, 0.38));
-    cone.addColorStop(1, hexAlpha(color, 0));
-    ctx.fillStyle = cone;
-    ctx.beginPath();
-    ctx.moveTo(centerX - halfWidth + 6, FLOOR_Y - 6);
-    ctx.lineTo(centerX + halfWidth - 6, FLOOR_Y - 6);
-    ctx.lineTo(centerX + halfWidth - 26, FLOOR_Y - 190);
-    ctx.lineTo(centerX - halfWidth + 26, FLOOR_Y - 190);
-    ctx.fill();
-
-    for (let i = 0; i < 7; i++) {
-      const phase = (this.clock * 0.5 + i / 7) % 1;
-      const moteX = centerX + Math.sin(i * 12.9 + this.clock) * (halfWidth - 24);
-      ctx.fillStyle = hexAlpha(color, 0.8 * (1 - phase));
-      ctx.fillRect(moteX, FLOOR_Y - 10 - phase * 150, 2, 2);
-    }
-
-    const ring = 0.5 + 0.5 * Math.sin(this.clock * 3);
-    ctx.strokeStyle = hexAlpha(color, 0.35 + 0.4 * ring);
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.ellipse(centerX, FLOOR_Y - 6, halfWidth - 8, 7, 0, 0, Math.PI * 2);
-    ctx.stroke();
+    drawPadPlate(ctx, shape, active);
+    if (active) drawPadGlow(ctx, shape, this.clock);
   }
 
   private drawAvatar(ctx: CanvasRenderingContext2D, now: number): void {
@@ -463,14 +447,7 @@ export class LoginRoom {
   }
 
   private drawBeam(ctx: CanvasRenderingContext2D, x: number, color: string, progress: number): void {
-    const strength = Math.sin(Math.min(progress * 1.3, 1) * Math.PI);
-    const halfWidth = 38 * (1 - progress * 0.4);
-    const beam = ctx.createLinearGradient(x - halfWidth, 0, x + halfWidth, 0);
-    beam.addColorStop(0, hexAlpha(color, 0));
-    beam.addColorStop(0.5, hexAlpha('#ffffff', 0.9 * strength));
-    beam.addColorStop(1, hexAlpha(color, 0));
-    ctx.fillStyle = beam;
-    ctx.fillRect(x - halfWidth, 28, halfWidth * 2, FLOOR_Y - 28);
+    drawBeamColumn(ctx, x, FLOOR_Y, FLOOR_Y - 28, 38, color, progress);
 
     if (Math.random() < 0.8) {
       this.particles.push({ x: x + (Math.random() - 0.5) * 70, y: FLOOR_Y - 10, vy: -(120 + Math.random() * 260), life: 0.5, color });
@@ -505,11 +482,4 @@ export class LoginRoom {
     ctx.fillStyle = vignette;
     ctx.fillRect(0, 0, ROOM_WIDTH, ROOM_HEIGHT);
   }
-}
-
-export function hexAlpha(hex: string, alpha: number): string {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r}, ${g}, ${b}, ${Math.max(0, Math.min(1, alpha))})`;
 }

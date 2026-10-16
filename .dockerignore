@@ -1,0 +1,15 @@
+node_modules
+dist
+.git
+.github
+graphify-out
+black-box
+test-results
+playwright-report
+media-src
+e2e
+server/__tests__
+src/**/__tests__
+data
+.env
+*.md

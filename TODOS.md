@@ -2,10 +2,6 @@
 
 ## INTEGRATION TO REAL SITE
 
-- use my DJ Recognize site to host cellwarz realtime multiplayers that can remember things if you sign up! Need a way to invite/advertise there
-- add an "exit" transporter on login screen that takes you back to my website.
-- If persistence is ever needed (session/avatar state surviving a server restart), use a NoSQL store — no DB is in use today.
-
 - check for vulnerabilities, in case some dj asshole hacks into it.
 
 ## Core Features

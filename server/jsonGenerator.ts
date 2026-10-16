@@ -7,6 +7,7 @@ const CONSUME_SCALE_KEY = '2';
 const SLEEPING_KEY = '3';
 const HEALTH_KEY = '4';
 const EMOJI_KEY = '5';
+const BEAM_KEY = '6';
 
 export type JsonSprite = [number] | [number, number, number] | [number, number, number, Record<string, unknown>];
 
@@ -44,6 +45,12 @@ export function getSprites(sprites: Sprite[], addExtraInfo: boolean): Record<str
       // A hurt avatar reports its remaining health percent (full health is left out), also in full-state payloads.
       if (sprite instanceof Avatar && sprite.getHealth() < MAX_HEALTH) {
         extraInfo = { ...(extraInfo ?? {}), [HEALTH_KEY]: sprite.getHealth() };
+      }
+
+      // An avatar being beamed up through a stargate reports how far along it is (also in full-state payloads).
+      const beamProgress = sprite instanceof Avatar ? sprite.getBeamProgress() : undefined;
+      if (beamProgress !== undefined) {
+        extraInfo = { ...(extraInfo ?? {}), [BEAM_KEY]: Math.round(beamProgress * 100) / 100 };
       }
 
       // A sprite being swallowed by a planet reports how far it has shrunk so clients can draw it smaller.

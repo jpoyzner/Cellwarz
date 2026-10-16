@@ -2,7 +2,7 @@
   "name": "cellwarz",
   "version": "2.0.0",
   "private": true,
-  "description": "Online multiplayer platform game",
+  "description": "Cyberstation: an online multiplayer platform game",
   "type": "module",
   "scripts": {
     "start": "rsbuild dev",
@@ -12,12 +12,16 @@
     "serve": "tsx server.ts",
     "test:unit": "vitest run",
     "test": "playwright test",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "loadtest": "node scripts/loadtest.mjs",
+    "test:restart": "node scripts/restart-smoke.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json --noEmit"
   },
   "dependencies": {
     "express": "^4.19.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "tsx": "^4.19.1",
     "ws": "^8.18.0"
   },
   "devDependencies": {
@@ -30,7 +34,6 @@
     "@types/ws": "^8.5.12",
     "concurrently": "^9.0.1",
     "pngjs": "^7.0.0",
-    "tsx": "^4.19.1",
     "typescript": "^5.6.2",
     "vitest": "^5.0.2"
   }

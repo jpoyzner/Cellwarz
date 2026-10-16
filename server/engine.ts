@@ -26,6 +26,8 @@ export class Engine {
   private frameNumber = 0;
   private lastStepTime = 0;
   private accumulatedMs = 0;
+  private averageStepMs = 0;
+  private slowestStepMs = 0;
 
   constructor(cell: Cell) {
     this.cell = cell;
@@ -45,10 +47,24 @@ export class Engine {
       // assuming setInterval fired at exactly 1000/48ms — keeps sim speed correct even if the event loop
       // drifts or briefly stalls, rather than silently running the whole game slower.
       while (this.accumulatedMs >= stepMs) {
+        const startedAt = performance.now();
         this.step();
+        this.recordStepTime(performance.now() - startedAt);
         this.accumulatedMs -= stepMs;
       }
     }, stepMs);
+  }
+
+  private recordStepTime(ms: number): void {
+    this.averageStepMs = this.averageStepMs === 0 ? ms : this.averageStepMs * 0.98 + ms * 0.02;
+    this.slowestStepMs = Math.max(this.slowestStepMs, ms);
+  }
+
+  /** How long a simulation step takes (smoothed average, and the slowest since the last call), for the health endpoint. */
+  takeStepStats(): { averageMs: number; slowestMs: number; budgetMs: number } {
+    const stats = { averageMs: this.averageStepMs, slowestMs: this.slowestStepMs, budgetMs: 1000 / Engine.ENGINE_FRAMES_PER_SECOND };
+    this.slowestStepMs = 0;
+    return stats;
   }
 
   private step(): void {

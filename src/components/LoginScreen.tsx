@@ -5,6 +5,7 @@ import { LoginRoom, PADS, ROOM_HEIGHT, ROOM_WIDTH } from '../game/loginRoom';
 import type { PadId } from '../game/loginRoom';
 import { ControlsDemo } from '../game/controlsDemo';
 import { RadarPreview } from '../game/radarPreview';
+import { HOME_URL } from '../game/homeUrl';
 import { isTouchDevice } from '../game/touchDevice';
 import type { LeaderboardEntry, RadarCounts } from '../game/radarPreview';
 
@@ -24,6 +25,8 @@ interface LoginScreenProps {
 }
 
 const MAX_HASH_LENGTH = 64;
+// Mirrors server/callsign.ts.
+const MAX_CALLSIGN_LENGTH = 32;
 
 const MAX_SCALE = 2.5;
 const READOUT_INTERVAL_MS = 250;
@@ -46,7 +49,7 @@ const CONTROL_KEYS = [
   { keys: ['SPACE'], action: 'GRAB / THROW' },
   { keys: ['\u2193'], action: 'PUT DOWN' },
   { keys: ['\u2190', '\u2192'], action: 'RUN' },
-  { keys: ['\u2191'], action: 'JUMP' },
+  { keys: ['\u2191'], action: 'JUMP / USE PAD' },
   { keys: ['SHIFT'], action: 'NINJA STAR' },
   { keys: ['0-9'], action: 'SAY AN EMOJI' },
   { keys: ['ESC'], action: 'LEAVE' },
@@ -57,7 +60,7 @@ const TOUCH_CONTROL_KEYS = [
   { keys: ['GRAB'], action: 'GRAB / THROW' },
   { keys: ['\u25BC'], action: 'PUT DOWN' },
   { keys: ['\u25C0', '\u25B6'], action: 'RUN' },
-  { keys: ['JUMP'], action: 'JUMP' },
+  { keys: ['JUMP'], action: 'JUMP / USE PAD' },
   { keys: ['\u2605'], action: 'NINJA STAR' },
   { keys: ['\u263A'], action: 'SAY AN EMOJI' },
   { keys: ['\u2630'], action: 'LEAVE' },
@@ -137,15 +140,20 @@ export function LoginScreen({ onEnter, initialHash = '', initialNotice = '' }: L
 
     const radar = new RadarPreview(radarCanvas);
     const room = new LoginRoom(canvas, {
-      canTransport: () => nameRef.current.length !== 0,
+      canTransport: () => nameRef.current.trim().length !== 0,
       onBlocked: () => {
         setNotice('NO TELEPORT: TYPE A CALLSIGN FIRST!');
         nameInputRef.current?.focus();
       },
       onTransport: (pad: PadId) => {
+        if (pad === 'home') {
+          window.location.assign(HOME_URL);
+          return;
+        }
         const { headband: chosenHeadband, belt: chosenBelt } = colorsRef.current;
-        saveLogin({ name: nameRef.current, headband: chosenHeadband, belt: chosenBelt });
-        onEnterRef.current(nameRef.current, hashRef.current, pad === 'teleport', resolveLook(chosenHeadband, chosenBelt));
+        const callsign = nameRef.current.trim();
+        saveLogin({ name: callsign, headband: chosenHeadband, belt: chosenBelt });
+        onEnterRef.current(callsign, hashRef.current, pad === 'teleport', resolveLook(chosenHeadband, chosenBelt));
       },
     }, frontCanvasRef.current ?? undefined);
     roomRef.current = room;
@@ -168,7 +176,7 @@ export function LoginScreen({ onEnter, initialHash = '', initialNotice = '' }: L
       const key = ARROW_KEYS[event.key];
       if (!key) return;
       event.preventDefault();
-      room.setKey(key, down);
+      room.setKey(key, down, event.repeat);
     };
     const onKeyDown = onKey(true);
     const onKeyUp = onKey(false);
@@ -225,6 +233,7 @@ export function LoginScreen({ onEnter, initialHash = '', initialNotice = '' }: L
               className={notice && loginName.length === 0 ? 'input-error' : undefined}
               type="text"
               autoComplete="off"
+              maxLength={MAX_CALLSIGN_LENGTH}
               autoFocus={loginName.length === 0}
               ref={nameInputRef}
               value={loginName}
@@ -258,7 +267,7 @@ export function LoginScreen({ onEnter, initialHash = '', initialNotice = '' }: L
             <SwatchRow id="headband-colors" title="HEADBAND" value={headband} onPick={setHeadband} />
             <SwatchRow id="belt-colors" title="BELT" value={belt} onPick={setBelt} />
             <div id="login-notice" className={notice ? 'login-notice-error' : undefined} role={notice ? 'alert' : undefined}>
-              {notice || (touch ? 'TAP A TRANSPORTER BELOW' : 'WALK ONTO A TRANSPORTER (\u2190 \u2192 \u2191)')}
+              {notice || (touch ? 'TAP A TRANSPORTER BELOW' : 'STAND ON A TRANSPORTER AND PRESS \u2191')}
             </div>
           </div>
 
@@ -331,6 +340,16 @@ export function LoginScreen({ onEnter, initialHash = '', initialNotice = '' }: L
             onClick={() => roomRef.current?.useTransporter('teleport')}
           >
             TELEPORT
+          </button>
+          <button
+            type="button"
+            id="home"
+            className="transporter-label"
+            title="Back to the DJ Recognize website"
+            style={{ left: padLeft('home'), top: LABEL_TOP, width: LABEL_WIDTH, color: PADS.home.color }}
+            onClick={() => roomRef.current?.useTransporter('home')}
+          >
+            HOME
           </button>
           {wakeAvailable && (
             <button

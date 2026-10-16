@@ -3,6 +3,7 @@ import { Cell, OUTER_WALL_SIZE } from './cell';
 import type { BackgroundKind, Lamp, Tv, Vines } from './cell';
 import { ClusteredInitException } from '../errors';
 import { CellData } from '../cellData';
+import { restoreItems } from '../roomSnapshot';
 import { Avatar } from '../sprite/avatar';
 import { CellBlock } from '../sprite/cellBlock';
 import { Flower } from '../sprite/flower';
@@ -284,9 +285,10 @@ export class MainRoom extends Cell {
     this.buildClutter(width);
     this.buildStargatePortals(width);
     this.buildSpawnPortal(width, floorY);
-    this.buildTestFixtures(floorY);
+    if (!this.restoreSnapshot) this.buildTestFixtures(floorY);
     this.buildFlower();
-    this.buildPickupsAndRobots();
+    if (this.restoreSnapshot) restoreItems(this, this.restoreSnapshot);
+    else this.buildPickupsAndRobots();
 
     return this;
   }

@@ -1,6 +1,5 @@
 import type { RawData, WebSocket } from 'ws';
 import type { Engine } from './engine';
-import type { Sprite } from './sprite/sprite';
 import { getSprites } from './jsonGenerator';
 import type { World } from './world';
 import { parseLook } from './look';
@@ -11,6 +10,11 @@ import { dumpSprites } from './blackBoxDump';
 import type { DumpedSprite } from './blackBoxDump';
 import { saveLatestBlackBox } from './blackBoxStore';
 import { topScores } from './leaderboard';
+import { checkCallsign } from './callsign';
+import { defaultConfig } from './config';
+import type { ServerConfig } from './config';
+import { LoginThrottle } from './loginThrottle';
+import { TokenBucket } from './rateLimit';
 
 const CONNECT_PARAM = 'connect';
 const INACTIVE_PARAM = 'inactive';
@@ -18,6 +22,12 @@ const LOGIN_PARAM = 'login';
 const HASH_PARAM = 'hash';
 const DENIED_PARAM = 'denied';
 const DISPLACED_PARAM = 'displaced';
+// Why a login was turned away (the client shows a notice for each).
+const FULL_PARAM = 'full';
+const INVALID_PARAM = 'invalid';
+const RESERVED_PARAM = 'reserved';
+const THROTTLED_PARAM = 'throttled';
+const BLACK_BOX_ENABLED_KEY = 'blackBox';
 // Sanity cap on a login hash; the client's field is capped far lower.
 const MAX_HASH_LENGTH = 128;
 const JUMP_PARAM = 'jump';
@@ -42,11 +52,28 @@ const LEADERBOARD_KEY = 'leaderboard';
 const LEADERBOARD_POLL_MS = 1000;
 // Clients extrapolate the planet from its velocity, so a periodic resync only has to correct small drift.
 const PLANET_RESYNC_MS = 2000;
-// Sanity cap on one report; a client reports a few blocks at a time.
+// Sanity cap on one report; a client reports a few blocks at a time (Session.claimBlocks also rate-limits them).
 const MAX_BLOCKS_PER_REPORT = 100;
+// Each connection may send a burst of messages, then this many per second (key presses are the bulk of it); a client that
+// keeps flooding anyway is hung up on.
+const MESSAGE_BURST = 120;
+const MESSAGES_PER_SECOND = 80;
+const MAX_DROPPED_MESSAGES = 600;
 const TIMEOUT = 3000;
 // How often a connection checks whether the engine has stepped (frames go out within this of each step).
 const RENDER_POLL_MS = 4;
+
+/** What a connection knows about where it came from and the rules it runs under (unit tests use the permissive defaults). */
+export interface HubOptions {
+  config: ServerConfig;
+  /** The client's network address, for throttling wrong-hash guesses. */
+  address: string;
+  loginThrottle: LoginThrottle;
+}
+
+// Every connection streaming the same engine step needs the very same redraw frame, so it is serialized once per step
+// and shared (with dozens of players this is most of the server's work).
+let frameCache: { engine: Engine; since: number; step: number; text: string } | undefined;
 
 export class SocketHub implements SessionOwner {
   private login: string | undefined;
@@ -68,14 +95,25 @@ export class SocketHub implements SessionOwner {
   private spectating = false;
   /** A newer login took this connection's session over (or it was refused); nothing it sends counts any more. */
   private dropped = false;
+  private readonly messageBucket = new TokenBucket(MESSAGE_BURST, MESSAGES_PER_SECOND);
+  private droppedMessages = 0;
 
   constructor(
     private readonly world: World,
     private readonly socket: WebSocket,
+    private readonly options: HubOptions = { config: defaultConfig(), address: 'local', loginThrottle: new LoginThrottle() },
   ) {
     socket.on('message', (data: RawData) => {
+      if (!this.messageBucket.take()) {
+        if (++this.droppedMessages > MAX_DROPPED_MESSAGES) this.socket.close(1008, 'too many messages');
+        return;
+      }
+
       try {
-        this.onTextMessage(JSON.parse(data.toString()));
+        const message: unknown = JSON.parse(data.toString());
+        if (typeof message === 'object' && message !== null && !Array.isArray(message)) {
+          this.onTextMessage(message as Record<string, unknown>);
+        }
       } catch (e) {
         console.error(e);
       }
@@ -122,7 +160,7 @@ export class SocketHub implements SessionOwner {
     const blocks = Math.floor(Number(data[SCORED_PARAM]));
     if (!session || !Number.isFinite(blocks) || blocks <= 0) return;
 
-    session.addBlocks(Math.min(blocks, MAX_BLOCKS_PER_REPORT));
+    session.claimBlocks(Math.min(blocks, MAX_BLOCKS_PER_REPORT));
   }
 
   // The player's room as the server sees it: every sprite's real class, size, mass and motion, which the client's terse wire
@@ -135,14 +173,14 @@ export class SocketHub implements SessionOwner {
 
   // The client pressed backtick: capture the server-side starting state to pair with the one it sends when it finishes.
   private handleBlackBoxStarted(): void {
-    if (!this.login) return;
+    if (!this.login || !this.options.config.blackBoxEnabled) return;
     this.blackBoxStartDump = this.dumpBlackBoxSprites();
   }
 
   // A player's Black Box (backtick key) plus the server-side sprite dumps from its start and end; only the latest is kept
   // on disk, see blackBoxStore.ts.
   private handleBlackBox(data: Record<string, unknown>): void {
-    if (!this.login) return;
+    if (!this.login || !this.options.config.blackBoxEnabled) return;
     const blackBox = data[BLACK_BOX_PARAM];
     const server = { startSprites: this.blackBoxStartDump, endSprites: this.dumpBlackBoxSprites() };
     this.blackBoxStartDump = undefined;
@@ -165,12 +203,32 @@ export class SocketHub implements SessionOwner {
     const hardlines = zion.getHardlines();
     const hash = typeof data[HASH_PARAM] === 'string' ? (data[HASH_PARAM] as string).slice(0, MAX_HASH_LENGTH) : '';
     if (this.login === undefined) {
-      const login = data[LOGIN_PARAM] as string;
+      const { config, address, loginThrottle } = this.options;
+      const rawLogin = data[LOGIN_PARAM];
+      const check = checkCallsign(rawLogin, config.reservedNames, typeof rawLogin === 'string' && hardlines.has(rawLogin));
+      if (!check.ok) {
+        this.cutOff(check.reason === 'reserved' ? RESERVED_PARAM : INVALID_PARAM);
+        return;
+      }
+
+      const login = check.login;
+      if (loginThrottle.blockedFor(address, login) > 0) {
+        this.cutOff(THROTTLED_PARAM);
+        return;
+      }
+
       const existing = hardlines.get(login);
       if (existing && !existing.acceptsPassword(hash)) {
+        loginThrottle.recordFailure(address, login);
         this.cutOff(DENIED_PARAM);
         return;
       }
+      if (zion.isFull(login)) {
+        this.cutOff(FULL_PARAM);
+        return;
+      }
+
+      if (existing) loginThrottle.recordSuccess(address, login);
       existing?.protect(hash); // the first hash an unprotected callsign is used with becomes its permanent one.
       this.login = login;
       jump = Boolean(data[JUMP_PARAM]);
@@ -185,7 +243,7 @@ export class SocketHub implements SessionOwner {
       if (!avatar) return;
       const created = new Session(avatar);
       created.protect(hash);
-      hardlines.set(this.login, created);
+      zion.addSession(this.login, created);
     } else if (session.unplugged() || jump) {
       cell = zion.getRandomEngine().getCell();
       const avatar = cell.addAvatarAtRandomFloor(this.login);
@@ -232,13 +290,18 @@ export class SocketHub implements SessionOwner {
     }, RENDER_POLL_MS);
   }
 
-  /** The sprites that changed in the engine's steps since this connection's last frame. */
-  private takeRedraws(cell: Cell): Sprite[] {
+  /** The sprites that changed in the engine's steps since this connection's last frame, serialized (and shared with connections at the same step). */
+  private takeRedrawFrame(cell: Cell): string {
     const engine = cell.getEngine();
     const step = engine.getStepCount();
     const since = this.sentStep?.engine === engine ? this.sentStep.step : step - 1;
     this.sentStep = { engine, step };
-    return engine.getRedrawSpritesSince(since);
+
+    if (frameCache?.engine === engine && frameCache.since === since && frameCache.step === step) return frameCache.text;
+
+    const text = JSON.stringify(getSprites(engine.getRedrawSpritesSince(since), true));
+    frameCache = { engine, since, step, text };
+    return text;
   }
 
   renderClient(): void {
@@ -278,11 +341,8 @@ export class SocketHub implements SessionOwner {
     const needsRefresh = this.world.getZion().stale(this.login);
 
     // Redraw-only frames are the sprite map itself (flat, unwrapped) — matches the original terse wire protocol.
-    const json: Record<string, unknown> = needsRefresh
-      ? this.getCellState(cell)
-      : (getSprites(this.takeRedraws(cell), true) as Record<string, unknown>);
-
-    this.send(json);
+    if (needsRefresh) this.send(this.getCellState(cell));
+    else this.sendText(this.takeRedrawFrame(cell));
 
     if (needsRefresh) {
       this.world.getZion().loginNotStale(this.login);
@@ -298,7 +358,7 @@ export class SocketHub implements SessionOwner {
 
     this.sendPlanetIfDue(cell);
     this.sendLeaderboardIfChanged();
-    this.send(getSprites(this.takeRedraws(cell), true));
+    this.sendText(this.takeRedrawFrame(cell));
   }
 
   // The login screen's top Disco-shard collectors: a one-shot message (not in the flat redraw frames), re-checked about once a second.
@@ -377,6 +437,7 @@ export class SocketHub implements SessionOwner {
 
     return {
       [CONNECT_PARAM]: '0',
+      [BLACK_BOX_ENABLED_KEY]: this.options.config.blackBoxEnabled,
       [SPRITES_KEY]: getSprites(cell.getCellData().getSprites(), false),
       [AVATARS_KEY]: avatars,
       [IMAGE_PATHS_KEY]: cell.getCellData().getImagePaths(),
@@ -399,7 +460,9 @@ export class SocketHub implements SessionOwner {
     const session = this.world.getZion().getHardlines().get(this.login);
     if (!session) return;
 
-    const key = data[KEY_PARAM] as number;
+    const key = data[KEY_PARAM];
+    if (typeof key !== 'number') return;
+
     session.getUI().reactTo(key, Boolean(data[DOWN_PARAM]));
 
     if (this.inactivityCount === TIMEOUT) {
@@ -410,8 +473,12 @@ export class SocketHub implements SessionOwner {
   }
 
   private send(payload: unknown): void {
+    this.sendText(JSON.stringify(payload));
+  }
+
+  private sendText(text: string): void {
     if (this.socket.readyState === this.socket.OPEN) {
-      this.socket.send(JSON.stringify(payload));
+      this.socket.send(text);
     }
   }
 }

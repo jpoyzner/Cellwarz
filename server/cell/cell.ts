@@ -1,6 +1,7 @@
 import { CellData } from '../cellData';
 import { ClusteredInitException, EdgeOfCellDataException } from '../errors';
 import type { Engine } from '../engine';
+import type { RoomSnapshot } from '../roomSnapshot';
 import { PlanetField } from '../planet';
 import type { PlanetState } from '../planet';
 import { randomInt } from '../random';
@@ -92,6 +93,8 @@ export abstract class Cell {
   // Multiple deposit points (spawn/warp-arrival) are supported; addAvatarAtEntrance picks one at random.
   protected entrances: Entrance[] = [];
   private readonly planets: PlanetField | undefined;
+  /** A saved room to rebuild its blocks, robots and diamonds from (instead of scattering new ones); see roomSnapshot.ts. */
+  protected restoreSnapshot: RoomSnapshot | undefined;
 
   constructor(world: World) {
     this.world = world;
@@ -224,6 +227,11 @@ export abstract class Cell {
 
   protected getRandomY(spriteSize: number): number {
     return OUTER_WALL_SIZE + randomInt(this.height - OUTER_WALL_SIZE * 2) - spriteSize + 1;
+  }
+
+  /** Makes the next `init()` rebuild the room as saved (rooms that don't support it ignore this). */
+  restoreFrom(snapshot: RoomSnapshot): void {
+    this.restoreSnapshot = snapshot;
   }
 
   getCellData(): CellData {

@@ -1,0 +1,56 @@
+# The whole production stack on one VPS: the game, Caddy (HTTPS), and optionally a staging copy. See DEPLOY.md.
+#
+#   docker compose up -d --build                 # the real site
+#   docker compose --profile beta up -d --build  # also the staging copy
+
+services:
+  cyberstation:
+    build:
+      context: .
+      args:
+        PUBLIC_HOME_URL: ${PUBLIC_HOME_URL:-https://djrecognize.com}
+    restart: unless-stopped
+    env_file: [.env]
+    environment:
+      NODE_ENV: production
+      CELLWARZ_DATA_DIR: /data
+    volumes:
+      - cyberstation-data:/data
+    expose: ["8080"]
+    # Time to save the room and the accounts before Docker stops the process.
+    stop_grace_period: 20s
+
+  cyberstation-beta:
+    profiles: [beta]
+    build:
+      context: .
+      args:
+        PUBLIC_HOME_URL: ${PUBLIC_HOME_URL:-https://djrecognize.com}
+    restart: unless-stopped
+    env_file: [.env]
+    environment:
+      NODE_ENV: production
+      CELLWARZ_DATA_DIR: /data
+      CELLWARZ_MAX_PLAYERS: "10"
+    volumes:
+      - cyberstation-beta-data:/data
+    expose: ["8080"]
+    stop_grace_period: 20s
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on: [cyberstation]
+
+volumes:
+  cyberstation-data:
+  cyberstation-beta-data:
+  caddy-data:
+  caddy-config:

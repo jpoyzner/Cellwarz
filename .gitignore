@@ -10,3 +10,7 @@ graphify-out/
 
 # the Black Box (backtick key in-game; only the latest is kept)
 black-box/
+
+# game data (accounts + room snapshot) and local secrets
+data/
+.env

@@ -40,4 +40,6 @@ export interface ConnectPayload {
   diamonds?: number;
   /** Players' chosen colours by name: [headband, belt]; players without an entry wear the default tints. */
   looks?: LooksMap;
+  /** Whether this server accepts Black Box recordings (a local-development tool; off on the real site). */
+  blackBox?: boolean;
 }

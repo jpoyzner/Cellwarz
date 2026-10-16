@@ -31,6 +31,8 @@ describe('SocketHub login room connections', () => {
       getPhysics: () => physics,
       getZion: () => ({
         getHardlines: () => hardlines,
+        addSession: (login: string, session: Session) => hardlines.set(login, session),
+        isFull: () => false,
         stale: () => false,
         loginNotStale: () => undefined,
         getRandomEngine: () => ({ getCell: () => room }),

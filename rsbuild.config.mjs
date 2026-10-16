@@ -1,6 +1,9 @@
 import { defineConfig } from '@rsbuild/core';
 import { pluginReact } from '@rsbuild/plugin-react';
 
+// The game server the dev server proxies to (override to run a second copy beside a running one).
+const apiPort = process.env.CELLWARZ_API_PORT ?? 8080;
+
 export default defineConfig({
   plugins: [pluginReact()],
   html: {
@@ -22,16 +25,19 @@ export default defineConfig({
   },
   server: {
     port: 3000,
+    // The game server serves /images and /videos straight from public/ (see server/web.ts), so the ~100 MB of videos must not
+    // also be copied into dist/ (and from there into the Docker image).
+    publicDir: { copyOnBuild: false },
     proxy: {
       '/socketrefresh': {
-        target: 'ws://localhost:8080',
+        target: `ws://localhost:${apiPort}`,
         ws: true,
       },
       '/images': {
-        target: 'http://localhost:8080',
+        target: `http://localhost:${apiPort}`,
       },
       '/videos': {
-        target: 'http://localhost:8080',
+        target: `http://localhost:${apiPort}`,
       },
     },
   },

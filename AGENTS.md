@@ -1,7 +1,10 @@
-# Cellwarz
+# Cellwarz (player-facing name: Cyberstation)
 
 Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScript WebSocket server (Express +
-`ws`), React client (rsbuild). No database — all game state is in-memory, matching the original design.
+`ws`), React client (rsbuild). Game state lives in memory while running; in production (`CELLWARZ_DATA_DIR` set) accounts
+and the main room are also saved so a restart brings them back (see "Production & persistence"). The name players see is
+**Cyberstation** — the repo, the `CELLWARZ_*` env vars, `window.__cellwarz` and the package keep the old name on purpose
+(see [PLAN.md](PLAN.md)). It is deployed at https://cyberstation.djrecognize.com ([DEPLOY.md](DEPLOY.md)).
 
 > The pre-migration Java/Tomcat + RequireJS/Backbone implementation is preserved on the `java` git branch/tag.
 > This repo was fully rewritten from that codebase to Node/TypeScript/React; the porting notes below describe
@@ -9,7 +12,7 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
 
 ## Jargon (Jeff's shorthand)
 
-- **"Black Box"** (a.k.a. "black box recording", "the recording") — the in-game flight recorder. When Jeff says
+- **"Black Box"** (a.k.a. "black box recording", "the recording") — the in-game flight recorder (local development only: off on the real site). When Jeff says
   "check the Black Box", **read [black-box/latest.json](black-box/latest.json) immediately** (no searching needed; it's
   git-ignored and only the latest one exists). It holds the client's starting snapshot and every server message/key
   press for up to 10s, plus a `server` section with the server's own dump of **every** sprite (real class, size, layer,
@@ -28,7 +31,43 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   time calls for (capped at `Engine.MAX_CATCHUP_STEPS` to avoid a catch-up spiral after a long stall), so the
   sim speed stays correct even if Node's timer drifts or briefly coalesces. `Session` maps a login to the
   player's current `Avatar`.
-- **Realtime transport**: a single `ws` `WebSocketServer` mounted at `/socketrefresh` in [server.ts](server.ts).
+- **Production & persistence** (all env-driven via [server/config.ts](server/config.ts) — `loadConfig`, see [.env.example](.env.example)):
+  - [server.ts](server.ts) is the thin entry: config → optional [Persistence](server/persistence.ts) → `World` → `createApp`
+    ([server/web.ts](server/web.ts): security headers/CSP in production, `/healthz`, `/api/status`, cache headers, `/images`,
+    `/videos`, `dist/`) → a `WebSocketServer({ noServer })` whose `upgrade` handler enforces the path, the `Origin`
+    ([connectionGuard.ts](server/connectionGuard.ts): same-site or listed; any localhost page outside production) and the
+    per-address/total socket caps, then ping/pong heartbeats, graceful SIGTERM/SIGINT (save, hang up so clients reconnect) and a
+    fatal-error handler that saves accounts only. A production server refuses to start with the e2e-only `CELLWARZ_*` switches set.
+  - **Accounts**: `Session.toStored/fromStored` ⇄ [UserStore](server/userStore.ts) (Node's built-in `node:sqlite`, `cyberstation.db`,
+    `PRAGMA user_version` schema). Credentials are salted `scrypt` (`CREDENTIAL_KDF`, with a per-process quick digest so a reconnect
+    skips the slow hash). `Zion.addSession()` is the one place a session is registered (it wires the change listener that marks it
+    dirty); `Persistence` flushes dirty users every snapshot interval and on shutdown. A restored `Session` has no avatar
+    (`new Session()` with none; `UI` accepts that).
+  - **Room snapshot** ([roomSnapshot.ts](server/roomSnapshot.ts), written by `Persistence` as `room-snapshot.json` + `.prev`, atomically):
+    where every coloured block, robot, diamond and player's avatar was (grid units; no velocities/fuses — a deliberate fidelity
+    trade-off). `Cell.restoreFrom()` makes `MainRoom.init()` skip the fixtures and random scatter and call `restoreItems()`;
+    `Zion` then `restorePlayers()` (avatars come back asleep and plugged into their sessions). `SNAPSHOT_VERSION` **must be bumped**
+    whenever the room layout or the saved fields change; `validateSnapshot` also checks room size, shapes and bounds, and
+    `Persistence.loadSnapshot` falls back to the previous file, then to a fresh room.
+  - **Hardening** in `SocketHub` (constructed with `HubOptions { config, address, loginThrottle }`; the defaults are permissive for
+    unit tests): per-connection `TokenBucket` message limit, JSON must be an object, key must be a number, callsign rules
+    ([callsign.ts](server/callsign.ts): 1–32 letters/numbers + inner punctuation, reserved look-alikes), [LoginThrottle](server/loginThrottle.ts)
+    on wrong hashes, capacity via `Zion.isFull()` (`connect: 'full'`), score reports through `Session.claimBlocks` (token bucket),
+    Black Box handlers gated on `config.blackBoxEnabled` (also sent as `blackBox` in the full-state payload; the client's
+    `Syncer.blackBoxEnabled` gates the backtick key). Refusals are `{ connect: 'denied'|'displaced'|'full'|'throttled'|'invalid'|'reserved'|'inactive' }`.
+  - **Capacity**: redraw frames are serialized once per engine step and shared by every connection (`frameCache` in
+    `socketHub.ts`) — this took 60 bots from ~95% to ~20% of a core. Bandwidth is the cost: ~8 MB/s to 60 constantly-moving
+    players (it grows with players², and every redraw is echoed for 10 frames). `permessage-deflate` shrinks that ~7x but made the
+    browser tests lose/delay key messages, so it is off (`server.ts`); the real fix would be interest management.
+    `Zion.evictSleepers()` (every 10s) removes avatars asleep without a connection for `CELLWARZ_SLEEPER_EVICT_MINUTES`.
+    `Engine.takeStepStats()` feeds `/healthz`. `npm run loadtest` ([scripts/loadtest.mjs](scripts/loadtest.mjs)) and
+    `npm run test:restart` ([scripts/restart-smoke.mjs](scripts/restart-smoke.mjs)) exercise a real server.
+  - **Client resilience**: `Syncer` reconnects with jittered backoff ([reconnect.ts](src/game/reconnect.ts)), a silence watchdog, re-attaches
+    with `jump: false` after the first accepted login, and `GameCanvas` shows `#reconnecting`; it gives up after 2 minutes.
+  - **Deploy files**: [Dockerfile](Dockerfile), [docker-compose.yml](docker-compose.yml) (game + Caddy + optional `beta` profile),
+    [deploy/Caddyfile](deploy/Caddyfile), [scripts/backup.sh](scripts/backup.sh), `.github/workflows/{ci,deploy}.yml`.
+    `rsbuild.config.mjs` doesn't copy `public/` into `dist/` (the server serves it directly).
+- **Realtime transport**: a single `ws` `WebSocketServer` (`noServer`, upgrade handled in [server.ts](server.ts)) serving `/socketrefresh`.
   Each connection gets its own [SocketHub](server/socketHub.ts), which polls every few ms and sends one frame right after each engine step (`Engine.getStepCount()`; the frame holds every sprite redrawn since its last one via `Engine.getRedrawSpritesSince` — a free-running second 48 FPS timer used to drift against the engine's, so frames went out unevenly and could skip a step's changes) and speaks
   a small JSON protocol (`connect` / key-down-up) via [jsonGenerator.ts](server/jsonGenerator.ts).
 - **Physics/world model**: [CellData](server/cellData.ts) stores sprites in a 2D grid of `Set<Sprite>`
@@ -37,8 +76,8 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   which populates walls/doors/mana/robots in `init()`. [MainRoom](server/cell/mainRoom.ts) is "the" reusable main
   multiplayer room layout — a fixed (non-random) giant rectangle with long horizontal platform rows, a center
   hole bridged by four straight-up/down stepping-stone columns, scattered decorative blocks, two animated
-  `Portal` "stargates" (walking into either warps the avatar to a random other room's spawn portal) in the top
-  corners, and one small floating `SpawnPortal` (avatars are deposited/warped-in here) at the bottom center;
+  `Portal` "stargates" (standing in one and pressing **Up** beams the avatar up for ~0.65s, then warps it to a random other
+  room's spawn portal; see "Stargates" below) in the top corners, and one small floating `SpawnPortal` (avatars are deposited/warped-in here) at the bottom center;
   only its coloured-block/`Robot` positions are still randomized per instance (plus three fixed fixture blocks, see
   the e2e note below). MainRoom also **wraps at its edges**
   (`Cell.wrapsAtEdges()` → `CellData` wraps a moved sprite's x/y modulo the grid): the outer walls are kept but have
@@ -207,14 +246,26 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
   planet, hazard-striped floor) drawn on `#ship-canvas`, scaled to fit the window (canvas resolution follows the scale;
   the DOM panels/labels sit in a 960x540 `.ship-overlay` that is CSS-scaled the same amount). `RoomAvatar` (pure, unit
   tested) walks/jumps on a flat floor; the avatar is baked with the in-game [neonSprites](src/game/neonSprites.ts) so
-  it wears the picked colours. Two transporters stand on the floor with DOM button labels over them: **TELEPORT**
-  (`#teleport`, always) and **WAKE UP** (`#wakeup`, only while the typed callsign has a living avatar in the room, read
-  from the radar's `avatars`). Standing on a pad ~0.45s or clicking its label calls `LoginRoom.useTransporter()`:
-  a 650ms beam-up effect (a `setTimeout`, not the rAF loop, so a throttled background tab still proceeds), then
-  `onEnter(name, jump = pad === 'teleport', look)`. No callsign ⇒ nothing fires (`onBlocked`). Arrow keys always drive
+  it wears the picked colours. Three transporters stand on the floor with DOM button labels over them: **TELEPORT**
+  (`#teleport`, always), **HOME** (`#home`, always; leads to `HOME_URL` from [homeUrl.ts](src/game/homeUrl.ts), build-time
+  `PUBLIC_HOME_URL`, default https://djrecognize.com) and **WAKE UP** (`#wakeup`, only while the typed callsign has a living avatar
+  in the room, read from the radar's `avatars`). A pad is used by **pressing Up while standing on it** — `LoginRoom.setKey('jump', true,
+  repeat)` consumes a fresh press on a pad (no jump; a held/auto-repeated Up never fires one, and the press stays consumed until
+  released) — or by clicking its label; either calls `LoginRoom.useTransporter()`: a 650ms beam-up effect (a `setTimeout`, not the rAF
+  loop, so a throttled background tab still proceeds), then `onEnter(name, jump = pad === 'teleport', look)` (HOME navigates with
+  `window.location.assign` instead). No callsign ⇒ TELEPORT/WAKE UP don't fire (`onBlocked`); HOME needs none. The avatar starts at
+  `START_X`, between WAKE UP and HOME, on no pad. The pad/cone/beam drawing lives in [transporterPad.ts](src/game/transporterPad.ts),
+  shared with the in-game stargates. Arrow keys always drive
   the room avatar (also while the name field is focused). The last callsign/colours persist in localStorage
   ([look.ts](src/game/look.ts) `loadSavedLogin`/`saveLogin`). `window.__cellwarzLogin` (`{ room, radar }`) is the
   test-only hook.
+- **Stargates (in-game transporters)**: `Avatar.attemptJump()` (the Up key) first checks `beamUpFromPortal()` — grounded and overlapping a
+  `Portal` — and if so starts a `BEAM_FRAMES` (31) beam instead of jumping: `doAction()` holds the avatar still, re-flags it for
+  redraw each frame, and at the end calls `portal.warpRandomly(this)`; `fallAsleep()` cancels. Walking into a portal does nothing
+  (and robots no longer warp). The beam progress rides the avatar's terse entry as extra key `'6'` (`BEAM_KEY` in
+  [jsonGenerator.ts](server/jsonGenerator.ts) / [beam.ts](src/game/beam.ts)); `Renderer.beams` stretches/fades the sprite and draws the
+  white column, and `vanishing()` (beams or planet shrinks) hides the name tag, emoji bubble and local prediction. The client draws
+  every stargate sprite as the login pads' look (`drawStargatePad`) instead of its server art.
 - **Login radar / spectator connection** ([radarPreview.ts](src/game/radarPreview.ts)): `RadarPreview` opens its own
   WebSocket sending `{ connect: true, spectate: true }`; `SocketHub.handleSpectate()` sends the main room's full state
   and then `renderSpectator()` streams the flat redraw frames and planet pings — no login, `Session`, avatar, score or
@@ -416,10 +467,14 @@ Online multiplayer platform game (see [README.md](README.md)). Node.js + TypeScr
 - Two dev processes: `npm run server` (Express + `ws` on :8080) and `npm start` (rsbuild dev server on :3000,
   proxies `/socketrefresh` and `/images` to :8080). `npm run dev` runs both together via `concurrently`.
 - `npm run build` — production client bundle to `dist/`. `npm run serve` — runs the server serving that build
-  (this is the current "local deploy"; no CI/remote deploy pipeline exists yet — that will be built out later).
+  (a local single-process deploy). Real deploys use the Docker image + Caddy on a VPS: see [DEPLOY.md](DEPLOY.md); CI is
+  `.github/workflows/ci.yml` (typecheck, unit tests, build, restart smoke test, Playwright) and `deploy.yml` is a manual SSH deploy.
+- `npm run typecheck`, `npm run test:restart`, `npm run loadtest` — see [README.md](README.md). Set `CELLWARZ_API_PORT` /
+  `CELLWARZ_WEB_PORT` to run Playwright beside an already-running dev server on the default ports.
 - `npm run test:unit` — Vitest, for engine/physics logic (`server/__tests__/`).
 - `npm test` / `npm run test:e2e` — Playwright browser tests (`e2e/`); see [WORKFLOWS.md](WORKFLOWS.md) for the
-  workflow-to-test mapping. `playwright.config.ts` auto-starts both dev processes via its `webServer` array.
+  workflow-to-test mapping. `playwright.config.ts` auto-starts both dev processes via its `webServer` array (it reuses ones already running on
+  those ports — which then lack its test-only env flags).
 - Node version: see [.nvmrc](.nvmrc).
 
 ## Conventions & gotchas
