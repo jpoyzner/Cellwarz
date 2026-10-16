@@ -312,7 +312,8 @@ and the main room are also saved so a restart brings them back (see "Production 
   `Renderer.onCarryingChange` (GRAB/THROW) and the spectator mode (WAKE). `pressEscape()` in [ui.ts](src/game/ui.ts) is shared
   by the Escape key and the ☰ button; the old swipe/tap handlers are gone. `App` mounts `RotatePrompt` (portrait overlay,
   pure CSS `@media (orientation: portrait)`) and asks for fullscreen + landscape lock on the first tap (`enterImmersiveMode`, once;
-  no-op on iOS). `Renderer.resize()` (wired only on touch) keeps canvas/camera in step with the window, and
+  no-op on iOS, where the only way to lose Safari's toolbar is launching from Add to Home Screen — `public/index.html` carries the
+  `apple-mobile-web-app-capable` meta tags for that). `Renderer.resize()` (wired only on touch) keeps canvas/camera in step with the window, and
   `Renderer.unlockAudio()`/`AudioManager.unlock()` resume WebAudio on every tap. `HintSystem` takes a `touch` flag that re-words
   its prompts. `TOUCH_CONTROL_KEYS` in `LoginScreen` mirrors `CONTROL_KEYS` for the login key caps. Known gaps: no
   `viewport-fit=cover`/safe-area insets, no PWA manifest (iOS "Add to Home Screen"), the login panels are just scaled down, the

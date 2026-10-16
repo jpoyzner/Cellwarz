@@ -51,6 +51,12 @@ async function startGame(page: Page, loginName: string): Promise<Fingers> {
   return new Fingers(await page.context().newCDPSession(page));
 }
 
+test('page declares itself a home-screen web app (iOS has no fullscreen API)', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('meta[name="apple-mobile-web-app-capable"]')).toHaveAttribute('content', 'yes');
+  await expect(page.locator('meta[name="mobile-web-app-capable"]')).toHaveAttribute('content', 'yes');
+});
+
 test.describe('desktop browser', () => {
   test('has no touch layout', async ({ page }) => {
     await page.goto('/');

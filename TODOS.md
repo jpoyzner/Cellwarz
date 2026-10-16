@@ -4,9 +4,9 @@
 
 - check for vulnerabilities, in case some dj asshole hacks into it.
 
-move to US server for better, lag, was fine on the phone
+- move to US server for better, lag, was fine on the phone!?
 
-sell cellwarz.com
+- remove cellwarz.com
 
 ## Core Features
 

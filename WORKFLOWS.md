@@ -218,7 +218,9 @@ style hangs off it) and mounts the touch UI; on a desktop browser none of this e
 1. **Landscape only**: held upright, a full-screen `#rotate-prompt` ("ROTATE YOUR PHONE") covers the login screen and the
    game; it goes away when the phone is turned.
 2. **First tap**: the first tap anywhere asks the browser for fullscreen and a landscape lock (once per page load; iOS
-   Safari has neither, so nothing happens there). The canvas and camera follow window resizes on touch devices. Every tap on
+   Safari has neither, so nothing happens there — to lose Safari's toolbar, use Share → **Add to Home Screen** and launch
+   from that icon: `index.html`'s `apple-mobile-web-app-capable` / `mobile-web-app-capable` meta tags make it a chrome-free
+   app; manual-only on a real iPhone). The canvas and camera follow window resizes on touch devices. Every tap on
    the controls also unlocks WebAudio (mobile browsers keep it silent until a tap).
 3. **Login screen**: the notice reads "1. TYPE A CALLSIGN  2. TAP TELEPORT" and each pad label (TELEPORT / HOME / WAKE UP) pulses with a small "▲ TAP" under it (tap TELEPORT / WAKE UP; the on-screen controls appear only once in the game), and the key caps in `#control-keys`
    list the on-screen buttons (GRAB, ▼, ◀ ▶, JUMP, ★, ☺, ☰) instead of keys.
