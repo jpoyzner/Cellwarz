@@ -353,6 +353,36 @@ body {
   background: rgba(255, 255, 255, 0.12);
 }
 
+/* On a phone nobody walks onto a pad: the labels are the buttons, so they pulse and say TAP. */
+.touch-device .transporter-label {
+  animation: transporter-pulse 1.6s ease-in-out infinite;
+}
+
+.touch-device .transporter-label::after {
+  content: '\25B2  TAP';
+  display: block;
+  font-size: 12px;
+  left: 0;
+  letter-spacing: 0.25em;
+  margin-top: 6px;
+  position: absolute;
+  right: 0;
+  text-shadow: 0 0 6px currentcolor;
+  top: 100%;
+}
+
+@keyframes transporter-pulse {
+  50% {
+    box-shadow: 0 0 28px currentcolor, inset 0 0 12px currentcolor;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .touch-device .transporter-label {
+    animation: none;
+  }
+}
+
 #crt {
   background:
     repeating-linear-gradient(to bottom, rgba(0, 0, 0, 0) 0, rgba(0, 0, 0, 0) 2px, rgba(0, 0, 0, 0.18) 3px),
@@ -573,6 +603,19 @@ body {
 .touch-device,
 .touch-device body {
   overscroll-behavior: none;
+}
+
+/* Swiping or holding on a phone must not select the page like text or pop up the iOS callout; only the form fields stay editable. */
+.touch-device {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.touch-device input {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .touch-device #canvas {

@@ -219,7 +219,7 @@ style hangs off it) and mounts the touch UI; on a desktop browser none of this e
 2. **First tap**: the first tap anywhere asks the browser for fullscreen and a landscape lock (once per page load; iOS
    Safari has neither, so nothing happens there). The canvas and camera follow window resizes on touch devices. Every tap on
    the controls also unlocks WebAudio (mobile browsers keep it silent until a tap).
-3. **Login screen**: the notice reads "TAP A TRANSPORTER BELOW" (tap TELEPORT / WAKE UP), and the key caps in `#control-keys`
+3. **Login screen**: the notice reads "1. TYPE A CALLSIGN  2. TAP TELEPORT" and each pad label (TELEPORT / HOME / WAKE UP) pulses with a small "▲ TAP" under it (tap TELEPORT / WAKE UP; the on-screen controls appear only once in the game), and the key caps in `#control-keys`
    list the on-screen buttons (GRAB, ▼, ◀ ▶, JUMP, ★, ☺, ☰) instead of keys.
 4. **In the game** (`#touch-controls`, drawn over the canvas; every button sends the keyboard's key codes, so the server is
    unchanged, and several fingers work at once):

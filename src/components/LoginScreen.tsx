@@ -267,7 +267,7 @@ export function LoginScreen({ onEnter, initialHash = '', initialNotice = '' }: L
             <SwatchRow id="headband-colors" title="HEADBAND" value={headband} onPick={setHeadband} />
             <SwatchRow id="belt-colors" title="BELT" value={belt} onPick={setBelt} />
             <div id="login-notice" className={notice ? 'login-notice-error' : undefined} role={notice ? 'alert' : undefined}>
-              {notice || (touch ? 'TAP A TRANSPORTER BELOW' : 'STAND ON A TRANSPORTER AND PRESS \u2191')}
+              {notice || (touch ? '1. TYPE A CALLSIGN  2. TAP TELEPORT' : 'STAND ON A TRANSPORTER AND PRESS \u2191')}
             </div>
           </div>
 

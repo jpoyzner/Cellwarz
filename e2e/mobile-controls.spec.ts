@@ -78,7 +78,12 @@ test.describe('phone', () => {
   test('the login screen explains the on-screen buttons', async ({ page }) => {
     await page.goto('/');
     await expect(page.locator('html')).toHaveClass(/touch-device/);
-    await expect(page.locator('#login-notice')).toContainText('TAP A TRANSPORTER');
+    await expect(page.locator('#login-notice')).toContainText('2. TAP TELEPORT');
+    // Each pad's label pulses and says TAP.
+    expect(await page.evaluate(() => getComputedStyle(document.querySelector('#teleport')!, '::after').content)).toContain('TAP');
+    // Swiping must not select the page like text; the callsign field stays editable.
+    expect(await page.evaluate(() => getComputedStyle(document.querySelector('#desc')!).userSelect)).toBe('none');
+    expect(await page.evaluate(() => getComputedStyle(document.querySelector('#loginName')!).userSelect)).toBe('text');
     await expect(page.locator('#control-keys li')).toHaveCount(7);
     await expect(page.locator('#control-keys .keys').first()).toContainText('GRAB');
     await expect(page.locator('#control-keys')).not.toContainText('SPACE');
