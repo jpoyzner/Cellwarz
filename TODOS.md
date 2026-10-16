@@ -4,6 +4,8 @@
 
 - check for vulnerabilities, in case some dj asshole hacks into it.
 
+sell cellwarz.com
+
 ## Core Features
 
 - EXPLORE AUDIO.TS!!!!!!!!! IT USES A BASS NOTE SO WELL :) MAYBE IT IS TIME TO MAKE AI MUSIC WITH THIS!!!

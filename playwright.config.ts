@@ -10,7 +10,8 @@ export default defineConfig({
   webServer: [
     {
       command: 'npm run serve',
-      url: `http://localhost:${apiPort}`,
+      // /healthz answers as soon as the server is up (the home page needs a client build, which the browser tests don't).
+      url: `http://localhost:${apiPort}/healthz`,
       // The planet still flies by, but its pull on avatars/blocks would shove the deterministic movement specs around;
       // robots and the randomly scattered blocks are left out (only the fixed fixture blocks stay): they would
       // otherwise kill, shoot or shove test avatars at random.
