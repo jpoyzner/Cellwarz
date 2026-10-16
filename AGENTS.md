@@ -65,7 +65,7 @@ and the main room are also saved so a restart brings them back (see "Production 
   - **Client resilience**: `Syncer` reconnects with jittered backoff ([reconnect.ts](src/game/reconnect.ts)), a silence watchdog, re-attaches
     with `jump: false` after the first accepted login, and `GameCanvas` shows `#reconnecting`; it gives up after 2 minutes.
   - **Deploy files**: [Dockerfile](Dockerfile), [docker-compose.yml](docker-compose.yml) (game + Caddy + optional `beta` profile),
-    [deploy/Caddyfile](deploy/Caddyfile), [scripts/backup.sh](scripts/backup.sh), `.github/workflows/{ci,deploy}.yml`.
+    [deploy/Caddyfile](deploy/Caddyfile), [scripts/backup.sh](scripts/backup.sh), `.github/workflows/ci.yml` (CI + auto-deploy), [scripts/deploy.sh](scripts/deploy.sh).
     `rsbuild.config.mjs` doesn't copy `public/` into `dist/` (the server serves it directly).
 - **Realtime transport**: a single `ws` `WebSocketServer` (`noServer`, upgrade handled in [server.ts](server.ts)) serving `/socketrefresh`.
   Each connection gets its own [SocketHub](server/socketHub.ts), which polls every few ms and sends one frame right after each engine step (`Engine.getStepCount()`; the frame holds every sprite redrawn since its last one via `Engine.getRedrawSpritesSince` — a free-running second 48 FPS timer used to drift against the engine's, so frames went out unevenly and could skip a step's changes) and speaks
@@ -105,8 +105,8 @@ and the main room are also saved so a restart brings them back (see "Production 
   memory; blank = still unprotected) and every later login for that callsign must pass `Session.acceptsPassword()` or
   `SocketHub` answers `{ connect: 'denied' }` and closes before touching the avatar. `Session.attach(owner)` drops the
   previous owner (`SessionOwner.drop()` → `{ connect: 'displaced' }` + close; the last login wins). The client
-  (`Syncer.onDenied`/`onDisplaced`) returns to the login screen with a notice; the hash is never put in localStorage.
-  There is no rate limiting on guesses yet.
+  (`Syncer.onDenied`/`onDisplaced`) returns to the login screen with a notice; the login screen remembers the last hash in localStorage (`cellwarz.login`, as typed; clearing the field forgets it).
+  Wrong guesses are throttled per address (`LoginThrottle`).
 - **No chat**: player-to-player text chat was removed entirely (client input handling, `Cell.postMessage` /
   `MESSAGE_PARAM` on the server) — a different communication system will replace it later. Don't re-add it
   without an explicit request.
@@ -399,8 +399,11 @@ and the main room are also saved so a restart brings them back (see "Production 
   whole frame and a short RGB-glitch burst on warp/death. A CSS `#crt` overlay (scanlines + vignette), a monospace
   HUD (score marked with a 🪩 emoji via CSS `::before`, with a digit-scramble on change, `RADAR` minimap with a sweep bar) and the ship-room login
   screen are in [cellwarz.css](src/styles/cellwarz.css); [audio.ts](src/game/audio.ts) uses bitcrushed/filter-swept
-  synth sounds plus a quiet synthwave ambient bed that starts on the first sound and is torn down by
-  `AudioManager.dispose()` from `Renderer.stop()`. There is no gray "stale" screen any more: when the server stops
+  synth sounds plus a quiet synthwave ambient bed that starts when the game's first full state arrives (`AudioManager.startMusic()`; before this it waited for the first sound effect, which on a phone is only when you move) and is torn down by
+  `AudioManager.dispose()` from `Renderer.stop()`. Sound can only start from a tap/click/key: `App` listens for the first one anywhere and calls
+  `unlockAudioSession()` (audio.ts), which creates and resumes ONE page-wide `AudioContext` (the managers share it; `dispose()` leaves it open),
+  sets `navigator.audioSession.type = 'playback'` (or loops a silent data-URI `<audio>` on iPhones without that API) because iOS otherwise
+  mutes Web Audio while the ringer switch is on silent, and resumes `interrupted` contexts too. The CSP allows `media-src data:` for that clip. There is no gray "stale" screen any more: when the server stops
   streaming an idle player (`connect: 'inactive'`, ~1 minute without a key), `Syncer.onInactive` makes `GameCanvas`
   take the same exit as Escape (back to the login screen; the avatar stays in the room, WAKE UP picks it up).
   `Syncer.handleMessage()` is public so e2e can feed it that message; `window.__cellwarz` also exposes `syncer`.
@@ -468,7 +471,9 @@ and the main room are also saved so a restart brings them back (see "Production 
   proxies `/socketrefresh` and `/images` to :8080). `npm run dev` runs both together via `concurrently`.
 - `npm run build` — production client bundle to `dist/`. `npm run serve` — runs the server serving that build
   (a local single-process deploy). Real deploys use the Docker image + Caddy on a VPS: see [DEPLOY.md](DEPLOY.md); CI is
-  `.github/workflows/ci.yml` (typecheck, unit tests, build, restart smoke test, Playwright) and `deploy.yml` is a manual SSH deploy.
+  `.github/workflows/ci.yml`: typecheck, unit tests, build and the restart smoke test gate an automatic deploy on every push to master
+  (docs-only pushes skip it); Playwright runs alongside but doesn't gate. The deploy job SSHes in with a forced-command key that can only run
+  [scripts/deploy.sh](scripts/deploy.sh) (pull, rebuild, wait for healthy, roll back if not).
 - `npm run typecheck`, `npm run test:restart`, `npm run loadtest` — see [README.md](README.md). Set `CELLWARZ_API_PORT` /
   `CELLWARZ_WEB_PORT` to run Playwright beside an already-running dev server on the default ports.
 - `npm run test:unit` — Vitest, for engine/physics logic (`server/__tests__/`).

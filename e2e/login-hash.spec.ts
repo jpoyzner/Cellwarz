@@ -86,3 +86,24 @@ test('logging in as the same avatar elsewhere drops the earlier connection back 
   await first.context().close();
   await second.context().close();
 });
+
+test('the callsign and hash are remembered on this device: a returning player just taps TELEPORT, and clearing the hash forgets it', async ({ page }) => {
+  const loginName = `rememberer-${Date.now()}`;
+  await fillLogin(page, loginName, 'my secret');
+  await page.locator('#teleport').click();
+  await waitForAvatar(page, loginName);
+
+  // A fresh page load (same browser): both fields come back prefilled, and TELEPORT gets straight back in.
+  await page.goto('/');
+  await expect(page.locator('#loginName')).toHaveValue(loginName);
+  await expect(page.locator('#loginHash')).toHaveValue('my secret');
+  await page.locator('#teleport').click();
+  await waitForAvatar(page, loginName);
+
+  // Clearing the hash field forgets it.
+  await page.goto('/');
+  await page.locator('#loginHash').fill('');
+  await page.goto('/');
+  await expect(page.locator('#loginName')).toHaveValue(loginName);
+  await expect(page.locator('#loginHash')).toHaveValue('');
+});

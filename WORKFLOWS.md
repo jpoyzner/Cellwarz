@@ -43,8 +43,9 @@ at a random bare floor spot at least 60 grid cells from any real player, with a 
 5. **HOME** needs no callsign: after the beam the browser goes to the DJ Recognize website (`https://djrecognize.com`;
    `PUBLIC_HOME_URL` at build time overrides it). Callsigns are at most 32 characters (the field stops there) and a
    stray space around one is trimmed before it is sent.
-6. The last callsign and colours are remembered (localStorage) and prefilled next time, including after Escape. The
-   hash is never written to storage (it is only kept in memory across Escape, within the page).
+6. The last callsign, **hash** and colours are remembered on this device (localStorage, `cellwarz.login`) and prefilled next
+   time — on desktop and phones, after Escape or a reload — so returning is one step. The hash is stored as typed (it is
+   the password); clearing the field forgets it, and a shared computer should clear it before leaving.
 
 **Covered by**: [e2e/login-room.spec.ts](e2e/login-room.spec.ts) (room, walking, jumping, callsign required, walking across
 pads does nothing, Up on a pad fires it and Up elsewhere jumps, HOME navigates), [e2e/login.spec.ts](e2e/login.spec.ts) (entering the game)
@@ -601,7 +602,7 @@ sprite dumps, saved start/end), and [server/__tests__/hardening.test.ts](server/
    nearby avatar dying, collecting a diamond, and your own death now each play a short synthesized sound effect (WebAudio oscillator
    blips — no audio asset files were added; bitcrushed square/saw tones, filter sweeps, noise bursts) and, where
    relevant, a small dust/impact/warp particle puff at the sprite's position. A quiet synthwave bed (detuned
-   drone plus a sparse arpeggio) starts on the first sound and stops when you leave the game screen (including when
+   drone plus a sparse arpeggio) starts as soon as you are in the game (not just after the first sound effect) and stops when you leave the game screen (including when
    an idle player is sent back to the login screen, see "Inactivity").
    Warping and dying also trigger a brief RGB-glitch burst on the whole screen.
 2. Movement for every avatar, and the camera itself, is smoothed between server updates instead of snapping to
@@ -613,7 +614,9 @@ sprite dumps, saved start/end), and [server/__tests__/hardening.test.ts](server/
 
 **Covered by**: mostly manual verification — this is inherently visual/audio polish with no discrete state to
 assert on in Playwright (no pixel-diffing or WebAudio-output assertions are in place). The exception is the music
-pausing/resuming (in the audio manager): [src/game/__tests__/audio.test.ts](src/game/__tests__/audio.test.ts) (with a fake AudioContext). The underlying data it's
+(starting at once, pausing/resuming) and what lets a phone hear it — the page-wide audio context created by the first tap, iOS's "playback"
+audio mode so the ringer switch doesn't mute it, resuming an interrupted context: [src/game/__tests__/audio.test.ts](src/game/__tests__/audio.test.ts)
+(with a fake AudioContext). Whether it is really audible on an iPhone is manual-only: check that the ringer switch is not on silent and the volume is up. The underlying data it's
 built on (sprite positions, the `died` ping) is exercised indirectly by the existing movement/death/multiplayer
 tests above, which would fail if the underlying server behavior changed.
 

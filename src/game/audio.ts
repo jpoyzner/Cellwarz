@@ -52,6 +52,62 @@ interface LegacyWindow {
   webkitAudioContext?: typeof AudioContext;
 }
 
+// One audio context for the whole page, created and resumed by the first tap or key press anywhere (see unlockAudioSession), so
+// the game's music can start by itself later: a context made outside a tap stays silent on phones.
+let sharedContext: AudioContext | undefined;
+
+// A tenth of a second of silence (8-bit mono WAV), played in a loop to move iOS into its "playback" audio mode.
+const SILENT_WAV =
+  'data:audio/wav;base64,UklGRkQDAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YSADAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA==';
+let silentPlayer: HTMLAudioElement | undefined;
+
+interface AudioSessionNavigator {
+  audioSession?: { type: string };
+  platform?: string;
+  maxTouchPoints?: number;
+  userAgent?: string;
+}
+
+function isIos(nav: AudioSessionNavigator): boolean {
+  return /iPad|iPhone|iPod/.test(nav.userAgent ?? '') || (nav.platform === 'MacIntel' && (nav.maxTouchPoints ?? 0) > 1);
+}
+
+function getAudioContextConstructor(): typeof AudioContext | undefined {
+  return window.AudioContext ?? (window as unknown as LegacyWindow).webkitAudioContext;
+}
+
+/**
+ * Makes sound possible from here on; call it from a tap, click or key press (browsers refuse otherwise). It creates and
+ * resumes the shared audio context, and on iPhones it also switches the page to the "playback" audio mode: by default iOS
+ * silences Web Audio whenever the ringer switch is on silent, which is why the game's music can be inaudible there.
+ * Resolves true once the context is running (so the caller can stop listening for taps).
+ */
+export async function unlockAudioSession(): Promise<boolean> {
+  try {
+    const nav = (typeof navigator === 'undefined' ? {} : navigator) as AudioSessionNavigator;
+    if (nav.audioSession) {
+      nav.audioSession.type = 'playback';
+    } else if (isIos(nav) && typeof Audio !== 'undefined' && !silentPlayer) {
+      silentPlayer = new Audio(SILENT_WAV);
+      silentPlayer.loop = true;
+      silentPlayer.setAttribute('playsinline', '');
+      await silentPlayer.play().catch(() => {
+        silentPlayer = undefined; // not allowed here; the next tap tries again.
+      });
+    }
+
+    const Ctor = getAudioContextConstructor();
+    if (!Ctor) return false;
+
+    sharedContext ??= new Ctor();
+    // iOS also reports "interrupted" (after a call or switching apps); that needs a resume just like "suspended".
+    if (sharedContext.state !== 'running') await sharedContext.resume();
+    return sharedContext.state === 'running';
+  } catch {
+    return false; // sound is polish; never let it break the page.
+  }
+}
+
 /** Lightweight synthesized sound effects and ambience — purely additive game feel, no gameplay effect. */
 export class AudioManager {
   private ctx: AudioContext | undefined;
@@ -82,6 +138,17 @@ export class AudioManager {
     this.ensureContext();
   }
 
+  /**
+   * Starts the music bed now rather than with the first sound effect (which, on a phone, only comes once you move). If the
+   * browser has not allowed sound yet it begins the moment the first tap does (see unlockAudioSession).
+   */
+  startMusic(): void {
+    if (this.muted || this.ambientPaused) return;
+
+    const ctx = this.ensureContext();
+    if (ctx) this.startAmbient(ctx);
+  }
+
   setMuted(muted: boolean): void {
     this.muted = muted;
     if (muted) this.stopAmbient();
@@ -90,7 +157,8 @@ export class AudioManager {
   /** Stops the ambience and releases the audio context (called when leaving the game screen). */
   dispose(): void {
     this.stopAmbient();
-    void this.ctx?.close();
+    // The page-wide context outlives the game screen (it can't be re-created without another tap).
+    if (this.ctx !== sharedContext) void this.ctx?.close();
     this.ctx = undefined;
   }
 
@@ -248,17 +316,19 @@ export class AudioManager {
   }
 
   private ensureContext(): AudioContext | undefined {
+    this.ctx ??= sharedContext;
     if (this.ctx) {
-      if (this.ctx.state === 'suspended') {
-        void this.ctx.resume();
+      if (this.ctx.state !== 'running') {
+        void this.ctx.resume().catch(() => undefined);
       }
       return this.ctx;
     }
 
-    const Ctor = window.AudioContext ?? (window as unknown as LegacyWindow).webkitAudioContext;
+    const Ctor = getAudioContextConstructor();
     if (!Ctor) return undefined;
 
     this.ctx = new Ctor();
+    if (this.ctx.state !== 'running') void this.ctx.resume().catch(() => undefined); // works when this runs inside a tap.
     return this.ctx;
   }
 }

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { GameCanvas } from './components/GameCanvas';
 import { LoginScreen } from './components/LoginScreen';
 import type { Look } from './game/look';
+import { unlockAudioSession } from './game/audio';
 import { enterImmersiveMode, isTouchDevice } from './game/touchDevice';
 
 interface Session {
@@ -31,8 +32,22 @@ export function App() {
     return () => window.removeEventListener('pointerup', enterImmersiveMode);
   }, [touch]);
 
+  // Browsers (phones above all) keep sound off until a tap, click or key press: the first ones anywhere switch it on, so the
+  // game's music can start by itself once the player is in.
+  useEffect(() => {
+    const events = ['pointerup', 'touchend', 'click', 'keydown'] as const;
+    const stop = () => events.forEach((name) => window.removeEventListener(name, unlock, true));
+    function unlock() {
+      void unlockAudioSession().then((running) => {
+        if (running) stop();
+      });
+    }
+    events.forEach((name) => window.addEventListener(name, unlock, true));
+    return stop;
+  }, []);
+
   const [session, setSession] = useState<Session | null>(null);
-  // The hash is never saved to storage, but survives leaving the game within the page so a wake-up doesn't need it retyped.
+  // The hash typed this visit, kept across leaving the game (the login screen also remembers it on this device).
   const [hash, setHash] = useState('');
   // Why the player was sent back to the login screen, when it wasn't their choice (wrong hash, logged in elsewhere).
   const [notice, setNotice] = useState('');

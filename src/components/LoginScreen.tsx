@@ -106,7 +106,8 @@ function SwatchRow({ id, title, value, onPick }: SwatchRowProps) {
 export function LoginScreen({ onEnter, initialHash = '', initialNotice = '' }: LoginScreenProps) {
   const [saved] = useState(loadSavedLogin);
   const [loginName, setLoginName] = useState(saved.name);
-  const [hash, setHash] = useState(initialHash);
+  // The hash typed this visit wins; otherwise the one remembered on this device.
+  const [hash, setHash] = useState(initialHash || saved.hash);
   const [headband, setHeadband] = useState<string | null>(saved.headband);
   const [belt, setBelt] = useState<string | null>(saved.belt);
   const [wakeAvailable, setWakeAvailable] = useState(false);
@@ -152,7 +153,7 @@ export function LoginScreen({ onEnter, initialHash = '', initialNotice = '' }: L
         }
         const { headband: chosenHeadband, belt: chosenBelt } = colorsRef.current;
         const callsign = nameRef.current.trim();
-        saveLogin({ name: callsign, headband: chosenHeadband, belt: chosenBelt });
+        saveLogin({ name: callsign, headband: chosenHeadband, belt: chosenBelt, hash: hashRef.current });
         onEnterRef.current(callsign, hashRef.current, pad === 'teleport', resolveLook(chosenHeadband, chosenBelt));
       },
     }, frontCanvasRef.current ?? undefined);
@@ -214,8 +215,8 @@ export function LoginScreen({ onEnter, initialHash = '', initialNotice = '' }: L
   }, [loginName, wakeAvailable, headband, belt]);
 
   useEffect(() => {
-    saveLogin({ name: loginName, headband, belt });
-  }, [loginName, headband, belt]);
+    saveLogin({ name: loginName, headband, belt, hash });
+  }, [loginName, headband, belt, hash]);
 
   const padLeft = (pad: PadId) => PADS[pad].centerX - LABEL_WIDTH / 2;
 

@@ -1,9 +1,20 @@
-name: CI
+name: CI and deploy
 
+# Every push to master runs the checks and, when they pass, deploys to https://cyberstation.djrecognize.com.
+# Docs-only pushes do nothing. "Run workflow" (Actions tab) redeploys master by hand. Needs the repository secret
+# DEPLOY_SSH_KEY; see DEPLOY.md ("Automatic deploys").
 on:
   push:
     branches: [master, main]
+    paths-ignore: ['**.md']
   pull_request:
+    paths-ignore: ['**.md']
+  workflow_dispatch:
+
+# Two quick pushes deploy one after the other, never at the same time.
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   checks:
@@ -38,3 +49,23 @@ jobs:
         with:
           name: playwright-report
           path: playwright-report
+
+  # The browser tests are not required to deploy: a few of their long specs fail at random (see PLAN.md), so a red run there
+  # is a reason to look, not to block a fix. The deploy itself rolls back if the new version does not come up healthy.
+  deploy:
+    needs: checks
+    if: github.ref == 'refs/heads/master' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Deploy over SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          install -m 600 /dev/null ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          # The server's host key is pinned here (not trusted on first use). If the server is ever replaced, update this line.
+          echo "cyberstation.djrecognize.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAL0sp9bZ1SEvewQLxk/TrHPoMVrc50aFDLP86Ey0b/r" > ~/.ssh/known_hosts
+          # The key can only run scripts/deploy.sh on the server (forced command), so there is nothing to pass.
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes deploy@cyberstation.djrecognize.com

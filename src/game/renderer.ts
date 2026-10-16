@@ -403,6 +403,7 @@ export class Renderer {
 
   /** Full-refresh payloads (login/portal warp/stale recovery) replace state wholesale — no delta to diff. */
   applyFullState(data: ConnectPayload): void {
+    this.audio.startMusic();
     const loginSpriteIdBefore = this.avatars[this.context.loginName];
     const before = loginSpriteIdBefore ? this.sprites[loginSpriteIdBefore] : undefined;
 

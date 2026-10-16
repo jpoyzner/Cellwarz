@@ -61,19 +61,36 @@ from Cloudflare, make the game see the real visitor address (the per-address lim
   ```
   Without the orange cloud (grey), leave 80/443 open and Caddy supplies the visitor address itself.
 
-## Updating
+## Automatic deploys (push to master)
 
-Locally: `npm run typecheck && npm run test:unit && npm test && npm run test:restart`, push, and wait for CI. Then either run the
-**Deploy** workflow from GitHub's Actions tab (needs the secrets `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`) or on the server:
+Every push to `master` runs the checks (typecheck, unit tests, build, restart smoke test) and, if they pass, deploys by itself:
+GitHub's runner logs into the server with a **dedicated key that can only run `scripts/deploy.sh`** (installed with a forced
+command in `/home/deploy/.ssh/authorized_keys`: `restrict,command="/opt/cyberstation/scripts/deploy.sh" ssh-ed25519 ...`). The script pulls
+the new commit, rebuilds and restarts the game, waits for the container to report healthy, and **rolls back to the previous commit
+if it doesn't** (the GitHub run then goes red). Caddy's config is reloaded when `deploy/Caddyfile` changed. Players are
+disconnected for a few seconds and reconnect on their own.
 
-```bash
-cd /opt/cyberstation && git pull --ff-only && docker compose up -d --build cyberstation
-```
+- Pushes that only change `*.md` files don't run anything. **Actions → CI and deploy → Run workflow** redeploys master by hand.
+- The browser tests run in parallel but don't block the deploy (a few long specs fail at random, see PLAN.md); look at them when red.
+- **One-time setup**: GitHub → the repo → Settings → Secrets and variables → Actions → **New repository secret**, name
+  `DEPLOY_SSH_KEY`, value = the whole private key file (`pbcopy < ~/.ssh/cyberstation_deploy` on the Mac that created it, then paste,
+  including the BEGIN/END lines). Then delete that local key file if you like: GitHub keeps its own copy.
+- The server's SSH host key is pinned in `.github/workflows/ci.yml` and the deploy connects to `cyberstation.djrecognize.com` over
+  SSH. Two consequences: if the server is replaced, update the pinned key (`ssh-keyscan -t ed25519 HOST`) and install a new deploy key;
+  and if you switch that DNS record to the orange cloud, SSH stops working through it, so make a grey `ssh.djrecognize.com` record for
+  the server and use that name in the workflow.
+- To revoke it: delete the `command=` line from `/home/deploy/.ssh/authorized_keys` and the secret.
 
-Players are disconnected for a few seconds and reconnect by themselves; the room and accounts come back as they were. Try changes on
-the staging copy first (`docker compose --profile beta up -d --build`, at https://cyberstation-beta.djrecognize.com; it has its own data and a 10-player cap).
+Deploying by hand on the server is the same script: `cd /opt/cyberstation && ./scripts/deploy.sh`.
 
-**Rolling back**: `git checkout <good commit> && docker compose up -d --build cyberstation`. If a release changed the room layout
+## Updating by hand and rolling back
+
+Locally: `npm run typecheck && npm run test:unit && npm test && npm run test:restart`, push, and the deploy above does the rest.
+Try risky changes on the staging copy first (`docker compose --profile beta up -d --build`, after un-commenting its block in
+`deploy/Caddyfile` and adding an A record for `cyberstation-beta`; it has its own data and a 10-player cap).
+
+**Rolling back** a release that turned out bad: `git revert` it and push (the deploy ships the revert), or on the server
+`cd /opt/cyberstation && git checkout <good commit> && docker compose up -d --build cyberstation`. If a release changed the room layout
 (`SNAPSHOT_VERSION` in `server/roomSnapshot.ts`), the saved room is simply ignored and a fresh one is built; accounts are unaffected.
 
 ## Backups

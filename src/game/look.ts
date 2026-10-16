@@ -59,17 +59,23 @@ export interface SavedLogin {
   name: string;
   headband: string | null;
   belt: string | null;
+  /** The login hash (password) typed last time; kept on this device so coming back is one tap. Blank when there is none. */
+  hash: string;
 }
+
+// Same cap as the login screen's field and the server's.
+const MAX_SAVED_HASH_LENGTH = 64;
 
 const STORAGE_KEY = 'cellwarz.login';
 
-/** The name and colours used last time, so coming back to the login room is one step; tolerant of anything stored (colours no longer in the palette are dropped). */
+/** The name, hash and colours used last time, so coming back to the login room is one step; tolerant of anything stored (colours no longer in the palette are dropped). */
 export function loadSavedLogin(): SavedLogin {
-  const saved: SavedLogin = { name: '', headband: null, belt: null };
+  const saved: SavedLogin = { name: '', headband: null, belt: null, hash: '' };
 
   try {
     const parsed = JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? '{}') as Partial<SavedLogin>;
     if (typeof parsed.name === 'string') saved.name = parsed.name;
+    if (typeof parsed.hash === 'string') saved.hash = parsed.hash.slice(0, MAX_SAVED_HASH_LENGTH);
     if (typeof parsed.headband === 'string' && LOOK_PALETTE.includes(parsed.headband)) saved.headband = parsed.headband;
     if (typeof parsed.belt === 'string' && LOOK_PALETTE.includes(parsed.belt)) saved.belt = parsed.belt;
   } catch {

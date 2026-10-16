@@ -39,22 +39,40 @@ describe('look colours', () => {
 describe('saved login', () => {
   it('round-trips the name and colours', () => {
     stubStorage();
-    saveLogin({ name: 'neo', headband: '#b45cff', belt: null });
-    expect(loadSavedLogin()).toEqual({ name: 'neo', headband: '#b45cff', belt: null });
+    saveLogin({ name: 'neo', headband: '#b45cff', belt: null, hash: 'open sesame' });
+    expect(loadSavedLogin()).toEqual({ name: 'neo', headband: '#b45cff', belt: null, hash: 'open sesame' });
+  });
+
+  it('forgets the hash once it is cleared, caps it, and ignores one that is not a string', () => {
+    stubStorage();
+    saveLogin({ name: 'neo', headband: null, belt: null, hash: 'x' });
+    saveLogin({ name: 'neo', headband: null, belt: null, hash: '' });
+    expect(loadSavedLogin().hash).toBe('');
+
+    stubStorage({ 'cellwarz.login': JSON.stringify({ name: 'a', hash: 'y'.repeat(500) }) });
+    expect(loadSavedLogin().hash).toHaveLength(64);
+
+    stubStorage({ 'cellwarz.login': JSON.stringify({ name: 'a', hash: 42 }) });
+    expect(loadSavedLogin().hash).toBe('');
+  });
+
+  it('still reads a login saved before hashes were remembered', () => {
+    stubStorage({ 'cellwarz.login': JSON.stringify({ name: 'old', headband: null, belt: null }) });
+    expect(loadSavedLogin()).toEqual({ name: 'old', headband: null, belt: null, hash: '' });
   });
 
   it('starts blank when nothing is stored and ignores corrupt, red or off-palette stored values', () => {
     stubStorage();
-    expect(loadSavedLogin()).toEqual({ name: '', headband: null, belt: null });
+    expect(loadSavedLogin()).toEqual({ name: '', headband: null, belt: null, hash: '' });
 
     stubStorage({ 'cellwarz.login': '{not json' });
-    expect(loadSavedLogin()).toEqual({ name: '', headband: null, belt: null });
+    expect(loadSavedLogin()).toEqual({ name: '', headband: null, belt: null, hash: '' });
 
     stubStorage({ 'cellwarz.login': JSON.stringify({ name: 'x', headband: '#ff2040', belt: 5 }) });
-    expect(loadSavedLogin()).toEqual({ name: 'x', headband: null, belt: null });
+    expect(loadSavedLogin()).toEqual({ name: 'x', headband: null, belt: null, hash: '' });
 
     // A custom colour or the removed green swatch saved by an older version.
     stubStorage({ 'cellwarz.login': JSON.stringify({ name: 'y', headband: '#123456', belt: '#3cff7a' }) });
-    expect(loadSavedLogin()).toEqual({ name: 'y', headband: null, belt: null });
+    expect(loadSavedLogin()).toEqual({ name: 'y', headband: null, belt: null, hash: '' });
   });
 });
