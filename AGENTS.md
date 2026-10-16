@@ -301,7 +301,7 @@ and the main room are also saved so a restart brings them back (see "Production 
   what they do). The death card ([deathCause.ts](src/game/deathCause.ts) `describeDeath`) turns the server's `cause` into
   `#death-cause`/`#death-tip` under "YOU DIED". Remaining ideas are in [TODOS.md](TODOS.md).
 - **Mobile controls (touch devices only, landscape only)**: [touchDevice.ts](src/game/touchDevice.ts) `isTouchDevice()` is
-  `(pointer: coarse)` (or `?touch=1`/`?touch=0`); [index.tsx](src/index.tsx) adds the `touch-device` class to `<html>` and every
+  `(pointer: coarse)`, or a touch screen whose shorter side is ≤500px (phones in "desktop site" mode report a fine pointer), or `?touch=1`/`?touch=0`; [index.tsx](src/index.tsx) adds the `touch-device` class to `<html>` and every
   touch-only rule in [cellwarz.css](src/styles/cellwarz.css) hangs off it (or off `#touch-controls`/`#rotate-prompt`, which only
   render on touch), so the desktop layout is untouched — keep it that way. [TouchControls.tsx](src/components/TouchControls.tsx)
   is a DOM gamepad over the canvas (plain `div`s, not `<button>`s — a focused button would fire on Space) that sends the

@@ -1,10 +1,23 @@
-/** Whether this is a phone/tablet-style device whose main pointer is a finger (a laptop with a touchscreen is not). */
-export function isTouchDevice(win: Pick<Window, 'matchMedia' | 'location'> = window): boolean {
+// A touch screen whose shorter side (CSS pixels) is at most this is a phone, whatever the browser claims about its pointer.
+const PHONE_MAX_SHORT_SIDE_PX = 500;
+
+type TouchProbe = Pick<Window, 'matchMedia' | 'location'> & Partial<{ navigator: Pick<Navigator, 'maxTouchPoints'>; screen: Pick<Screen, 'width' | 'height'> }>;
+
+/**
+ * Whether this is a phone/tablet-style device whose main pointer is a finger (a laptop with a touchscreen is not).
+ * Some phones report a fine pointer (Chrome's "desktop site" mode, some in-app browsers), so a touch screen as small as a
+ * phone's counts too.
+ */
+export function isTouchDevice(win: TouchProbe = window): boolean {
   // `?touch=1` / `?touch=0` force the answer, for hybrid devices and for testing the touch layout on a desktop.
   const forced = new URLSearchParams(win.location.search).get('touch');
   if (forced === '1') return true;
   if (forced === '0') return false;
-  return win.matchMedia?.('(pointer: coarse)').matches ?? false;
+  if (win.matchMedia?.('(pointer: coarse)').matches) return true;
+
+  const touchPoints = win.navigator?.maxTouchPoints ?? 0;
+  const shortSide = Math.min(win.screen?.width ?? Infinity, win.screen?.height ?? Infinity);
+  return touchPoints > 0 && shortSide <= PHONE_MAX_SHORT_SIDE_PX;
 }
 
 let immersiveTried = false;

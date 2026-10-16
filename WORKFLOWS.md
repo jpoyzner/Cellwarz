@@ -210,7 +210,7 @@ finishing rocket/star hit counts) plus [server/__tests__/socketHubRobotBody.test
 
 ## Mobile controls (phones, landscape only)
 
-Everything here exists only on touch devices: a device whose main pointer is coarse (`(pointer: coarse)`), or any browser
+Everything here exists only on touch devices: a device whose main pointer is coarse (`(pointer: coarse)`), a phone-sized touch screen (touch points and a shorter screen side of at most 500px — some phones claim a fine pointer in "desktop site" mode), or any browser
 opened with `?touch=1` (`?touch=0` forces it off). Detection sets the `touch-device` class on `<html>` (every touch-only
 style hangs off it) and mounts the touch UI; on a desktop browser none of this exists and the keyboard game is unchanged.
 
