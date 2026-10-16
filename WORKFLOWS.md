@@ -30,9 +30,9 @@ at a random bare floor spot at least 60 grid cells from any real player, with a 
 2. Walk the avatar with the Left/Right arrows and jump with Up (the arrow keys work even while the callsign field has
    focus; the room is client-only, nothing is sent to the server for it). A name tag shows the callsign over it.
 3. There are three transporters on the floor, each with a button label over it (also clickable): **TELEPORT**
-   (`#teleport`, always there), **HOME** (`#home`, always there, in the middle) and **WAKE UP** (`#wakeup`, only
+   (`#teleport`, always there), **HOME** (`#home`, always there, at the far left) and **WAKE UP** (`#wakeup`, to the right of HOME, only
    present while the callsign typed has a living — awake or asleep — avatar in the main room; typing another name
-   removes it, a dead player never sees it). The avatar starts between WAKE UP and HOME, on no pad.
+   removes it, a dead player never sees it). The avatar starts in the middle of the room, on no pad.
 4. A transporter is used by **standing on it and pressing Up** (or clicking/tapping its label): walking onto or across a
    pad does nothing, so you can walk past one. The Up press is used up by the pad (the avatar does not also jump), and
    only a fresh press counts (holding Up while running across a pad doesn't). Using one beams the avatar up (a short

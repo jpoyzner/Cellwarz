@@ -6,8 +6,9 @@ cyberstation.djrecognize.com {
 	reverse_proxy cyberstation:8080
 }
 
-# Staging copy (docker compose --profile beta up -d): one level below djrecognize.com so Cloudflare's free certificate covers it.
-cyberstation-beta.djrecognize.com {
-	encode zstd gzip
-	reverse_proxy cyberstation-beta:8080
-}
+# Staging copy: add an A record for cyberstation-beta, uncomment this block, then `docker compose --profile beta up -d --build`
+# (left off by default: Caddy keeps retrying a certificate for a name with no DNS record).
+# cyberstation-beta.djrecognize.com {
+# 	encode zstd gzip
+# 	reverse_proxy cyberstation-beta:8080
+# }

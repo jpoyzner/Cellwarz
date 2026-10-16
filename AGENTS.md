@@ -254,7 +254,7 @@ and the main room are also saved so a restart brings them back (see "Production 
   released) — or by clicking its label; either calls `LoginRoom.useTransporter()`: a 650ms beam-up effect (a `setTimeout`, not the rAF
   loop, so a throttled background tab still proceeds), then `onEnter(name, jump = pad === 'teleport', look)` (HOME navigates with
   `window.location.assign` instead). No callsign ⇒ TELEPORT/WAKE UP don't fire (`onBlocked`); HOME needs none. The avatar starts at
-  `START_X`, between WAKE UP and HOME, on no pad. The pad/cone/beam drawing lives in [transporterPad.ts](src/game/transporterPad.ts),
+  `START_X`, mid-room, on no pad (left to right the pads are HOME, WAKE UP, TELEPORT). The pad/cone/beam drawing lives in [transporterPad.ts](src/game/transporterPad.ts),
   shared with the in-game stargates. Arrow keys always drive
   the room avatar (also while the name field is focused). The last callsign/colours persist in localStorage
   ([look.ts](src/game/look.ts) `loadSavedLogin`/`saveLogin`). `window.__cellwarzLogin` (`{ room, radar }`) is the

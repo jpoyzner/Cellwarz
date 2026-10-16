@@ -16,13 +16,13 @@ export const FLOOR_Y = 470;
 export type PadId = 'wakeup' | 'teleport' | 'home';
 
 export const PADS: Record<PadId, { centerX: number; halfWidth: number; color: string; label: string }> = {
-  wakeup: { centerX: 215, halfWidth: 75, color: '#ffae1a', label: 'WAKE UP' },
+  home: { centerX: 95, halfWidth: 75, color: '#ff2ea6', label: 'HOME' },
+  wakeup: { centerX: 265, halfWidth: 75, color: '#ffae1a', label: 'WAKE UP' },
   teleport: { centerX: 745, halfWidth: 75, color: '#00f6ff', label: 'TELEPORT' },
-  home: { centerX: 480, halfWidth: 75, color: '#ff2ea6', label: 'HOME' },
 };
 
-/** The avatar starts between the WAKE UP and HOME pads, standing on none of them. */
-export const START_X = 347;
+/** The avatar starts in the middle of the room, standing on none of the pads. */
+export const START_X = 480;
 
 const AVATAR_SCALE = 2;
 const SPRITE_WIDTH = 48;

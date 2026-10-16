@@ -147,7 +147,7 @@ test('the HOME pad takes you back to the DJ Recognize website, with no callsign 
 
   // Standing on the HOME pad and pressing Up beams you out...
   await page.evaluate(() => {
-    window.__cellwarzLogin!.room.avatar.x = 480;
+    window.__cellwarzLogin!.room.avatar.x = 95;
   });
   await page.keyboard.press('ArrowUp');
   await page.waitForURL('https://djrecognize.com/**');
