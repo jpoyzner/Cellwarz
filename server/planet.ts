@@ -51,17 +51,20 @@ const PROJECTILE_PULL_SCALE = 0.1;
 const CORE_RADIUS_FRACTION = 0.15;
 // Swallowing takes this long: the sprite slides into the exact centre while shrinking away, then is destroyed.
 const CONSUME_FRAMES = Engine.ENGINE_FRAMES_PER_SECOND;
+// After a planet has flown off the far side, the room goes without one for this long before the next enters.
+const DEFAULT_REST_SECONDS = 60;
 
 /**
  * One gas giant at a time flies across a room; sprites within ~6 avatar heights of its surface are pulled toward it.
  * The planet is pure background (it never collides) — only the pull touches the grid, through ordinary `Physics.move`s,
  * so walls and heavier sprites still block it. Anything whose centre reaches the planet's core is swallowed: it
  * slides to the exact centre while shrinking away (reported to clients as its consume scale), then is destroyed
- * (an avatar dies).
+ * (an avatar dies). After one has left, the room rests with no planet for a while before the next appears.
  */
 export class PlanetField {
   private planet: Planet;
   private nextId = 1;
+  private restFramesRemaining = 0;
   private readonly accumulators = new WeakMap<Sprite, PullAccumulator>();
   private readonly consuming = new Map<Sprite, Consumption>();
 
@@ -71,31 +74,42 @@ export class PlanetField {
     private readonly avatarHeightPx: number,
     private readonly pullEnabled = process.env.CELLWARZ_PLANET_PULL !== 'off',
     private readonly random: () => number = Math.random,
+    private readonly restSeconds = DEFAULT_REST_SECONDS,
   ) {
     this.planet = this.spawn();
   }
 
-  getState(): PlanetState {
-    return this.planet.toState();
+  /** The current planet, or undefined while the room is resting between planets. */
+  getState(): PlanetState | undefined {
+    return this.resting() ? undefined : this.planet.toState();
   }
 
   getGravityRange(): number {
     return this.avatarHeightPx * GRAVITY_RANGE_AVATAR_HEIGHTS;
   }
 
-  /** Advances the planet one simulation step and replaces it with a fresh random one once it has flown past. */
+  /** Advances the planet one simulation step; once it has flown past, rests a while and then brings in a fresh random one. */
   step(): void {
+    if (this.resting()) {
+      if (--this.restFramesRemaining <= 0) this.planet = this.spawn();
+      return;
+    }
+
     this.planet.advance(1 / Engine.ENGINE_FRAMES_PER_SECOND);
 
     const margin = this.planet.radius * OFFSCREEN_RADII;
     const gone =
       this.planet.vx > 0 ? this.planet.x > this.worldWidth + margin : this.planet.x < -margin;
-    if (gone) this.planet = this.spawn();
+    if (gone) this.restFramesRemaining = Math.max(1, Math.round(this.restSeconds * Engine.ENGINE_FRAMES_PER_SECOND));
+  }
+
+  private resting(): boolean {
+    return this.restFramesRemaining > 0;
   }
 
   /** Pulls one sprite toward the planet, if it is within range, by this frame's whole number of grid units. */
   applyPull(sprite: Sprite, physics: Physics): void {
-    if (!this.pullEnabled || sprite.getMass() === 0 || sprite.removed() || this.consuming.has(sprite)) return;
+    if (!this.pullEnabled || this.resting() || sprite.getMass() === 0 || sprite.removed() || this.consuming.has(sprite)) return;
 
     const step = CellData.ANIMATION_STEP;
     const dx = this.planet.x - (sprite.getXPixels() + (sprite.getWidth() * step) / 2);
@@ -131,7 +145,7 @@ export class PlanetField {
    */
   projectileAcceleration(centerXPx: number, centerYPx: number): { x: number; y: number } {
     const none = { x: 0, y: 0 };
-    if (!this.pullEnabled) return none;
+    if (!this.pullEnabled || this.resting()) return none;
 
     const dx = this.planet.x - centerXPx;
     const dy = this.planet.y - centerYPx;

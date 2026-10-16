@@ -116,7 +116,7 @@ only for a callsign with a living avatar and wakes it where it sleeps)
 ## Login room — live radar
 
 1. The login room shows the same radar as the game (`#radar`, canvas `#radar-canvas`, titled LIVE RADAR · MAIN ROOM): the
-   room's walls, other players as magenta dots, robots as red dots and the amber planet, updating live, plus a readout
+   room's walls, other players as blue dots, robots as red dots and the amber planet, updating live, plus a readout
    (`#radar-readout`) like "2 AVATARS · 3 ROBOTS". There is no avatar of yours on it yet.
 2. It comes from a spectator-only connection (`{ connect, spectate: true }`: the server sends the full state and the
    room's frames, with no login, session or avatar, and never times it out); it is closed when you enter the game. The
@@ -625,7 +625,7 @@ tests above, which would fail if the underlying server behavior changed.
 ## Minimap
 
 1. While in-game, a mostly-transparent "radar" (the minimap) sits in the bottom-right corner (`#minimap`, canvas
-   `#minimap-canvas`) labelled MAIN ROOM, showing the room's walls in cyan, other players as magenta dots, robots
+   `#minimap-canvas`) labelled MAIN ROOM, showing the room's walls in cyan, other players as blue dots, robots
    as red dots, and your own avatar as a larger pulsing white dot with a lime outline. The pulse pauses while the
    browser page is hidden. The level's gas giant (see "Gas giant planet") shows as an amber disc with a ring,
    clipped to the map while it flies in or out.
@@ -767,11 +767,13 @@ spits normally, quiet when random blocks are off). The look of the art, hue and 
 
 1. [MainRoom](server/cell/mainRoom.ts) has one randomly generated gas giant with rings flying by in the background at
    a time (random size, banding/color palette, ring tilt, height and direction; slow, crossing the whole room in
-   about one to two minutes). When it has flown fully off the far side a new random one enters from a random side.
+   about one to two minutes). When it has flown fully off the far side the room has no planet for a minute (nothing is
+   drawn and there is no pull), then a new random one enters from a random side.
    It is pure scenery drawn behind the sprites — nothing collides with it. The server owns its position
    ([planet.ts](server/planet.ts), stepped by `Cell.process()`) and sends it as `planet` in the full-state payload
-   and as a separate `{ planet }` message when a new planet appears and every 2s as a drift correction (the flat
-   redraw frames are untouched); clients extrapolate from its velocity in between.
+   and as a separate `{ planet }` message when a new planet appears and every 2s as a drift correction, and
+   `{ planet: null }` once when it leaves for its break (the flat redraw frames are untouched); clients extrapolate from
+   its velocity in between.
 2. Within about 6 avatar heights (384px) of its surface, things are pulled toward it, harder the closer they get
    (quadratic falloff): avatars/robots, uncollected diamonds and every coloured block except the rainbow one, which ignores gravity (not ones being
    carried) are moved on the server grid through normal physics, so walls and heavier things still block the pull
@@ -800,7 +802,7 @@ Set `CELLWARZ_PLANET_PULL=off` on the server to keep the planet flying but switc
 Playwright config does this so its deterministic movement specs aren't shoved around; it only applies when
 Playwright starts the server itself).
 
-**Covered by**: [server/__tests__/planet.test.ts](server/__tests__/planet.test.ts) (one planet at a time, respawn,
+**Covered by**: [server/__tests__/planet.test.ts](server/__tests__/planet.test.ts) (one planet at a time, the one-minute break before the next, no pull while resting,
 range/falloff, stronger pull over the planet, reaching the floor and swallowing a resting diamond, bending rocket/ninja-star flight, walls blocking, lifting only inside the planet, shrink-then-destroy of avatars/mana, wire extra info, MainRoom-only),
 [src/game/__tests__/planet.test.ts](src/game/__tests__/planet.test.ts),
 [src/game/__tests__/spaceBackground.test.ts](src/game/__tests__/spaceBackground.test.ts) (pieces pulled, not broken, shrunk away at the core),

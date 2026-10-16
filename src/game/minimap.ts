@@ -11,7 +11,7 @@ const ACTOR_WIDTH_PX = 48;
 const ACTOR_HEIGHT_PX = 64;
 
 const WALL_COLOR = '#00c8e6';
-const PLAYER_COLOR = '#ff2ea6';
+const PLAYER_COLOR = '#2f6bff';
 const ROBOT_COLOR = '#ff3b55';
 export const PLANET_COLOR = '#ffae1a';
 const SELF_COLOR = '#ffffff';

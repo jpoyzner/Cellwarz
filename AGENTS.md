@@ -410,7 +410,7 @@ and the main room are also saved so a restart brings them back (see "Production 
   `Syncer.handleMessage()` is public so e2e can feed it that message; `window.__cellwarz` also exposes `syncer`.
 - **Gas giant planet** (`Cell.usesPlanets()`, MainRoom only; server [planet.ts](server/planet.ts), client
   [planet.ts](src/game/planet.ts)): `PlanetField` keeps one planet at a time crossing the room (random size/speed/
-  height/direction/`seed`), stepped from `Cell.process()`, replaced by a new one once fully off the far side. It
+  height/direction/`seed`), stepped from `Cell.process()`, once fully off the far side the room rests with no planet for 60s (`getState()` is undefined, no pull; clients get `{ planet: null }` once), then a new one enters. It
   is not a `Sprite` (no grid presence/collision); its pull is applied each step to sprites whose
   `isAffectedByPlanets()` is true (Avatar incl. Robot, every Mana subclass except the rainbow block, and `Diamond`) via ordinary `Physics.move`s with a
   per-sprite fractional accumulator, so walls/mass still block it. Range = 6 avatar heights from the surface,

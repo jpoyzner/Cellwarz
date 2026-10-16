@@ -402,7 +402,14 @@ export class SocketHub implements SessionOwner {
 
   private sendPlanetIfDue(cell: Cell): void {
     const planet = cell.getPlanet();
-    if (!planet) return;
+    if (!planet) {
+      // The planet has left for its break: tell the client once so it drops it.
+      if (this.sentPlanetId !== undefined) {
+        this.send({ [PLANET_KEY]: null });
+        this.sentPlanetId = undefined;
+      }
+      return;
+    }
 
     if (planet.id !== this.sentPlanetId || Date.now() - this.sentPlanetAt >= PLANET_RESYNC_MS) {
       this.send({ [PLANET_KEY]: planet });
@@ -434,6 +441,7 @@ export class SocketHub implements SessionOwner {
 
     const planet = cell.getPlanet();
     if (planet) this.markPlanetSent(planet.id);
+    else this.sentPlanetId = undefined;
 
     return {
       [CONNECT_PARAM]: '0',

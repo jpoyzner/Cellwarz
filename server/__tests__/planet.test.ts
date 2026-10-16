@@ -39,28 +39,50 @@ function parkedField(x: number, y: number, pullEnabled = true) {
 }
 
 describe('PlanetField', () => {
-  it('flies one planet at a time across the room and then replaces it with a new random one', () => {
+  it('flies one planet at a time across the room, rests for a minute, then brings in a new random one', () => {
     const field = new PlanetField(1000, 800, AVATAR_HEIGHT_PX, false, seeded([0, 0, 0.1, 0.5, 0.5, 0.2]));
-    const first = field.getState();
+    const first = field.getState()!;
 
     expect(first.vx).toBeGreaterThan(0);
     expect(first.x).toBeLessThan(0);
     expect(first.radius).toBeGreaterThanOrEqual(140);
 
     field.step();
-    expect(field.getState().id).toBe(first.id);
-    expect(field.getState().x).toBeCloseTo(first.x + first.vx / FPS);
+    expect(field.getState()!.id).toBe(first.id);
+    expect(field.getState()!.x).toBeCloseTo(first.x + first.vx / FPS);
 
-    for (let i = 0; i < FPS * 600 && field.getState().id === first.id; i++) field.step();
+    for (let i = 0; i < FPS * 600 && field.getState(); i++) field.step();
+    expect(field.getState()).toBeUndefined();
 
-    const next = field.getState();
+    for (let i = 0; i < FPS * 60 - 1; i++) field.step();
+    expect(field.getState()).toBeUndefined();
+
+    field.step();
+    const next = field.getState()!;
     expect(next.id).toBe(first.id + 1);
     expect(next.x).toBeLessThan(0);
   });
 
+  it('exerts no pull while resting between planets', () => {
+    const { cell, physics } = createScene();
+    const avatar = new Avatar('rester', 100, 60, false, cell);
+    const field = new PlanetField(1600, 960, AVATAR_HEIGHT_PX, true, seeded([0, 0, 0, 0.5, 0.5, 0]), 1);
+    const planet = (field as unknown as { planet: { x: number; y: number; vx: number } }).planet;
+    Object.assign(planet, { x: avatar.getXPixels() + 200, y: avatar.getYPixels(), vx: 1e6 });
+
+    expect(field.projectileAcceleration(avatar.getXPixels(), avatar.getYPixels()).x).toBeGreaterThan(0);
+    field.step();
+    expect(field.getState()).toBeUndefined();
+
+    const x = avatar.getX();
+    field.applyPull(avatar, physics);
+    expect(avatar.getX()).toBe(x);
+    expect(field.projectileAcceleration(avatar.getXPixels(), avatar.getYPixels())).toEqual({ x: 0, y: 0 });
+  });
+
   it('enters from either side with a random look, height and size', () => {
-    const left = new PlanetField(1000, 800, AVATAR_HEIGHT_PX, false, seeded([0.5, 0.5, 0.1, 0.5, 0.5, 0.5])).getState();
-    const right = new PlanetField(1000, 800, AVATAR_HEIGHT_PX, false, seeded([0.5, 0.5, 0.9, 0.5, 0.5, 0.5])).getState();
+    const left = new PlanetField(1000, 800, AVATAR_HEIGHT_PX, false, seeded([0.5, 0.5, 0.1, 0.5, 0.5, 0.5])).getState()!;
+    const right = new PlanetField(1000, 800, AVATAR_HEIGHT_PX, false, seeded([0.5, 0.5, 0.9, 0.5, 0.5, 0.5])).getState()!;
 
     expect(left.vx).toBeGreaterThan(0);
     expect(right.vx).toBeLessThan(0);
