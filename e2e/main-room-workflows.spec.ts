@@ -372,7 +372,10 @@ test.describe('MainRoom deterministic workflows', () => {
     await waitForAvatar(page, thrower);
     await page.locator('#canvas').click();
     const spawn = await waitUntilGrounded(page, thrower);
-    await walkTo(page, thrower, 'ArrowRight', spawn.x + 160, { tolerance: 8, timeoutMs: 15000 });
+    // Other specs leave avatars standing on and just right of the spawn (they are never cleaned up), and a star is used up by the
+    // first avatar it touches, so this scenario plays out on the empty floor to the left: thrower further left, target between
+    // the thrower and the crowd.
+    await walkTo(page, thrower, 'ArrowLeft', spawn.x - 300, { tolerance: 8, timeoutMs: 15000 });
 
     const contextB = await browser.newContext();
     const pageB = await contextB.newPage();
@@ -381,19 +384,27 @@ test.describe('MainRoom deterministic workflows', () => {
       await login(pageB, target);
       await expect(pageB.locator('#canvas')).toBeVisible();
       await waitForAvatar(pageB, target);
-      await waitUntilGrounded(pageB, target);
+      const targetSpawn = await waitUntilGrounded(pageB, target);
+      await pageB.locator('#canvas').click();
+      await walkTo(pageB, target, 'ArrowLeft', targetSpawn.x - 140, { tolerance: 8, timeoutMs: 15000 });
       await waitForAvatar(page, target);
 
-      // Face the target (left) with a short tap, then throw.
-      await page.keyboard.down('ArrowLeft');
+      // Face the target (right) with a short tap, then throw.
+      await page.keyboard.down('ArrowRight');
       await page.waitForTimeout(60);
-      await page.keyboard.up('ArrowLeft');
+      await page.keyboard.up('ArrowRight');
       await page.keyboard.press('Shift');
 
-      await page.waitForFunction(() => {
-        const renderer = window.__cellwarz?.renderer;
-        return Object.values(renderer?.sprites ?? {}).some(([image]) => renderer?.imagePaths[image]?.includes('/projectiles/star'));
-      });
+      // The star only lives ~0.3s, and the default requestAnimationFrame polling stalls in this page once the second
+      // browser context opens, so poll on a timer instead.
+      await page.waitForFunction(
+        () => {
+          const renderer = window.__cellwarz?.renderer;
+          return Object.values(renderer?.sprites ?? {}).some(([image]) => renderer?.imagePaths[image]?.includes('/projectiles/star'));
+        },
+        undefined,
+        { polling: 10 },
+      );
 
       const healthOf = (name: string) =>
         pageB.evaluate((who) => {
